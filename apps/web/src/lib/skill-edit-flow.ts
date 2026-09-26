@@ -37,8 +37,15 @@ export function shouldRegenerateVerdictOutputSchema(input: {
 export function skillVersionChangeLabels(current: SkillVersion, previous?: SkillVersion | undefined): string[] {
   if (!previous) return ["initial version"];
   const labels: string[] = [];
-  if (current.rubricMarkdown !== previous.rubricMarkdown) labels.push("review guide");
-  if (current.prompt !== previous.prompt) labels.push("judge instructions");
+  if ((current.typedQuestion === null) !== (previous.typedQuestion === null)) {
+    // A switch between a prompted definition and a typed question replaces the whole definition.
+    labels.push("definition kind");
+  } else {
+    if (current.rubricMarkdown !== previous.rubricMarkdown) labels.push("review guide");
+    if (current.prompt !== previous.prompt) labels.push("judge instructions");
+    if (JSON.stringify(current.typedQuestion) !== JSON.stringify(previous.typedQuestion)) labels.push("typed question");
+    if (current.decisionThreshold !== previous.decisionThreshold) labels.push("decision threshold");
+  }
   if (!sameExecutionBinding(current, previous)) labels.push("execution binding");
   if (
     current.verdictKind !== previous.verdictKind ||

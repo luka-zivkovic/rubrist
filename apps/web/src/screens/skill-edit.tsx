@@ -23,7 +23,7 @@ import {
 import { useDashboard } from "@/lib/dashboard-context";
 import { useCriterion } from "@/lib/criterion-context";
 import { skillCriterionVersionId } from "@/lib/criterion-scope";
-import { executionBindingFields, executionBindingInputFromFields } from "@/lib/execution-binding-draft";
+import { executionBindingFields } from "@/lib/execution-binding-draft";
 import { promptedProviderOptions, resolveJudgeProviderSelection } from "@/lib/judge-provider-selection";
 import { firstResultPath, isBench, markSetupReceipt } from "@/lib/journey";
 import {
@@ -37,10 +37,11 @@ import {
   type OnboardingCheckDraft
 } from "@/lib/onboarding-check";
 import { STARTER_SKILLS, findStarterSkill, type StarterSkill } from "@/lib/starter-skills";
-import { shouldRegenerateVerdictOutputSchema, skillEditOperationIsCurrent } from "@/lib/skill-edit-flow";
+import { skillEditOperationIsCurrent } from "@/lib/skill-edit-flow";
+import { skillVersionInputFromDraft } from "../lib/skill-version-input.js";
 import {
   compileJudgePrompt,
-  verdictOutputSchema,
+  takesSamplingSettings,
   type CriterionVersion,
   type CreateSkillVersionInput,
   type JudgeModel,
@@ -52,6 +53,13 @@ import {
   type SkillVersionTimeScope,
   type VerdictKind
 } from "@rubrist/shared";
+import {
+  EMPTY_TYPED_QUESTION_DRAFT,
+  typedQuestionDraftFrom,
+  typedQuestionDraftProblems,
+  typedQuestionFromDraft,
+  type TypedQuestionDraft
+} from "../lib/typed-question-draft.js";
 import { useBindingPicker } from "./skill-edit/binding-settings.js";
 import { SkillVersionEditor } from "./skill-edit/editor.js";
 import {
@@ -111,7 +119,10 @@ export function SkillEditScreen() {
   const [rubric, setRubric] = useState("");
   const [rubricMode, setRubricMode] = useState<"source" | "preview">("source");
   const [prompt, setPrompt] = useState("");
+  // A TypeSafe evaluator's definition is a typed question in place of the guide and prompt.
+  const [typedDraft, setTypedDraft] = useState<TypedQuestionDraft>(EMPTY_TYPED_QUESTION_DRAFT);
   const [provider, setProvider] = useState<JudgeProviderId>("mock");
+  const typed = provider === "typesafe";
   const [providerOptions, setProviderOptions] = useState<JudgeProviderAvailabilityItem[]>([]);
   const [modelId, setModelId] = useState("");
   const [modelVersion, setModelVersion] = useState("");
@@ -177,13 +188,11 @@ export function SkillEditScreen() {
     version: Pick<SkillVersion, "executionBinding" | "customEndpointUrl">,
     options: ReadonlyArray<JudgeProviderAvailabilityItem>
   ) => {
-    const stored = version.executionBinding.provider;
-    const { provider: selectedProvider, preservesBinding } = resolveJudgeProviderSelection(
-      stored === "typesafe" ? "mock" : stored,
+    const { provider: selectedProvider, preservesBinding: keeps } = resolveJudgeProviderSelection(
+      version.executionBinding.provider,
       options
     );
     const fields = executionBindingFields(version);
-    const keeps = preservesBinding && stored !== "typesafe";
     setProvider(selectedProvider);
     setModelId(keeps ? fields.modelId : "");
     setModelVersion(keeps ? fields.modelVersion : "");
@@ -211,9 +220,9 @@ export function SkillEditScreen() {
   // not silently re-apply the template.
   const applyCurrentVersion = useCallback((s: Skill) => {
     const v = s.currentVersion;
-    // The editor is prompted; a typed-question version's authoring arrives in Batch 8F.
     setRubric(v.rubricMarkdown ?? "");
     setPrompt(v.prompt ?? "");
+    setTypedDraft(typedQuestionDraftFrom(v));
     setVerdictKind(v.verdictKind);
     setChoiceScores(v.categoricalChoiceScores);
     setScalarRange(v.scalarRange);
@@ -230,6 +239,7 @@ export function SkillEditScreen() {
   const editFromVersion = useCallback((version: SkillVersion) => {
     setRubric(version.rubricMarkdown ?? "");
     setPrompt(version.prompt ?? "");
+    setTypedDraft(typedQuestionDraftFrom(version));
     setVerdictKind(version.verdictKind);
     setChoiceScores(version.categoricalChoiceScores);
     setScalarRange(version.scalarRange);
@@ -273,10 +283,13 @@ export function SkillEditScreen() {
       setOnboardingEvidenceInventory(evidenceInventory);
       const v = s.currentVersion;
       setBaseVersion(v);
-      // This editor authors prompted evaluators.
-      const promptedProviders = promptedProviderOptions(availability.providers);
-      setProviderOptions(promptedProviders);
-      applyBindingFields(v, promptedProviders);
+      // The typed question loads with the version, whichever content a starter or draft applies.
+      setTypedDraft(typedQuestionDraftFrom(v));
+      // First-project setup authors prompted evaluators from starter
+      // templates; the editor also authors typed questions on TypeSafe.
+      const editorProviders = firstRun ? promptedProviderOptions(availability.providers) : availability.providers;
+      setProviderOptions(editorProviders);
+      applyBindingFields(v, editorProviders);
 
       if (firstRun) {
         const savedDraft = loadOnboardingCheckDraft(s.projectId, s.id);
@@ -458,11 +471,13 @@ export function SkillEditScreen() {
       setModelVersion("");
       return;
     }
-    if (provider === "custom") {
+    // A custom endpoint and TypeSafe publish no model catalog: the author names the model.
+    if (provider === "custom" || provider === "typesafe") {
       setModels([]);
       setModelsError(null);
       setModelsLoading(false);
-      setModelVersion(modelId.trim());
+      // A loaded version keeps the model version it saved; a newly named model starts from its id.
+      setModelVersion((current) => current.trim() === "" ? modelId.trim() : current);
       return;
     }
 
@@ -504,16 +519,17 @@ export function SkillEditScreen() {
   }, [provider, providerOptions, skill?.id]);
 
   // A blank temperature is not sent (ADR-0014 section 2); it is never read as
-  // 0, which Number("") would silently produce. The mock takes no sampling, and
-  // a temperature the model rejects outright is hidden and not sent.
+  // 0, which Number("") would silently produce. The mock and TypeSafe take no
+  // sampling, and a temperature the model rejects outright is hidden and not sent.
   const parsedTemperature = Number(temperature);
-  const temperatureValid = provider === "mock" || !picker.guidance.temperature.shown || temperature.trim() === "" ||
+  const temperatureValid = !takesSamplingSettings(provider) || !picker.guidance.temperature.shown || temperature.trim() === "" ||
     (Number.isFinite(parsedTemperature) && parsedTemperature >= 0 && parsedTemperature <= 2);
   // The pinned model is allowed to be absent from the fetched catalog (it may
   // have been deprecated or filtered out of the listing). It stays selectable
   // and saveable — the warning below the picker is the honest surface.
   const pinnedModelMissing =
     provider !== "custom" &&
+    provider !== "typesafe" &&
     !modelsLoading &&
     !modelsError &&
     models.length > 0 &&
@@ -526,43 +542,23 @@ export function SkillEditScreen() {
   const buildInput = useCallback(
     (extra?: { overrideReason?: string }): CreateSkillVersionInput | null => {
       if (!skill) return null;
-      const v = skill.currentVersion;
       // Settings not in the editor carry over from the version being edited,
       // the same base the change review compares against.
-      const executionBinding = executionBindingInputFromFields(
-        { provider, modelId, modelVersion, baseUrl, ...pickerSavedFields(temperature) },
-        (baseVersion ?? v).executionBinding
-      );
-      if (executionBinding === null) return null;
-      const regenerateOutputSchema = shouldRegenerateVerdictOutputSchema({
-        firstRun,
-        starterSuppliedContract: starterSuppliedOutputContract,
-        base: v,
-        current: {
-          verdictKind,
-          scalarRange,
-          categoricalChoiceScores: choiceScores
-        }
-      });
-      const input: CreateSkillVersionInput = {
-        ...(skillCriterionVersionId(skill) ? { criterionVersionId: skillCriterionVersionId(skill)! } : {}),
+      return skillVersionInputFromDraft({
+        base: baseVersion ?? skill.currentVersion,
+        criterionVersionId: skillCriterionVersionId(skill),
+        binding: { provider, modelId, modelVersion, baseUrl, ...pickerSavedFields(temperature) },
         rubricMarkdown: rubric,
         prompt,
-        executionBinding,
-        outputSchema: regenerateOutputSchema
-          ? verdictOutputSchema({ verdictKind, scalarRange, categoricalChoiceScores: choiceScores })
-          : v.outputSchema,
-        verdictKind,
+        typedQuestion: typedDraft,
+        verdict: { verdictKind, scalarRange, categoricalChoiceScores: choiceScores },
         timeScope,
-        ...(verdictKind === "scalar" && scalarRange ? { scalarRange } : {}),
-        ...(verdictKind === "categorical" && choiceScores
-          ? { categoricalChoiceScores: choiceScores }
-          : {}),
-        ...(extra?.overrideReason ? { overrideReason: extra.overrideReason } : {})
-      };
-      return input;
+        firstRun,
+        starterSuppliedContract: starterSuppliedOutputContract,
+        overrideReason: extra?.overrideReason
+      });
     },
-    [skill, baseVersion, rubric, prompt, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
+    [skill, baseVersion, rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
   );
 
   // A setting the check saw rejected would fail resolution after save, so it blocks saving.
@@ -571,8 +567,9 @@ export function SkillEditScreen() {
     skill != null &&
     draftInput !== null &&
     (firstRun || picker.blockingProblems.length === 0) &&
-    rubric.trim().length > 0 &&
-    prompt.trim().length > 0 &&
+    (typed
+      ? typedQuestionFromDraft(typedDraft) !== null
+      : rubric.trim().length > 0 && prompt.trim().length > 0) &&
     modelId.trim().length > 0 &&
     modelVersion.trim().length > 0 &&
     providerAvailable &&
@@ -608,7 +605,10 @@ export function SkillEditScreen() {
       : null;
     const input = buildInput(extra);
     if (!input) {
-      setSubmitError("Check the model binding: choose a model, use a temperature from 0 to 2, give an output token limit where it's required, and complete the custom endpoint fields.");
+      const questionProblems = typed ? typedQuestionDraftProblems(typedDraft) : [];
+      setSubmitError(questionProblems.length > 0
+        ? `Finish the typed question: ${questionProblems.join(" ")}`
+        : "Check the model binding: choose a model, use a temperature from 0 to 2, give an output token limit where it's required, and complete the custom endpoint fields.");
       return;
     }
     setSubmitting(true);
@@ -791,7 +791,8 @@ export function SkillEditScreen() {
   );
   const availableProviderOptions = providerOptions.filter((option) => option.available);
   const selectedProviderOption = availableProviderOptions.find((option) => option.provider === provider);
-  const hasConfiguredRealProvider = availableProviderOptions.some((option) => option.provider !== "mock");
+  // A prompted evaluator needs a key for a prompted provider; TypeSafe runs only typed questions.
+  const hasConfiguredRealProvider = availableProviderOptions.some((option) => option.provider !== "mock" && option.provider !== "typesafe");
   const changeInput = draftInput;
 
   if (firstRun) {
@@ -875,6 +876,9 @@ export function SkillEditScreen() {
       setRubricMode={setRubricMode}
       rubric={rubric}
       setRubric={setRubric}
+      typed={typed}
+      typedDraft={typedDraft}
+      setTypedDraft={setTypedDraft}
       prompt={prompt}
       setPrompt={setPrompt}
       showPromptEditor={showPromptEditor}

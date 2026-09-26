@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { BindingResolutionStatus } from "@/components/binding-resolution-status";
+import { TypedQuestionView } from "@/components/typed-question-view";
 import { regressionReceiptLabel, skillVersionChangeLabels } from "@/lib/skill-edit-flow";
 import { Table } from "@/components/ui/table";
 import { RowLink } from "@/components/row-action";
@@ -129,7 +130,7 @@ export function SkillVersionsScreen() {
       <SectionHead
         eyebrow="Immutable evaluator history"
         title="Evaluator versions"
-        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect the guide, prompt, result format, and evidence attached to it."
+        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a guide and prompt, or a typed question), result format, and evidence attached to it."
         right={
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
@@ -361,8 +362,7 @@ export function SkillVersionDetailScreen() {
   }
 
   const agreementPct = v.goldenSetAgreement == null ? null : Math.round(v.goldenSetAgreement * 100);
-  // A typed-question version has no rubric or prompt; its views arrive in Batch 8F.
-  const compiledPrompt = compileJudgePrompt({ prompt: v.prompt ?? "", rubricMarkdown: v.rubricMarkdown ?? "" });
+  const compiledPrompt = v.typedQuestion === null ? compileJudgePrompt({ prompt: v.prompt ?? "", rubricMarkdown: v.rubricMarkdown ?? "" }) : null;
 
   return (
     <div className="fadeUp max-w-[1760px]">
@@ -399,27 +399,37 @@ export function SkillVersionDetailScreen() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_1fr]">
         <div className="flex flex-col gap-5">
-          <Card>
-            <CardContent className="py-4">
-              <Eyebrow>Review guide · stored as Markdown</Eyebrow>
-              <p className="mt-2 text-[12px] leading-5 text-ink-2">
-                Defines what a good result looks like and the evidence this evaluator should use.
-              </p>
-              <MarkdownPreview markdown={v.rubricMarkdown ?? ""} className="mt-3 max-h-[520px]" />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-4">
-              <Eyebrow>Judge instructions · exact compiled text</Eyebrow>
-              <p className="mt-2 text-[12px] leading-5 text-ink-2">
-                Exact source sent to the judge after inserting the review guide. It is intentionally
-                not rendered as Markdown.
-              </p>
-              <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-3 py-3 font-mono text-[12px] leading-[1.6] text-ink">
-                {compiledPrompt.content || <span className="text-ink-3">No judge instructions recorded.</span>}
-              </pre>
-            </CardContent>
-          </Card>
+          {v.typedQuestion !== null ? (
+            <Card>
+              <CardContent className="py-4">
+                <TypedQuestionView question={v.typedQuestion} threshold={v.decisionThreshold} />
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardContent className="py-4">
+                  <Eyebrow>Review guide · stored as Markdown</Eyebrow>
+                  <p className="mt-2 text-[12px] leading-5 text-ink-2">
+                    Defines what a good result looks like and the evidence this evaluator should use.
+                  </p>
+                  <MarkdownPreview markdown={v.rubricMarkdown ?? ""} className="mt-3 max-h-[520px]" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-4">
+                  <Eyebrow>Judge instructions · exact compiled text</Eyebrow>
+                  <p className="mt-2 text-[12px] leading-5 text-ink-2">
+                    Exact source sent to the judge after inserting the review guide. It is intentionally
+                    not rendered as Markdown.
+                  </p>
+                  <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-3 py-3 font-mono text-[12px] leading-[1.6] text-ink">
+                    {compiledPrompt?.content || <span className="text-ink-3">No judge instructions recorded.</span>}
+                  </pre>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         <div className="flex flex-col gap-5">
@@ -467,7 +477,8 @@ export function SkillVersionDetailScreen() {
                   <div className="mt-0.5 text-[11.5px] leading-5 text-ink-3">
                     {verdictKindDescription(v.verdictKind, {
                       scalarRange: v.scalarRange,
-                      categoricalChoiceScores: v.categoricalChoiceScores
+                      categoricalChoiceScores: v.categoricalChoiceScores,
+                      decisionThreshold: v.decisionThreshold
                     })}
                   </div>
                 </div>

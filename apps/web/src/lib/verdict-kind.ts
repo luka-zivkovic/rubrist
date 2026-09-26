@@ -5,8 +5,13 @@ export function verdictKindDescription(
   details?: {
     scalarRange?: [number, number] | null;
     categoricalChoiceScores?: Record<string, number> | null;
+    /** A typed-question version's threshold; its verdict never abstains (ADR-0014 decision 8). */
+    decisionThreshold?: number | null;
   }
 ): string {
+  if (kind === "binary" && details?.decisionThreshold != null) {
+    return `Returns pass when the model's probability that the answer is true reaches ${details.decisionThreshold}, and fail otherwise. It never abstains.`;
+  }
   if (kind === "binary") {
     return "Returns pass or fail. Use ambiguous when the evidence is not enough to decide.";
   }
