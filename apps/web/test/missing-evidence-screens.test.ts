@@ -71,6 +71,7 @@ vi.mock("@/components/row-action", () => ({
 vi.mock("@/components/markdown-preview", () => ({
   MarkdownPreview: ({ markdown }: Props) => createElement("div", null, markdown as string)
 }));
+vi.mock("@/components/binding-resolution-status", () => ({ BindingResolutionStatus: () => createElement("section") }));
 vi.mock("@/components/rubrist", async () => {
   const loadError = await import("../src/components/rubrist/load-error.js");
   const gate = await import("../src/components/rubrist/gate.js");
@@ -110,6 +111,15 @@ vi.mock("@/components/skill-edit-flow", () => ({ SkillEditFlow: () => createElem
 vi.mock("../src/screens/skill-edit/editor.js", () => ({
   SkillVersionEditor: () => createElement("section", null, "Evaluator editor")
 }));
+// Stable across renders, like the real hook's callbacks: the editor's effects
+// depend on them.
+const picker = vi.hoisted(() => ({
+  load: () => undefined,
+  savedFields: () => ({}),
+  guidance: { temperature: { shown: false } },
+  blockingProblems: []
+}));
+vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({ useBindingPicker: () => picker }));
 vi.mock("../src/screens/skill-edit/regression.js", () => ({
   GovernedEvaluatorEditBoundary: () => createElement("section"),
   RegressionResult: () => createElement("section"),
