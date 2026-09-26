@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FirstRunCheckSetup } from "@/components/first-run-check-setup";
 import type { SkillEditPhase } from "@/components/skill-edit-flow";
-import { SectionHead } from "@/components/rubrist";
+import { PageLoadError, SectionHead } from "@/components/rubrist";
 import {
   createSkillVersion,
   createOnboardingCheck,
@@ -22,6 +21,7 @@ import {
 } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadErrorMessage } from "@/lib/load-error";
 import { skillCriterionVersionId } from "@/lib/criterion-scope";
 import { executionBindingFields, executionBindingInputFromFields } from "@/lib/execution-binding-draft";
 import { promptedProviderOptions, resolveJudgeProviderSelection } from "@/lib/judge-provider-selection";
@@ -154,6 +154,9 @@ export function SkillEditScreen() {
   const [pollError, setPollError] = useState<string | null>(null);
   const [pendingVersion, setPendingVersion] = useState<SkillVersion | null>(null);
   const [pinnedReferenceCount, setPinnedReferenceCount] = useState<number | null>(null);
+  // True once the pinned revision's count cannot be read, so the running check
+  // says the count is unavailable instead of loading it forever.
+  const [pinnedReferenceCountUnavailable, setPinnedReferenceCountUnavailable] = useState(false);
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -239,6 +242,7 @@ export function SkillEditScreen() {
     setPhase("edit");
     setPendingVersion(null);
     setPinnedReferenceCount(null);
+    setPinnedReferenceCountUnavailable(false);
     setResult(null);
     setSubmitError(null);
     setPollError(null);
@@ -318,7 +322,7 @@ export function SkillEditScreen() {
       setLoadedCriterionId(selectedCriterionId);
     } catch (err) {
       if (generation === loadGeneration.current) {
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(loadErrorMessage(err));
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -376,17 +380,23 @@ export function SkillEditScreen() {
     const revisionId = pinnedRevisionId;
     if (!revisionId) {
       setPinnedReferenceCount(null);
+      setPinnedReferenceCountUnavailable(true);
       return;
     }
     let cancelled = false;
     setPinnedReferenceCount(null);
+    setPinnedReferenceCountUnavailable(false);
     void fetchDatasetRevisionMetadata(revisionId)
       .then((metadata) => {
-        if (!cancelled) setPinnedReferenceCount(metadata?.itemCount ?? null);
+        if (cancelled) return;
+        const count = metadata?.itemCount ?? null;
+        setPinnedReferenceCount(count);
+        setPinnedReferenceCountUnavailable(count === null);
       })
       .catch(() => {
         // The durable version receipt still names the pinned revision. A read
         // failure only withholds the count; terminal evidence remains exact.
+        if (!cancelled) setPinnedReferenceCountUnavailable(true);
       });
     return () => {
       cancelled = true;
@@ -639,6 +649,7 @@ export function SkillEditScreen() {
         setResult(null);
         setPendingVersion(res.version);
         setPinnedReferenceCount(null);
+        setPinnedReferenceCountUnavailable(false);
         setPollError(null);
         setPhase("running");
       } else {
@@ -670,19 +681,17 @@ export function SkillEditScreen() {
 
   if (loadError || !skill) {
     return (
-      <div className="fadeUp">
-        <div className="mb-3">
+      <PageLoadError
+        eyebrow="Edit skill"
+        title="Couldn't load the skill"
+        message={loadError ?? "Rubrist returned no skill for this criterion."}
+        onRetry={() => void load()}
+        back={
           <Button variant="ghost" size="sm" onClick={() => navigate("/skill")}>
             <ArrowLeft /> Back to skill
           </Button>
-        </div>
-        <SectionHead eyebrow="Edit skill" title="Could not load skill" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {loadError ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+        }
+      />
     );
   }
 
@@ -707,6 +716,7 @@ export function SkillEditScreen() {
         firstRun={firstRun}
         criterionVersion={onboardingCriterionVersion}
         referenceCount={pinnedReferenceCount}
+        referenceCountUnavailable={pinnedReferenceCountUnavailable}
         pollError={pollError}
         onOpenHistory={() => navigate("/skill/versions")}
       />

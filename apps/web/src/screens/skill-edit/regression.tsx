@@ -74,6 +74,7 @@ export function RegressionRunning({
   firstRun,
   criterionVersion,
   referenceCount,
+  referenceCountUnavailable,
   pollError,
   onOpenHistory
 }: {
@@ -83,6 +84,7 @@ export function RegressionRunning({
   firstRun: boolean;
   criterionVersion: CriterionVersion | null;
   referenceCount: number | null;
+  referenceCountUnavailable: boolean;
   pollError: string | null;
   onOpenHistory: () => void;
 }) {
@@ -162,7 +164,13 @@ export function RegressionRunning({
               <dt className="text-ink-3">Pinned revision</dt>
               <dd className="break-all font-mono">{version.regressionDatasetRevisionId ?? "not available"}</dd>
               <dt className="text-ink-3">Cases in revision</dt>
-              <dd>{referenceCount == null ? "Loading exact count…" : referenceCount}</dd>
+              <dd>
+                {referenceCount != null
+                  ? referenceCount
+                  : referenceCountUnavailable
+                    ? "Count unavailable"
+                    : "Loading exact count…"}
+              </dd>
             </dl>
           </div>
         </CardContent>

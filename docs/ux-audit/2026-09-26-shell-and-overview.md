@@ -1064,6 +1064,17 @@ questions.
     example in bench projects, and labels a reviewer records while seeing the
     assessment are "ungoverned human labels".
 
+## Implementation status
+
+Slice 1, "missing evidence never looks good", changes the CURRENT behavior
+that S4 describes. The finding above keeps its as-audited text.
+
+- **S4: fixed, except the breadcrumb.** The top bar shows "—" instead of 0
+  until the dashboard loads, and labels the count "traces imported". A failed
+  dashboard read already replaces the page with the connection screen, which
+  hides the stats. While the dashboard loads, the breadcrumb still reads
+  "Rubrist".
+
 ## Next rounds
 
 Each round is one page or flow, in this order:

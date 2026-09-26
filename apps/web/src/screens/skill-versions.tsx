@@ -7,9 +7,10 @@ import { MarkdownPreview } from "@/components/markdown-preview";
 import { regressionReceiptLabel, skillVersionChangeLabels } from "@/lib/skill-edit-flow";
 import { Table } from "@/components/ui/table";
 import { RowLink } from "@/components/row-action";
-import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, RegressionDiffTable, ConvergenceCard } from "@/components/rubrist";
+import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError } from "@/components/rubrist";
 import { fetchCurrentSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadErrorMessage } from "@/lib/load-error";
 import { verdictKindDescription } from "@/lib/verdict-kind";
 import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type ConvergenceAudit, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
 
@@ -64,7 +65,7 @@ export function SkillVersionsScreen() {
       setVersions(history.versions);
       setRegressionRuns(Object.fromEntries(history.regressionRuns.map((run) => [run.skillVersionId, run])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(loadErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -112,14 +113,12 @@ export function SkillVersionsScreen() {
 
   if (error || !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Every version of the skill" title="Could not load versions" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+      <PageLoadError
+        eyebrow="Every version of the skill"
+        title="Couldn't load versions"
+        message={error ?? "Rubrist returned no skill for this criterion."}
+        onRetry={() => void load()}
+      />
     );
   }
 
@@ -193,7 +192,7 @@ export function SkillVersionsScreen() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusChip status={v.status} />
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-                      <GateChip state={gateStateForVersion(v)} title={v.knownLimitations.join(" · ")} />
+                      <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
                   </td>
                   <td>
@@ -260,23 +259,35 @@ export function SkillVersionDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
-  const [regression, setRegression] = useState<RegressionRunResult | null>(null);
+  // The recorded regression run: undefined until it is read or when the read
+  // fails, null when this version has none.
+  const [regression, setRegression] = useState<RegressionRunResult | null | undefined>(undefined);
+  const [regressionError, setRegressionError] = useState<string | null>(null);
   const [convergence, setConvergence] = useState<ConvergenceAudit | null>(null);
+  const [convergenceError, setConvergenceError] = useState<string | null>(null);
   const [consistency, setConsistency] = useState<SelfConsistencyReport | null>(null);
+  const [consistencyError, setConsistencyError] = useState<string | null>(null);
   // the AUTHORITATIVE Judge Card, fetched from /card (κ + basis + audit)
   // — distinct from the client-side signal assembly on this screen.
   const [judgeCard, setJudgeCard] = useState<JudgeCard | null>(null);
+  const [judgeCardError, setJudgeCardError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setRegression(null);
+    setRegression(undefined);
+    setRegressionError(null);
     setConvergence(null);
+    setConvergenceError(null);
     setConsistency(null);
+    setConsistencyError(null);
     setJudgeCard(null);
+    setJudgeCardError(null);
     (async () => {
       try {
         const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
@@ -285,42 +296,31 @@ export function SkillVersionDetailScreen() {
         const vs = await fetchSkillVersions(s.id, 100);
         if (cancelled) return;
         setVersions(vs);
-        // The recorded regression run is best-effort: fetchSkillVersionRegression
-        // already maps 404 (no run for this version, e.g. the seeded baseline)
-        // to null. We don't swallow other errors here — a 500/network failure
-        // should surface via the surrounding catch, not silently omit the diff.
         if (id) {
-          const run = await fetchSkillVersionRegression(s.id, id);
-          if (!cancelled) setRegression(run);
-          // A2.2c: the convergence audit is supplementary to the Judge Card. A
-          // transient failure on it shouldn't collapse the whole version view
-          // (rubric, prompt, regression) — isolate it and just omit the card,
-          // mirroring how a missing regression run degrades to null.
-          try {
-            const page = await fetchSkillVersionConvergence(s.id, id);
-            if (!cancelled) setConvergence(page.audit);
-          } catch {
-            if (!cancelled) setConvergence(null);
-          }
-          // self-consistency is the third trust signal on the card; like
-          // convergence it degrades to absent rather than failing the view.
-          try {
-            const report = await fetchSkillVersionSelfConsistency(s.id, id);
-            if (!cancelled) setConsistency(report);
-          } catch {
-            if (!cancelled) setConsistency(null);
-          }
-          // The attested Judge Card — supplementary like the signals above;
-          // a transient failure omits the panel rather than failing the view.
-          try {
-            const cardData = await fetchJudgeCard(s.id, id);
-            if (!cancelled) setJudgeCard(cardData);
-          } catch {
-            if (!cancelled) setJudgeCard(null);
-          }
+          // Each evidence read fails on its own: the version stays readable, and
+          // a failed section says so instead of reading as empty or missing.
+          // fetchSkillVersionRegression maps a 404 (no recorded run) to null.
+          await Promise.all([
+            fetchSkillVersionRegression(s.id, id).then(
+              (run) => { if (!cancelled) setRegression(run); },
+              (err: unknown) => { if (!cancelled) setRegressionError(loadErrorMessage(err)); }
+            ),
+            fetchSkillVersionConvergence(s.id, id).then(
+              (page) => { if (!cancelled) setConvergence(page.audit); },
+              (err: unknown) => { if (!cancelled) setConvergenceError(loadErrorMessage(err)); }
+            ),
+            fetchSkillVersionSelfConsistency(s.id, id).then(
+              (report) => { if (!cancelled) setConsistency(report); },
+              (err: unknown) => { if (!cancelled) setConsistencyError(loadErrorMessage(err)); }
+            ),
+            fetchJudgeCard(s.id, id).then(
+              (cardData) => { if (!cancelled) setJudgeCard(cardData); },
+              (err: unknown) => { if (!cancelled) setJudgeCardError(loadErrorMessage(err)); }
+            )
+          ]);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setError(loadErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -328,12 +328,18 @@ export function SkillVersionDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, selectedCriterionId]);
+  }, [id, selectedCriterionId, reloadKey]);
 
   const v = versions.find((vv) => vv.id === id) ?? null;
   const isCurrent = v && skill ? v.id === skill.currentVersion.id : false;
+  const backToVersions = (
+    <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
+      <ArrowLeft /> Back to versions
+    </Button>
+  );
 
-  if (loading && !v) {
+  // Wait for every read: a section still loading must not render as empty.
+  if (loading) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Judge card" title="Loading version" />
@@ -341,18 +347,26 @@ export function SkillVersionDetailScreen() {
     );
   }
 
-  if (error || !v) {
+  if (error) {
+    return (
+      <PageLoadError
+        eyebrow="Judge card"
+        title="Couldn't load this version"
+        message={error}
+        onRetry={reload}
+        back={backToVersions}
+      />
+    );
+  }
+
+  if (!v) {
     return (
       <div className="fadeUp">
-        <div className="mb-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
-            <ArrowLeft /> Back to versions
-          </Button>
-        </div>
+        <div className="mb-3">{backToVersions}</div>
         <SectionHead eyebrow="Judge card" title="Version not found" />
         <Card>
           <CardContent className="text-[13px] text-ink-2">
-            {error ?? "This version may have been archived or removed."}
+            This version may have been archived or removed.
           </CardContent>
         </Card>
       </div>
@@ -388,13 +402,17 @@ export function SkillVersionDetailScreen() {
           <div className="flex items-center gap-2">
             <StatusChip status={v.status} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-            <GateChip state={gateStateForVersion(v)} title={v.knownLimitations.join(" · ")} />
+            <GateChip state={gateStateForVersion(v, regression)} title={v.knownLimitations.join(" · ")} />
             {isCurrent ? <Chip>current</Chip> : null}
           </div>
         }
       />
 
-      {judgeCard && skill ? <JudgeCardPanel card={judgeCard} skillId={skill.id} versionId={v.id} /> : null}
+      {judgeCardError ? (
+        <SectionLoadError className="mb-6" title="Couldn't load the Judge Card." message={judgeCardError} onRetry={reload} />
+      ) : judgeCard && skill ? (
+        <JudgeCardPanel card={judgeCard} skillId={skill.id} versionId={v.id} />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_1fr]">
         <div className="flex flex-col gap-5">
@@ -511,7 +529,9 @@ export function SkillVersionDetailScreen() {
       </div>
 
       <div className="mt-6">
-        {regression && regression.cases.length > 0 ? (
+        {regressionError ? (
+          <SectionLoadError title="Couldn't load the regression run." message={regressionError} onRetry={reload} />
+        ) : regression && regression.cases.length > 0 ? (
           <RegressionDiffTable
             cases={regression.cases}
             title="Regression at version creation"
@@ -525,7 +545,11 @@ export function SkillVersionDetailScreen() {
         ) : null}
       </div>
 
-      {convergence ? (
+      {convergenceError ? (
+        <div className="mt-6">
+          <SectionLoadError title="Couldn't load the convergence audit." message={convergenceError} onRetry={reload} />
+        </div>
+      ) : convergence ? (
         <div className="mt-6">
           <ConvergenceCard
             audit={convergence}
@@ -543,7 +567,7 @@ export function SkillVersionDetailScreen() {
       ) : null}
 
       <div className="mt-6">
-        <SelfConsistencyCard report={consistency} />
+        <SelfConsistencyCard report={consistency} error={consistencyError} onRetry={reload} />
       </div>
     </div>
   );
@@ -685,7 +709,15 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
   );
 }
 
-function SelfConsistencyCard({ report }: { report: SelfConsistencyReport | null }) {
+function SelfConsistencyCard({
+  report,
+  error,
+  onRetry
+}: {
+  report: SelfConsistencyReport | null;
+  error: string | null;
+  onRetry: () => void;
+}) {
   return (
     <Card>
       <CardContent className="py-4">
@@ -698,7 +730,9 @@ function SelfConsistencyCard({ report }: { report: SelfConsistencyReport | null 
             </span>
           ) : null}
         </div>
-        {!report || report.comparedCases === 0 ? (
+        {error ? (
+          <SectionLoadError className="mt-2" title="Couldn't load self-consistency." message={error} onRetry={onRetry} />
+        ) : !report || report.comparedCases === 0 ? (
           <div className="text-[12.5px] leading-[1.55] text-ink-3">
             No repeat runs under this version yet. Re-judge a case with <code>force: true</code> on{" "}
             <code>POST /api/v1/judge</code> (or re-run a dataset eval) to probe whether the requested

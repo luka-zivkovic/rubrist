@@ -888,6 +888,27 @@ contract are unchanged.
    30, 2026 · 2 golden cases" or "Saved Mar 15, 2026 · no recorded regression
    check". No label reads "approved", in line with BOJ:272.
 
+## Implementation status
+
+Slice 1, "missing evidence never looks good", changes the CURRENT behavior
+that three findings describe. The findings above keep their as-audited text.
+
+- **C1: fixed.** The regression chip is derived from the version's recorded
+  run. A version with no run reads "regression · not recorded", and a run that
+  couldn't be read reads "regression · unavailable". Compare shows "—" for any
+  total that includes a save without a loaded run, and says why. The picker
+  bar counts saves and recorded runs separately. The chip keeps the existing
+  "regression · …" wording until C12 and ADR-0015 settle the labels.
+- **C6: in part.** "Cases in revision" says "Count unavailable" when there is
+  no pinned revision or the read fails. Elapsed time and the long-wait message
+  are still to do.
+- **C7: fixed, except skeletons.** The five routes show "Couldn't load …" with
+  Retry, built on `EmptyShell`. A failed section read on the version page says
+  so inside its section. "Version not found" appears only when the version is
+  missing from the history. Compare no longer shows "Nothing to compare yet"
+  while loading. A response the page can't parse no longer prints the
+  validation dump. Loading states are still a title, with no `Skeleton`.
+
 ## Next rounds
 
 1. First run, end to end (`/skill/edit?first=1` → `/first-result`).

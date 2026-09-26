@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eyebrow, MarginNote, SectionHead, Chip } from "@/components/rubrist";
+import { Eyebrow, MarginNote, PageLoadError, SectionHead, Chip } from "@/components/rubrist";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { fetchCurrentSkill } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadErrorMessage } from "@/lib/load-error";
 import { useDashboard } from "@/lib/dashboard-context";
 import { skillEditConsequence, skillVersionStateLabel } from "../lib/skill-presentation.js";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,7 @@ export function SkillScreen() {
     try {
       setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(loadErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -61,14 +62,12 @@ export function SkillScreen() {
 
   if (error || !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="The artifact" title="Could not load skill" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+      <PageLoadError
+        eyebrow="The artifact"
+        title="Couldn't load the skill"
+        message={error ?? "Rubrist returned no skill for this criterion."}
+        onRetry={() => void load()}
+      />
     );
   }
 

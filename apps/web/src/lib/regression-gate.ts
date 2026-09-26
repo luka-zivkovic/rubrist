@@ -1,0 +1,59 @@
+import type { RegressionRunResult, SkillVersion } from "@rubrist/shared";
+
+// One vocabulary for evaluator-version regression, used in Version history,
+// the version page, and run comparisons.
+export type GateState =
+  | "clean"
+  | "blocked"
+  | "error"
+  | "override"
+  | "inactive"
+  | "first"
+  | "running"
+  | "unrecorded"
+  | "unavailable";
+
+export const GATE_LABEL: Record<GateState, string> = {
+  clean: "regression · clean",
+  blocked: "regression · found",
+  error: "regression · error",
+  override: "regression · override recorded",
+  inactive: "regression · inactive",
+  first: "regression · no baseline",
+  running: "regression · running",
+  unrecorded: "regression · not recorded",
+  unavailable: "regression · unavailable"
+};
+
+// Derive a version's regression state from its status and its persisted
+// regression run. `run` is that run, `null` when none was recorded, and
+// `undefined` when it could not be read. Only a recorded run can make a version
+// clean: a version saved before the gate, signed off as a starter, or whose run
+// was lost has no evidence either way, and missing evaluation is never shown
+// as a favorable result (PRODUCT.md principle 2).
+export function gateStateForVersion(
+  version: SkillVersion,
+  run: RegressionRunResult | null | undefined
+): GateState {
+  if (version.status === "failed") return "error";
+  if (version.status === "regressing") return "blocked";
+  if (version.status === "calibrating") return "running";
+  if (run === undefined) return "unavailable";
+  if (run === null) return "unrecorded";
+  if (run.status === "error") return "error";
+  if (run.status === "blocked") return "blocked";
+  if (
+    run.goldenSetMissing
+    || version.goldenSetAgreement === null
+    || version.knownLimitations.some((limitation) => limitation.includes("no golden-set cases"))
+  ) {
+    return "first";
+  }
+  if (
+    run.status === "overridden"
+    || version.knownLimitations.some((limitation) => limitation.includes("regressed on one or more"))
+  ) {
+    return "override";
+  }
+  return "clean";
+}
