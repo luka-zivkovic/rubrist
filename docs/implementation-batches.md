@@ -1,8 +1,8 @@
 # Portfolio implementation batches
 
-Status: **Batch 6 product foundations complete: Rubrist Analyze → Measure, the Dailies invariant gate, and the neutral blind-contract foundation are implemented; comparative execution remains gated by Gate 5; Batch 7 Rubrist production outcome monitoring is complete under Rubrist ADR-0013; Batch 8 model-agnostic evaluator execution is planned under Rubrist ADR-0014**
+Status: **Batch 6 product foundations complete: Rubrist Analyze → Measure, the Dailies invariant gate, and the neutral blind-contract foundation are implemented; comparative execution remains gated by Gate 5; Batch 7 Rubrist production outcome monitoring is complete under Rubrist ADR-0013; Batch 8 model-agnostic evaluator execution is in progress under Rubrist ADR-0014, with 8A through 8E complete**
 
-Last reviewed: 2026-09-25
+Last reviewed: 2026-09-26
 
 This file is intentionally vendored in Rubrist, Dailies, and Casefile. Update
 all three copies together.
@@ -561,15 +561,35 @@ and binary-calibration v1 bytes are unchanged.
 
 ## Batch 8 — Model-agnostic evaluator execution and evidence v2
 
-Implementation status: **planned**. Decision gate 12 was accepted on
-2026-09-25 and is recorded in Rubrist ADR-0014, including the founder's
-answers to its four open questions and three later decisions: receipts
-carry a definition digest, v2 replaces v1, and a launch baseline restarts
-every versioned identifier at v1. The first 8A slice (#125, shared
-identity contracts) is merged; its `skillDigestV2` moves to the
-definition-digest construction (#127) before first use. Every slice gets an independent review
-against its exact diff, and each review's correctness findings are resolved
-before merge.
+Implementation status: **in progress; 8A through 8E complete**. Decision
+gate 12 was accepted on 2026-09-25 and is recorded in Rubrist ADR-0014,
+including the founder's answers to its four open questions and later
+decisions: receipts carry a definition digest, v2 replaces v1, a launch
+baseline restarts every versioned identifier at v1, and how typed-question
+evaluators record their verdicts, credentials, and state. Every slice gets an
+independent review against its exact diff, and each review's correctness
+findings are resolved before merge.
+
+- 8A (#125, #127–#130), 8B (#132, #133), and 8C (#134) are merged; #126
+  and #131 amended ADR-0014.
+- 8D is merged:
+  - 8D-1 to 8D-4 (#135–#139): v2 bindings, the executor, resolution records,
+    governed gates, and calibration and suite manifest v2, with their v1
+    contracts removed;
+  - 8D-5 (#141–#144): per-item provenance, `skill-format/v2`, assessment
+    receipt v2 with receipt v1 removed, and removal of the legacy v1 binding
+    view.
+- Dailies switched every report to v2 in the same window (dailies#18,
+  Dailies ADR-0008). Its ADR-0009 records the founder's 2026-09-26 decision
+  that an abstained outcome counts as not passing.
+- 8E is merged (#145–#151): the `typed-question/v1` protocol and its
+  TypeSafe adapter, typed-question definitions with their identity and
+  export, TypeSafe credentials, typed-question judging through the runtime,
+  typed-question version creation through the API and TypeSafe binding
+  resolution, sealed calibration and governed candidates, and
+  criterion-author guidance. #148 amended ADR-0014 with the founder's
+  2026-09-26 decisions for typed-question evaluators (decisions 8–11).
+- 8F and 8G remain.
 
 This batch changes Rubrist and Dailies. Both switch to the v2 contracts in
 one window and drop v1 support. Casefile changes only in the launch baseline
@@ -681,10 +701,11 @@ such as TypeSafe Jev can be an optional evaluator provider.
 ### 8E — typed-question evaluators (#101)
 
 - An optional `typesafe` provider covering binary `noul` questions only.
-- The definition holds the question-set digest, the polarity, a
-  **required** decision threshold chosen on non-sealed data, and the output
-  contract.
-- `rationale: not_provided`, the pinned model, and #108's alias rule.
+- The definition holds the question digest, the polarity, a **required**
+  decision threshold chosen on non-sealed data, and the output contract.
+- The definition states `rationale: "not_provided"`; each verdict records
+  `rationaleStatus: "not_provided"` and never abstains (ADR-0014 decision 8).
+- The pinned model, and #108's alias rule.
 - Criterion-author guidance from the spike.
 
 ### 8F — authoring UI

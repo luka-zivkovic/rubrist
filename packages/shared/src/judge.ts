@@ -19,7 +19,7 @@ export const SkillStatusSchema = z.enum([
 ]);
 export type SkillStatus = z.infer<typeof SkillStatusSchema>;
 
-export const JudgeProviderIdSchema = z.enum(["mock", "anthropic", "openai", "openrouter", "custom"]);
+export const JudgeProviderIdSchema = z.enum(["mock", "anthropic", "openai", "openrouter", "custom", "typesafe"]);
 export type JudgeProviderId = z.infer<typeof JudgeProviderIdSchema>;
 
 // Canonical JSON identities operate on Unicode scalar values. JavaScript can
@@ -86,14 +86,6 @@ export const UnicodeScalarValueSchema = z.string().refine((value) => !containsLo
   message: "Text must not contain an unpaired UTF-16 surrogate"
 });
 
-// Canonicalize raw provider identifiers at explicit input or protocol-check
-// boundaries. Persisted bindings use StoredModelBindingSchema and are already
-// canonical.
-export function normalizeJudgeProviderId(value: string): JudgeProviderId | null {
-  const parsed = JudgeProviderIdSchema.safeParse(value.trim().toLowerCase());
-  return parsed.success ? parsed.data : null;
-}
-
 /** Where a judge credential comes from: built in (the mock), the project, or the platform environment. */
 export const JudgeProviderCredentialSourceSchema = z.enum(["built_in", "project", "environment"]);
 export type JudgeProviderCredentialSource = z.infer<typeof JudgeProviderCredentialSourceSchema>;
@@ -104,26 +96,6 @@ export const HttpUrlSchema = z
   .trim()
   .url()
   .refine((value) => /^https?:\/\//i.test(value), { message: "baseUrl must use http or https" });
-
-// Contract-facing model bindings intentionally mirror the frozen receipt-v1
-// and skill-format/v1 schemas, where provider and sampling values are not
-// restricted to Rubrist's current runtime provider catalog.
-export const ModelBindingSchema = z.object({
-  provider: z.string(),
-  modelId: z.string(),
-  // Honest limitation: no supported provider catalog exposes an immutable
-  // snapshot id separate from the model id, so every pin path today stores
-  // modelVersion = modelId. The field records WHAT was requested, not a dated
-  // snapshot — an upstream silent model revision is not detectable through it
-  // (see spec/skill-format-v1.md § Model binding).
-  modelVersion: z.string(),
-  temperature: z.number(),
-  topP: z.number().optional(),
-  baseUrl: z.string().optional()
-});
-export type ModelBinding = z.infer<typeof ModelBindingSchema>;
-
-
 
 // Calibration evidence only describes the exact model that produced it, so a
 // model id the provider can repoint underneath Rubrist cannot become a
@@ -161,7 +133,57 @@ export const MinimumVerdictOutputSchema = {
   }
 } as const;
 
-export const JsonSchemaSchema = z.record(z.string(), z.unknown());
+/**
+ * The output contract a typed-question version stores (ADR-0014 section 5):
+ * a probability, and no rationale. Its identity names the contract by the
+ * question type and polarity, not by this schema.
+ */
+export const TypedQuestionOutputSchema = {
+  type: "object",
+  required: ["probability"],
+  additionalProperties: false,
+  properties: {
+    probability: { type: "number", minimum: 0, maximum: 1 }
+  }
+} as const;
+
+/** JSON equality, with object keys in any order. */
+function sameJson(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length &&
+      left.every((entry, index) => sameJson(entry, right[index]));
+  }
+  if (left !== null && right !== null && typeof left === "object" && typeof right === "object") {
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const keys = Object.keys(leftRecord);
+    return keys.length === Object.keys(rightRecord).length &&
+      keys.every((key) => Object.hasOwn(rightRecord, key) && sameJson(leftRecord[key], rightRecord[key]));
+  }
+  return Object.is(left, right);
+}
+
+/** Whether a stored output schema is exactly the typed-question contract, keys in any order. */
+export function isTypedQuestionOutputSchema(value: unknown): boolean {
+  return sameJson(value, TypedQuestionOutputSchema);
+}
+
+/**
+ * How deep a saved output schema may nest: skill-format/v2 carries it four
+ * levels below the document root (evaluator.identity.definition.outputSchema).
+ */
+const OUTPUT_SCHEMA_MAX_JSON_DEPTH = V2_EVIDENCE_MAX_JSON_DEPTH - 4;
+
+// A version's output schema follows skill-format/v2's rules at save, so every
+// saved version can be exported (ADR-0014 section 7). The raw input is checked
+// first, because a record parse drops an own `__proto__` key without a word.
+export const JsonSchemaSchema = z.unknown().superRefine((raw, ctx) => {
+  if (exceedsJsonDepth(raw, OUTPUT_SCHEMA_MAX_JSON_DEPTH)) {
+    ctx.addIssue({ code: "custom", message: `An output schema must not nest deeper than ${OUTPUT_SCHEMA_MAX_JSON_DEPTH} levels` });
+  } else if (containsOwnProtoKey(raw)) {
+    ctx.addIssue({ code: "custom", message: "An output schema must not contain a __proto__ key" });
+  }
+}).pipe(z.record(z.string(), z.unknown()));
 export type JsonSchema = z.infer<typeof JsonSchemaSchema>;
 
 // The immutable output contract stored with a version must describe the

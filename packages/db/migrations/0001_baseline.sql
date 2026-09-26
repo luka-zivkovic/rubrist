@@ -2956,6 +2956,9 @@ $$;
 
 CREATE FUNCTION evaluator_lifecycle_request_digest_v1(row_value evaluator_lifecycles) RETURNS text
     LANGUAGE sql STABLE
+    -- The decision threshold is a float8: its JSON digits must be the
+    -- shortest exact ones, whatever the session's extra_float_digits.
+    SET extra_float_digits TO '1'
     AS $$
   select governed_content_v1_digest('evaluator-candidate-request/v1',jsonb_build_object(
     'criterionId',row_value.criterion_id,
@@ -2972,7 +2975,9 @@ CREATE FUNCTION evaluator_lifecycle_request_digest_v1(row_value evaluator_lifecy
     'rubricMarkdown',(select version.rubric_markdown from skill_versions version where version.id=row_value.skill_version_id),
     'skillDescription',(select skill.description from skills skill where skill.id=row_value.skill_id),
     'skillName',(select skill.name from skills skill where skill.id=row_value.skill_id),
-    'truthDatasetRevisionId',row_value.truth_dataset_revision_id
+    'truthDatasetRevisionId',row_value.truth_dataset_revision_id,
+    'typedQuestion',(select version.typed_question from skill_versions version where version.id=row_value.skill_version_id),
+    'decisionThreshold',(select version.decision_threshold from skill_versions version where version.id=row_value.skill_version_id)
   ))
 $$;
 
@@ -6111,7 +6116,8 @@ begin
   if run.id is null or item.id is null or run.project_id <> new.project_id
      or item.project_id <> new.project_id or item.revision_id <> run.dataset_revision_id
      or item.item_digest <> new.dataset_revision_item_digest
-     or new.provider <> run.requested_provider then
+     or new.provider <> run.requested_provider
+     or (new.upstream_provider is not null and run.requested_provider <> 'openrouter') then
     raise exception 'binary calibration attempt must bind one run item and requested provider'
       using errcode = '23514';
   end if;
@@ -6278,6 +6284,7 @@ begin
        or revision.item_count <> new.item_count
        or version.skill_id <> new.skill_id
        or version.criterion_version_id <> new.criterion_version_id
+       or version.execution_binding <> new.execution_binding
        or skill_row.criterion_id <> new.criterion_id
        or criterion.criterion_id <> new.criterion_id
        or criterion.criterion_digest <> new.criterion_digest
@@ -6336,12 +6343,8 @@ begin
      or new.skill_digest is distinct from old.skill_digest
      or new.output_contract_digest is distinct from old.output_contract_digest
      or new.requested_provider is distinct from old.requested_provider
-     or new.requested_model_id is distinct from old.requested_model_id
-     or new.requested_model_version is distinct from old.requested_model_version
-     or new.temperature_decimal is distinct from old.temperature_decimal
-     or new.top_p_decimal is distinct from old.top_p_decimal
-     or new.endpoint_kind is distinct from old.endpoint_kind
-     or new.base_url_digest is distinct from old.base_url_digest
+     or new.definition_digest is distinct from old.definition_digest
+     or new.execution_binding is distinct from old.execution_binding
      or new.requested_binding_digest is distinct from old.requested_binding_digest
      or new.suite_manifest_id is distinct from old.suite_manifest_id
      or new.suite_manifest_digest is distinct from old.suite_manifest_digest
@@ -10103,7 +10106,7 @@ CREATE TABLE binary_calibration_artifacts (
     CONSTRAINT binary_calibration_artifacts_artifact_revision_check CHECK ((artifact_revision > 0)),
     CONSTRAINT binary_calibration_artifacts_canonical_bytes_check CHECK (((octet_length(canonical_bytes) >= 2) AND (octet_length(canonical_bytes) <= 16777216))),
     CONSTRAINT binary_calibration_artifacts_check CHECK ((((artifact_revision = 1) AND (predecessor_artifact_id IS NULL) AND (correction_reason IS NULL)) OR ((artifact_revision > 1) AND (predecessor_artifact_id IS NOT NULL) AND (correction_reason IS NOT NULL)))),
-    CONSTRAINT binary_calibration_artifacts_contract_check CHECK ((contract = 'rubrist/binary-calibration/v1'::text)),
+    CONSTRAINT binary_calibration_artifacts_contract_check CHECK ((contract = 'rubrist/binary-calibration/v2'::text)),
     CONSTRAINT binary_calibration_artifacts_evidence_digest_check CHECK ((evidence_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_artifacts_status_check CHECK ((status = ANY (ARRAY['complete'::text, 'incomplete'::text])))
 );
@@ -10130,6 +10133,7 @@ CREATE TABLE binary_calibration_attempts (
     observed_model text,
     observed_version text,
     system_fingerprint text,
+    upstream_provider text,
     commitment_salt text NOT NULL,
     accounted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -10138,21 +10142,22 @@ CREATE TABLE binary_calibration_attempts (
     CONSTRAINT binary_calibration_attempts_check CHECK ((((accounting_state = 'pending'::text) AND (terminal_evaluator_outcome IS NULL) AND (error_code IS NULL) AND (accounted_at IS NULL)) OR ((accounting_state = 'accounted'::text) AND (terminal_evaluator_outcome IS NOT NULL) AND (accounted_at IS NOT NULL)))),
     CONSTRAINT binary_calibration_attempts_check1 CHECK (((error_code IS NULL) OR (terminal_evaluator_outcome = 'errored'::text))),
     CONSTRAINT binary_calibration_attempts_check2 CHECK (((terminal_evaluator_outcome <> 'errored'::text) OR (error_code IS NOT NULL))),
-    CONSTRAINT binary_calibration_attempts_check3 CHECK (((terminal_evaluator_outcome IS NULL) OR ((terminal_evaluator_outcome = ANY (ARRAY['evaluator_pass'::text, 'evaluator_fail'::text, 'abstained'::text])) AND (attempt_state = 'terminal'::text) AND (physical_provider_calls >= 1) AND (error_code IS NULL)) OR ((terminal_evaluator_outcome = 'unevaluated'::text) AND (attempt_state = 'not_started'::text) AND (physical_provider_calls = 0) AND (error_code IS NULL)) OR ((terminal_evaluator_outcome = 'errored'::text) AND (error_code = 'outcome_unknown'::text) AND (attempt_state = 'started'::text) AND (physical_provider_calls >= 1)) OR ((terminal_evaluator_outcome = 'errored'::text) AND (error_code <> 'outcome_unknown'::text) AND (attempt_state = 'terminal'::text)))),
-    CONSTRAINT binary_calibration_attempts_check4 CHECK (((physical_provider_calls > 0) OR ((observed_model IS NULL) AND (observed_version IS NULL) AND (system_fingerprint IS NULL)))),
+    CONSTRAINT binary_calibration_attempts_check3 CHECK (((terminal_evaluator_outcome IS NULL) OR ((terminal_evaluator_outcome = ANY (ARRAY['evaluator_pass'::text, 'evaluator_fail'::text, 'abstained'::text])) AND (attempt_state = 'terminal'::text) AND (physical_provider_calls >= 1) AND (error_code IS NULL)) OR ((terminal_evaluator_outcome = 'not_attempted'::text) AND (attempt_state = 'not_started'::text) AND (physical_provider_calls = 0) AND (error_code IS NULL)) OR ((terminal_evaluator_outcome = 'errored'::text) AND (error_code = 'outcome_unknown'::text) AND (attempt_state = 'started'::text) AND (physical_provider_calls >= 1)) OR ((terminal_evaluator_outcome = 'errored'::text) AND (error_code <> 'outcome_unknown'::text) AND (attempt_state = 'terminal'::text)))),
+    CONSTRAINT binary_calibration_attempts_check4 CHECK (((physical_provider_calls > 0) OR ((observed_model IS NULL) AND (observed_version IS NULL) AND (system_fingerprint IS NULL) AND (upstream_provider IS NULL)))),
     CONSTRAINT binary_calibration_attempts_check5 CHECK ((((observed_version IS NULL) AND (system_fingerprint IS NULL)) OR (observed_model IS NOT NULL))),
-    CONSTRAINT binary_calibration_attempts_check6 CHECK (((attempt_state <> 'not_started'::text) OR ((physical_provider_calls = 0) AND (observed_model IS NULL) AND (observed_version IS NULL) AND (system_fingerprint IS NULL)))),
+    CONSTRAINT binary_calibration_attempts_check6 CHECK (((attempt_state <> 'not_started'::text) OR ((physical_provider_calls = 0) AND (observed_model IS NULL) AND (observed_version IS NULL) AND (system_fingerprint IS NULL) AND (upstream_provider IS NULL)))),
     CONSTRAINT binary_calibration_attempts_commitment_salt_check CHECK ((commitment_salt ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_attempts_dataset_revision_item_digest_check CHECK ((dataset_revision_item_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_attempts_error_code_check CHECK ((error_code = ANY (ARRAY['provider_unavailable'::text, 'provider_authentication'::text, 'provider_rate_limit'::text, 'provider_timeout'::text, 'provider_transport'::text, 'provider_protocol'::text, 'invalid_evaluator_output'::text, 'outcome_unknown'::text, 'internal'::text]))),
+    CONSTRAINT binary_calibration_attempts_error_code_check CHECK ((error_code = ANY (ARRAY['provider_rejected_request'::text, 'provider_unavailable'::text, 'provider_authentication'::text, 'provider_rate_limit'::text, 'provider_timeout'::text, 'provider_transport'::text, 'provider_protocol'::text, 'invalid_evaluator_output'::text, 'outcome_unknown'::text, 'internal'::text]))),
     CONSTRAINT binary_calibration_attempts_observed_model_check CHECK (((char_length(observed_model) <= 4096) AND (octet_length(observed_model) <= 16384))),
     CONSTRAINT binary_calibration_attempts_observed_version_check CHECK (((char_length(observed_version) <= 4096) AND (octet_length(observed_version) <= 16384))),
     CONSTRAINT binary_calibration_attempts_physical_provider_calls_check CHECK (((physical_provider_calls >= 0) AND (physical_provider_calls <= '9007199254740991'::bigint))),
     CONSTRAINT binary_calibration_attempts_provider_check CHECK (((length(provider) > 0) AND (char_length(provider) <= 4096) AND (octet_length(provider) <= 16384))),
     CONSTRAINT binary_calibration_attempts_system_fingerprint_check CHECK (((char_length(system_fingerprint) <= 4096) AND (octet_length(system_fingerprint) <= 16384))),
-    CONSTRAINT binary_calibration_attempts_terminal_evaluator_outcome_check CHECK ((terminal_evaluator_outcome = ANY (ARRAY['evaluator_pass'::text, 'evaluator_fail'::text, 'abstained'::text, 'errored'::text, 'unevaluated'::text]))),
+    CONSTRAINT binary_calibration_attempts_terminal_evaluator_outcome_check CHECK ((terminal_evaluator_outcome = ANY (ARRAY['evaluator_pass'::text, 'evaluator_fail'::text, 'abstained'::text, 'errored'::text, 'not_attempted'::text]))),
     CONSTRAINT binary_calibration_attempts_trial_index_check CHECK ((trial_index = 0)),
-    CONSTRAINT binary_calibration_attempts_truth_label_check CHECK ((truth_label = ANY (ARRAY['pass'::text, 'fail'::text])))
+    CONSTRAINT binary_calibration_attempts_truth_label_check CHECK ((truth_label = ANY (ARRAY['pass'::text, 'fail'::text]))),
+    CONSTRAINT binary_calibration_attempts_upstream_provider_check CHECK (((length(upstream_provider) > 0) AND (char_length(upstream_provider) <= 4096) AND (octet_length(upstream_provider) <= 16384)))
 );
 
 
@@ -10196,7 +10201,7 @@ CREATE TABLE binary_calibration_private_ledgers (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT binary_calibration_private_ledgers_canonical_bytes_check CHECK (((octet_length(canonical_bytes) >= 2) AND (octet_length(canonical_bytes) <= 16777216))),
     CONSTRAINT binary_calibration_private_ledgers_commitment_digest_check CHECK ((commitment_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_private_ledgers_contract_check CHECK ((contract = 'rubrist/binary-calibration-private-ledger/v1'::text))
+    CONSTRAINT binary_calibration_private_ledgers_contract_check CHECK ((contract = 'rubrist/binary-calibration-private-ledger/v2'::text))
 );
 
 
@@ -10252,12 +10257,10 @@ CREATE TABLE binary_calibration_runs (
     skill_digest text NOT NULL,
     output_contract_digest text NOT NULL,
     requested_provider text NOT NULL,
-    requested_model_id text NOT NULL,
-    requested_model_version text NOT NULL,
-    temperature_decimal text NOT NULL,
-    top_p_decimal text,
-    endpoint_kind text NOT NULL,
-    base_url_digest text,
+    -- The evaluator identity the run pins (ADR-0014 section 1): the definition
+    -- digest and the execution binding, exactly as the version stores it.
+    definition_digest text NOT NULL,
+    execution_binding jsonb NOT NULL,
     requested_binding_digest text NOT NULL,
     suite_manifest_id text,
     suite_manifest_digest text,
@@ -10298,9 +10301,8 @@ CREATE TABLE binary_calibration_runs (
     completed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT binary_calibration_runs_artifact_digest_check CHECK ((artifact_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_runs_base_url_digest_check CHECK ((base_url_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_check CHECK (((accounted_observations >= 0) AND (accounted_observations <= planned_observations))),
-    CONSTRAINT binary_calibration_runs_check1 CHECK (((endpoint_kind = 'custom'::text) = (base_url_digest IS NOT NULL))),
+    CONSTRAINT binary_calibration_runs_check1 CHECK ((requested_provider = (execution_binding ->> 'provider'::text))),
     CONSTRAINT binary_calibration_runs_check2 CHECK ((((suite_manifest_id IS NULL) AND (suite_manifest_digest IS NULL) AND (suite_member_position IS NULL)) OR ((suite_manifest_id IS NOT NULL) AND (suite_manifest_digest IS NOT NULL) AND (suite_member_position IS NOT NULL)))),
     CONSTRAINT binary_calibration_runs_check3 CHECK (((representative_of_population_id IS NULL) <> (cardinality(representative_ineligible_reasons) = 0))),
     CONSTRAINT binary_calibration_runs_check4 CHECK (((claim_token IS NOT NULL) OR ((claim_worker_id IS NULL) AND (claim_expires_at IS NULL)))),
@@ -10310,7 +10312,7 @@ CREATE TABLE binary_calibration_runs (
     CONSTRAINT binary_calibration_runs_check8 CHECK (((state <> 'rejected'::text) OR (rejection_reason IS NOT NULL))),
     CONSTRAINT binary_calibration_runs_criterion_digest_check CHECK ((criterion_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_draw_digest_check CHECK ((draw_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_runs_endpoint_kind_check CHECK ((endpoint_kind = ANY (ARRAY['managed'::text, 'custom'::text]))),
+    CONSTRAINT binary_calibration_runs_definition_digest_check CHECK ((definition_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_evidence_digest_check CHECK ((evidence_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_execution_environment_check CHECK ((execution_environment = ANY (ARRAY['external_provider'::text, 'self_hosted_provider'::text, 'local_provider'::text]))),
     CONSTRAINT binary_calibration_runs_governed_review_batch_digest_check CHECK ((governed_review_batch_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -10327,8 +10329,6 @@ CREATE TABLE binary_calibration_runs (
     CONSTRAINT binary_calibration_runs_provider_policy_id_check CHECK (((length(provider_policy_id) > 0) AND (octet_length(provider_policy_id) <= 4096))),
     CONSTRAINT binary_calibration_runs_request_digest_check CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_requested_binding_digest_check CHECK ((requested_binding_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_runs_requested_model_id_check CHECK (((length(requested_model_id) > 0) AND (char_length(requested_model_id) <= 4096) AND (octet_length(requested_model_id) <= 16384))),
-    CONSTRAINT binary_calibration_runs_requested_model_version_check CHECK (((length(requested_model_version) > 0) AND (char_length(requested_model_version) <= 4096) AND (octet_length(requested_model_version) <= 16384))),
     CONSTRAINT binary_calibration_runs_requested_provider_check CHECK (((length(requested_provider) > 0) AND (char_length(requested_provider) <= 4096) AND (octet_length(requested_provider) <= 16384))),
     CONSTRAINT binary_calibration_runs_review_instruction_digest_check CHECK ((review_instruction_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_revision_digest_check CHECK ((revision_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -10337,8 +10337,6 @@ CREATE TABLE binary_calibration_runs (
     CONSTRAINT binary_calibration_runs_state_check CHECK ((state = ANY (ARRAY['queued'::text, 'running'::text, 'recovery_required'::text, 'complete'::text, 'incomplete'::text, 'rejected'::text]))),
     CONSTRAINT binary_calibration_runs_suite_manifest_digest_check CHECK ((suite_manifest_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_runs_suite_member_position_check CHECK (((suite_member_position >= 0) AND (suite_member_position <= 99))),
-    CONSTRAINT binary_calibration_runs_temperature_decimal_check CHECK ((temperature_decimal ~ '^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$'::text)),
-    CONSTRAINT binary_calibration_runs_top_p_decimal_check CHECK ((top_p_decimal ~ '^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$'::text)),
     CONSTRAINT binary_calibration_runs_trial_plan_kind_check CHECK ((trial_plan_kind = 'single'::text)),
     CONSTRAINT binary_calibration_runs_trials_per_item_check CHECK ((trials_per_item = 1)),
     CONSTRAINT binary_calibration_runs_truth_content_digest_check CHECK ((truth_content_digest ~ '^sha256:[0-9a-f]{64}$'::text))
@@ -10592,6 +10590,13 @@ CREATE TABLE eval_run_items (
     execution_claimed_at timestamp with time zone,
     provider_call_started_at timestamp with time zone,
     provider_call_returned_at timestamp with time zone,
+    -- A failed item's shared classification (ADR-0014 section 6): the failure
+    -- kind of an attempted item and what its call observed, or not attempted.
+    failure_kind text,
+    not_attempted boolean DEFAULT false NOT NULL,
+    observed jsonb,
+    CONSTRAINT eval_run_items_failure_classification_check CHECK (((status <> 'failed'::text) = ((failure_kind IS NULL) AND (NOT not_attempted))) AND ((failure_kind IS NULL) OR (NOT not_attempted)) AND ((NOT not_attempted) OR (observed IS NULL)) AND ((observed IS NULL) OR ((status = 'failed'::text) AND (jsonb_typeof(observed) = 'object'::text))) AND ((failure_kind IS NULL) OR (observed IS NOT NULL))),
+    CONSTRAINT eval_run_items_failure_kind_check CHECK ((failure_kind = ANY (ARRAY['provider_rejected_request'::text, 'provider_unavailable'::text, 'provider_authentication'::text, 'provider_rate_limit'::text, 'provider_timeout'::text, 'provider_transport'::text, 'provider_protocol'::text, 'invalid_evaluator_output'::text, 'outcome_unknown'::text, 'internal'::text]))),
     CONSTRAINT eval_run_items_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'completed'::text, 'failed'::text, 'skipped'::text])))
 );
 
@@ -10665,6 +10670,52 @@ CREATE TABLE evaluator_execution_authorizations (
 
 
 --
+-- Name: evaluator_resolution_attempts; Type: TABLE; Schema: current; Owner: -
+--
+
+-- Every resolution attempt and re-check of an execution binding, recorded
+-- against the gate, run, or request that triggered it (ADR-0014 section 4).
+-- A candidate's gate attempt precedes its version, so the version is optional.
+CREATE TABLE evaluator_resolution_attempts (
+    id text NOT NULL,
+    project_id text NOT NULL,
+    skill_version_id text,
+    binding_digest text NOT NULL,
+    kind text NOT NULL,
+    trigger_kind text NOT NULL,
+    trigger_ref text NOT NULL,
+    outcome text NOT NULL,
+    probes jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT date_trunc('milliseconds'::text, clock_timestamp()) NOT NULL,
+    CONSTRAINT evaluator_resolution_attempts_binding_digest_check CHECK ((binding_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT evaluator_resolution_attempts_kind_check CHECK ((kind = ANY (ARRAY['resolution'::text, 'recheck'::text]))),
+    CONSTRAINT evaluator_resolution_attempts_outcome_check CHECK ((((kind = 'resolution'::text) AND (outcome = ANY (ARRAY['resolved'::text, 'unresolved'::text, 'failed'::text]))) OR ((kind = 'recheck'::text) AND (outcome = ANY (ARRAY['holds'::text, 'no_longer_holds'::text, 'unknown'::text]))))),
+    CONSTRAINT evaluator_resolution_attempts_probes_check CHECK ((jsonb_typeof(probes) = 'array'::text)),
+    CONSTRAINT evaluator_resolution_attempts_trigger_kind_check CHECK ((trigger_kind = ANY (ARRAY['candidate_creation'::text, 'activation'::text, 'binary_calibration'::text, 'binary_calibration_run'::text, 'on_demand'::text, 'version_save'::text]))),
+    CONSTRAINT evaluator_resolution_attempts_trigger_ref_check CHECK (((char_length(trigger_ref) >= 1) AND (char_length(trigger_ref) <= 4096)))
+);
+
+
+--
+-- Name: evaluator_resolution_records; Type: TABLE; Schema: current; Owner: -
+--
+
+-- The latest resolution of each evaluator version's execution binding. Not
+-- identity: it confirms or fails the binding and never changes it
+-- (ADR-0014 section 1).
+CREATE TABLE evaluator_resolution_records (
+    skill_version_id text NOT NULL,
+    project_id text NOT NULL,
+    binding_digest text NOT NULL,
+    status text NOT NULL,
+    record jsonb NOT NULL,
+    recorded_at timestamp with time zone DEFAULT date_trunc('milliseconds'::text, clock_timestamp()) NOT NULL,
+    CONSTRAINT evaluator_resolution_records_binding_digest_check CHECK ((binding_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT evaluator_resolution_records_status_check CHECK (((status = ANY (ARRAY['resolved'::text, 'unresolved'::text, 'failed'::text])) AND (status = (record ->> 'status'::text))))
+);
+
+
+--
 -- Name: evaluator_suite_manifest_members; Type: TABLE; Schema: current; Owner: -
 --
 
@@ -10716,13 +10767,13 @@ CREATE TABLE evaluator_suite_manifests (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT evaluator_suite_manifests_artifact_digest_check CHECK ((artifact_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_canonical_bytes_check CHECK ((octet_length(canonical_bytes) > 0)),
-    CONSTRAINT evaluator_suite_manifests_contract_check CHECK ((contract = 'rubrist/evaluator-suite-manifest/v1'::text)),
+    CONSTRAINT evaluator_suite_manifests_contract_check CHECK ((contract = 'rubrist/evaluator-suite-manifest/v2'::text)),
     CONSTRAINT evaluator_suite_manifests_idempotency_key_check CHECK ((length(idempotency_key) BETWEEN 1 AND 200) AND (idempotency_key = TRIM(BOTH FROM idempotency_key))),
     CONSTRAINT evaluator_suite_manifests_manifest_digest_check CHECK ((manifest_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_member_count_check CHECK ((member_count > 0)),
     CONSTRAINT evaluator_suite_manifests_request_digest_check CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_revision_check CHECK ((revision > 0)),
-    CONSTRAINT evaluator_suite_manifests_schema_version_check CHECK ((schema_version = 1)),
+    CONSTRAINT evaluator_suite_manifests_schema_version_check CHECK ((schema_version = 2)),
     CONSTRAINT evaluator_suite_manifests_trial_plan_check CHECK (((trial_plan = 'null'::jsonb) OR ((jsonb_typeof(trial_plan) = 'object'::text) AND ((trial_plan ->> 'kind'::text) = 'independent_repetitions'::text) AND (jsonb_typeof((trial_plan -> 'trialsPerItem'::text)) = 'number'::text) AND ((((trial_plan ->> 'trialsPerItem'::text))::integer >= 2) AND (((trial_plan ->> 'trialsPerItem'::text))::integer <= 10)) AND (trial_plan = jsonb_build_object('kind', 'independent_repetitions', 'trialsPerItem', ((trial_plan ->> 'trialsPerItem'::text))::integer)))))
 );
 
@@ -11552,7 +11603,7 @@ CREATE TABLE judge_provider_keys (
     encrypted_credentials text NOT NULL,
     key_display text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT judge_provider_keys_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'openai'::text, 'openrouter'::text, 'custom'::text])))
+    CONSTRAINT judge_provider_keys_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'openai'::text, 'openrouter'::text, 'custom'::text, 'typesafe'::text])))
 );
 
 
@@ -11567,7 +11618,8 @@ CREATE TABLE judge_runs (
     skill_version_id text NOT NULL,
     verdict text NOT NULL,
     score numeric NOT NULL,
-    reasoning text NOT NULL,
+    -- Null when the evaluator states no reason: a typed-question verdict.
+    reasoning text,
     raw_request jsonb,
     raw_response jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -11851,8 +11903,10 @@ CREATE TABLE skill_versions (
     project_id text NOT NULL,
     version text NOT NULL,
     status text NOT NULL,
-    rubric_markdown text NOT NULL,
-    prompt text NOT NULL,
+    rubric_markdown text,
+    prompt text,
+    typed_question jsonb,
+    decision_threshold double precision,
     output_schema jsonb NOT NULL,
     execution_binding jsonb NOT NULL,
     custom_endpoint_url text,
@@ -11876,6 +11930,17 @@ CREATE TABLE skill_versions (
     onboarding_request_digest text,
     onboarding_assurance text,
     CONSTRAINT skill_versions_developer_identity_status_check CHECK ((developer_identity_status = ANY (ARRAY['unknown_legacy'::text, 'recorded'::text]))),
+    -- A typed-question version (ADR-0014 section 5) asks a question with a
+    -- decision threshold on P(pass), strictly between 0 and 1, and has no
+    -- rubric or prompt; a prompted version is the reverse. Only
+    -- typed-question/v1 runs a typed question, its verdict is binary, and its
+    -- output contract is the fixed probability schema, which identity names
+    -- only by question type and polarity.
+    CONSTRAINT skill_versions_definition_kind_check CHECK ((
+      CASE WHEN ((execution_binding ->> 'verdictProtocol'::text) = 'typed-question/v1'::text)
+        THEN ((typed_question IS NOT NULL) AND (jsonb_typeof(typed_question) = 'object'::text) AND (decision_threshold IS NOT NULL) AND (decision_threshold > (0)::double precision) AND (decision_threshold < (1)::double precision) AND (rubric_markdown IS NULL) AND (prompt IS NULL) AND (verdict_kind = 'binary'::text) AND (output_schema = '{"type": "object", "required": ["probability"], "properties": {"probability": {"type": "number", "maximum": 1, "minimum": 0}}, "additionalProperties": false}'::jsonb))
+        ELSE ((typed_question IS NULL) AND (decision_threshold IS NULL) AND (rubric_markdown IS NOT NULL) AND (prompt IS NOT NULL))
+      END)),
     -- The binding names a custom endpoint only by digest (ADR-0014 section 2):
     -- SHA-256 of 'rubrist/endpoint-base-url/v1', a NUL byte, and the URL. A
     -- custom provider keeps its configured URL here, and only it does, and the
@@ -12019,6 +12084,14 @@ CREATE TABLE verdicts (
     payload jsonb NOT NULL,
     external_run_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    -- An evaluator's verdict records what its call observed and the
+    -- evaluator's own score (ADR-0014 section 6).
+    observed jsonb,
+    evaluator_score jsonb,
+    CONSTRAINT verdicts_evaluator_provenance_check CHECK ((((observed IS NULL) AND (evaluator_score IS NULL)) OR (source = 'llm_judge'::text)) AND ((evaluator_score IS NULL) OR (observed IS NOT NULL)) AND ((observed IS NULL) OR (jsonb_typeof(observed) = 'object'::text)) AND ((evaluator_score IS NULL) OR (jsonb_typeof(evaluator_score) = 'object'::text))),
+    -- Only an evaluator records a verdict that states no rationale (a
+    -- typed-question verdict, ADR-0014 section 5); a person always gives one.
+    CONSTRAINT verdicts_rationale_status_check CHECK ((NOT (payload ? 'rationaleStatus'::text)) OR ((source = 'llm_judge'::text) AND ((payload ->> 'kind'::text) = 'binary'::text) AND (NOT (payload ? 'rationale'::text)))),
     CONSTRAINT verdicts_source_check CHECK ((source = ANY (ARRAY['llm_judge'::text, 'human'::text, 'imported_external'::text, 'adjudicated'::text]))),
     CONSTRAINT verdicts_verdict_kind_check CHECK ((verdict_kind = ANY (ARRAY['binary'::text, 'scalar'::text, 'categorical'::text])))
 );
@@ -13207,6 +13280,22 @@ ALTER TABLE ONLY evaluator_execution_authorizations
 
 
 --
+-- Name: evaluator_resolution_attempts evaluator_resolution_attempts_pkey; Type: CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_attempts
+    ADD CONSTRAINT evaluator_resolution_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: evaluator_resolution_records evaluator_resolution_records_pkey; Type: CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_records
+    ADD CONSTRAINT evaluator_resolution_records_pkey PRIMARY KEY (skill_version_id);
+
+
+--
 -- Name: evaluator_lifecycle_events evaluator_lifecycle_events_lifecycle_id_sequence_key; Type: CONSTRAINT; Schema: current; Owner: -
 --
 
@@ -14095,6 +14184,14 @@ ALTER TABLE ONLY skill_versions
 
 
 --
+-- Name: skill_versions skill_versions_project_id_id_key; Type: CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY skill_versions
+    ADD CONSTRAINT skill_versions_project_id_id_key UNIQUE (project_id, id);
+
+
+--
 -- Name: skills skills_pkey; Type: CONSTRAINT; Schema: current; Owner: -
 --
 
@@ -14832,6 +14929,13 @@ CREATE INDEX eval_runs_source_trace_test_idx ON eval_runs USING btree (project_i
 --
 
 CREATE INDEX evaluator_execution_authorizations_version_idx ON evaluator_execution_authorizations USING btree (project_id, skill_version_id, authorized_at, id);
+
+
+--
+-- Name: evaluator_resolution_attempts_trigger_idx; Type: INDEX; Schema: current; Owner: -
+--
+
+CREATE INDEX evaluator_resolution_attempts_trigger_idx ON evaluator_resolution_attempts USING btree (project_id, trigger_kind, trigger_ref, recorded_at);
 
 
 --
@@ -16246,6 +16350,13 @@ CREATE TRIGGER eval_runs_revision_guard BEFORE INSERT OR UPDATE OF dataset_revis
 --
 
 CREATE TRIGGER evaluator_execution_authorizations_append_only BEFORE DELETE OR UPDATE ON evaluator_execution_authorizations FOR EACH ROW EXECUTE FUNCTION guard_evaluator_lifecycle_append_only_v1();
+
+
+--
+-- Name: evaluator_resolution_attempts evaluator_resolution_attempts_append_only; Type: TRIGGER; Schema: current; Owner: -
+--
+
+CREATE TRIGGER evaluator_resolution_attempts_append_only BEFORE DELETE OR UPDATE ON evaluator_resolution_attempts FOR EACH ROW EXECUTE FUNCTION guard_evaluator_lifecycle_append_only_v1();
 
 
 --
@@ -18254,6 +18365,38 @@ ALTER TABLE ONLY evaluator_execution_authorizations
 
 ALTER TABLE ONLY evaluator_execution_authorizations
     ADD CONSTRAINT evaluator_execution_authorizations_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: evaluator_resolution_attempts evaluator_resolution_attempts_project_id_fkey; Type: FK CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_attempts
+    ADD CONSTRAINT evaluator_resolution_attempts_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+
+
+--
+-- Name: evaluator_resolution_attempts evaluator_resolution_attempts_skill_version_id_fkey; Type: FK CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_attempts
+    ADD CONSTRAINT evaluator_resolution_attempts_skill_version_id_fkey FOREIGN KEY (project_id, skill_version_id) REFERENCES skill_versions(project_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: evaluator_resolution_records evaluator_resolution_records_project_id_fkey; Type: FK CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_records
+    ADD CONSTRAINT evaluator_resolution_records_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+
+
+--
+-- Name: evaluator_resolution_records evaluator_resolution_records_skill_version_id_fkey; Type: FK CONSTRAINT; Schema: current; Owner: -
+--
+
+ALTER TABLE ONLY evaluator_resolution_records
+    ADD CONSTRAINT evaluator_resolution_records_skill_version_id_fkey FOREIGN KEY (project_id, skill_version_id) REFERENCES skill_versions(project_id, id) ON DELETE CASCADE;
 
 
 --

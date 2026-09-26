@@ -8,9 +8,10 @@ import {
   type GoldenSetEntry,
   type GoldenSetHealthSummary,
   type JudgeRun,
-  type SkillFormatExample,
+  type SkillFormatV2Example,
   type VerdictRecord,
   effectiveHumanLabel,
+  payloadRationale,
   verdictLabelFromPayload
 } from "@rubrist/shared";
 import { redactTrace } from "../lib/redaction.js";
@@ -84,19 +85,21 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
     projectId: string,
     cap: number,
     criterionVersionId?: string | undefined
-  ): Promise<SkillFormatExample[]> {
+  ): Promise<SkillFormatV2Example[]> {
     const golden = (await this.dependencies.listGoldenSet(projectId, criterionVersionId)).slice(0, cap);
-    const examples: SkillFormatExample[] = [];
+    const examples: SkillFormatV2Example[] = [];
     for (const entry of golden) {
       // Reuse the redacted case-detail trace (demo parity with the PG join).
       const detail = await this.dependencies.getCaseDetail(projectId, entry.caseId, entry.sourceSkillVersionId).catch(() => null);
       examples.push({
         id: entry.id,
         label: entry.agreedLabel,
-        input: detail?.trace.input ?? null,
-        output: detail?.trace.output ?? null,
+        input: (detail?.trace.input ?? null) as SkillFormatV2Example["input"],
+        output: (detail?.trace.output ?? null) as SkillFormatV2Example["output"],
         reason: entry.reason,
-        ...(detail?.trace.metadata && Object.keys(detail.trace.metadata).length > 0 ? { metadata: detail.trace.metadata } : {})
+        metadata: detail?.trace.metadata && Object.keys(detail.trace.metadata).length > 0
+          ? detail.trace.metadata as SkillFormatV2Example["metadata"]
+          : null
       });
     }
     return examples;
@@ -145,7 +148,8 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
         caseId,
         trace?.id ?? caseId,
         judged.verdict,
-        judged.reasoning,
+        // The legacy exception queue shows "" for a verdict that states no reason.
+        judged.reasoning ?? "",
         undefined,
         judged
       );
@@ -212,12 +216,15 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
         source: "llm_judge",
         actorUserId: null,
         actorName: null,
-        payload: {
-          kind: "categorical",
-          choice: recordedRun.verdict,
-          choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 },
-          rationale: recordedRun.reasoning
-        },
+        // A run that states no reason is a typed-question verdict: pass or fail.
+        payload: recordedRun.reasoning === null
+          ? { kind: "binary", pass: recordedRun.verdict === "pass", rationaleStatus: "not_provided" }
+          : {
+              kind: "categorical",
+              choice: recordedRun.verdict,
+              choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 },
+              rationale: recordedRun.reasoning
+            },
         externalRunId: null,
         createdAt: recordedRun.createdAt
       };
@@ -233,7 +240,12 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
     const displayedVerdict = recordedRun?.verdict ?? (
       latestHistoricalJudge ? verdictLabelFromPayload(latestHistoricalJudge.payload) : verdict
     );
-    const displayedReason = recordedRun?.reasoning ?? latestHistoricalJudge?.payload.rationale ?? reason;
+    // Null when the displayed verdict states no reason; the legacy exception
+    // queue shows "" for it.
+    const displayedReasoning = recordedRun
+      ? recordedRun.reasoning
+      : latestHistoricalJudge ? payloadRationale(latestHistoricalJudge.payload) : reason;
+    const displayedReason = displayedReasoning ?? "";
     const displayedCreatedAt = recordedRun?.createdAt ?? latestHistoricalJudge?.createdAt ?? demoProject.updatedAt;
     const displayedJudgeRunId = recordedRun?.id ?? (
       latestHistoricalJudge ? `judge_from_${latestHistoricalJudge.id}` : `judge_${caseId}`
@@ -296,7 +308,7 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
         skillVersionId: displayedSkillVersionId,
         verdict: displayedVerdict,
         score: displayedVerdict === "fail" ? 0.2 : displayedVerdict === "pass" ? 0.9 : 0.5,
-        reasoning: displayedReason,
+        reasoning: displayedReasoning,
         createdAt: displayedCreatedAt
       },
       latestHumanLabel: effectiveHumanLabel(verdictHistory),

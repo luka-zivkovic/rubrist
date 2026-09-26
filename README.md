@@ -112,7 +112,13 @@ RUBRIST_BOOTSTRAP_TOKEN=
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 OPENROUTER_API_KEY=
+# Runs typed-question evaluators (Jev) only; prompted judging still needs one of the keys above.
+TYPESAFE_API_KEY=
 ```
+
+Typed-question evaluators ask a TypeSafe model one yes-or-no question; see
+[typed-question evaluators](docs/typed-question-evaluators.md) for when they
+fit and how to author one.
 
 Set `RUBRIST_TRUST_PROXY=1` only when clients cannot bypass your trusted reverse
 proxy. Rubrist will then use sanitized forwarded client-IP headers for the
@@ -295,7 +301,7 @@ Rubrist complements tracing platforms rather than replacing them. It can import 
 - Multiple independently versioned evaluation criteria per project, each with
   its own judging-skill lineage, human evidence, and exact definition binding.
 - Immutable, policy-free evaluator-suite manifests that bind ordered criterion
-  definitions to exact evaluator versions without changing assessment receipt v1.
+  definitions to exact evaluator versions without changing the assessment receipt.
 - Binary, scalar, and categorical structured verdicts. Binary evaluators can
   explicitly return `ambiguous` to abstain instead of being forced to pass or fail.
 - Bulk trace judging with asynchronous eval runs.
@@ -313,7 +319,7 @@ Rubrist complements tracing platforms rather than replacing them. It can import 
 - Native Ironside project verification, settled trace-version import, cursor recovery, and criterion-specific assessment writeback.
 - Agent-trajectory evaluation with ordered steps and expected failing-step labels.
 - Per-project Anthropic or OpenAI judge keys encrypted at rest.
-- Judge Cards and portable [SkillFormat v1](spec/skill-format-v1.md) exports.
+- Judge Cards and portable [skill-format/v2](contracts/skill-format-v2.md) exports.
 - A small CI gate client in [`tools/ci/gate.mjs`](tools/ci/gate.mjs).
 
 </details>
@@ -386,18 +392,22 @@ Unchanged examples reuse recorded verdicts; edited examples are judged again. In
 available. New release integrations submit `purpose: "release_evidence"` to
 `POST /api/v1/judge/batch`, verify the policy-free assessment receipt, and
 apply thresholds or ship/hold policy in the release layer—not in Rubrist.
-Receipt v1 is a closed wire contract with portable schema and interoperability
-fixtures in [`contracts/`](contracts/). Calibration transport is now the
-separate aggregate-only `rubrist/binary-calibration/v1` contract accepted by
-ADR-0009. The current Postgres runtime executes one trial per governed sealed
-binary item and mints that separate artifact; it is not added to receipt v1.
-Dailies independently verifies the frozen calibration contract and corpus and
-consumes explicitly configured local artifacts through config v6, policy v2,
-report v6, runner, and CLI paths. It performs no network or latest-artifact
+Receipt v2 is a closed wire contract with portable schema and interoperability
+fixtures in [`contracts/`](contracts/). It states the evaluator's execution
+binding and definition digest, and for each item an outcome, a failure, or
+that it was never attempted, with the evaluator's score and what its call
+observed. Calibration transport is the
+separate aggregate-only `rubrist/binary-calibration/v2` contract (ADR-0009, as
+ADR-0014 revises it). The current Postgres runtime executes one trial per
+governed sealed binary item through the evaluator's exact execution binding
+and mints that separate artifact; it is not added to the receipt.
+Dailies independently verifies receipt v2 and calibration v2 and consumes
+explicitly configured local artifacts through config v6, policy v2, report v6,
+runner, and CLI paths. It performs no network or latest-artifact
 lookup. Other uncertainty transport remains unresolved. Current receipts are
 derived once at terminalization and persisted as exact canonical bytes in
-append-only PostgreSQL artifacts. Historical terminal v1 runs freeze once on
-their first receipt read. Later source-row changes cannot alter the stored
+append-only PostgreSQL artifacts. A terminal run without one freezes once on
+its first receipt read. Later source-row changes cannot alter the stored
 root; governed
 corrections append linked successors, and consumer-held canonical copies can
 be recorded as exact matches or divergences without overwriting history. See
@@ -457,8 +467,10 @@ In Postgres mode, a project owner can launch an explicit
 `{ kind: "single", trialsPerItem: 1 }` binary calibration from the governed
 human-truth screen. The run binds one exact binary evaluator, criterion,
 governed sealed-validation revision, selection provenance, provider policy,
-and authorization/completion exposure snapshots. The worker records call
-start durably before its one provider dispatch; a stranded started attempt is
+and authorization/completion exposure snapshots. Each attempt is one call that
+sends exactly the pinned execution binding. The worker records call start
+durably just before that dispatch, after every check that can refuse it; a
+stranded started attempt is
 accounted permanently as `outcome_unknown` and is never called again in that
 run. An explicit binary `ambiguous` result is recorded as `abstained`: it is a
 valid terminal outcome that lowers classified coverage and never enters the
@@ -466,7 +478,8 @@ confusion matrix.
 
 The immutable public-contract artifact is aggregate-only. It carries support,
 coverage, confusion-matrix cells, exact metrics and Wilson bounds, error and
-unevaluated counts, and requested/observed provider provenance without item
+not-attempted counts, the evaluator's execution binding and definition digest,
+and requested/observed provider provenance without item
 identity, labels, payloads, rationale, or request/response identifiers. Its
 private salted ledger is used only inside atomic minting and has no HTTP,
 project-key, browser, operator-export, or application read surface.
@@ -479,12 +492,12 @@ Later development exposure can revoke current admissibility without rewriting
 the historical artifact.
 
 The frozen contract supports repeated-trial evidence, but the current Rubrist
-runtime does not execute it. Dailies currently vends and verifies the same
-contract and conformance corpus, consumes explicitly configured local
-artifacts, and emits calibration-aware release reports. It never fetches a
-latest artifact or Rubrist status, and it has no access to the private ledger.
+runtime does not execute it. Dailies consumes explicitly configured local
+calibration artifacts and emits calibration-aware release reports over
+calibration v2 (Dailies ADR-0008). It never fetches a latest
+artifact or Rubrist status, and it has no access to the private ledger.
 
-See the [binary-calibration contract](contracts/binary-calibration-v1.md),
+See the [binary-calibration contract](contracts/binary-calibration-v2.md),
 [ADR-0009](docs/decisions/0009-binary-calibration-artifact-contract.md), and
 the [runtime architecture](docs/architecture.md).
 
@@ -504,12 +517,12 @@ at execution time. Single-criterion routes continue to work for projects with
 one criterion and fail closed when selection would be ambiguous.
 
 An owner can publish an immutable
-[`rubrist/evaluator-suite-manifest/v1`](contracts/evaluator-suite-manifest-v1.md)
+[`rubrist/evaluator-suite-manifest/v2`](contracts/evaluator-suite-manifest-v2.md)
 artifact that orders criterion definitions and binds each one to an exact
-evaluator version, frozen `skillDigest`, output contract, applicability rule,
+evaluator version, its v2 `skillDigest`, output contract, applicability rule,
 and optional independent-trial plan. The manifest contains no release roles,
 weights, thresholds, aggregate score, or ship decision. Each criterion is
-still assessed through a separate, unchanged receipt-v1 artifact; Dailies or
+still assessed through a separate assessment receipt; Dailies or
 another release layer applies customer policy to that evidence.
 
 ## Analyze workflow status
@@ -552,7 +565,11 @@ explicit nonproduction evaluation, binary-calibration, and retained-regression
 contexts; imports, suites, trace tests, release gates, scheduled work, and
 implicit judging require an active evaluator with currently admissible sealed
 calibration. Activation is an owner action over exact complete calibration and
-full passed regression evidence; revocation appends `needs_review`.
+full passed regression evidence; revocation appends `needs_review`. Candidate
+creation, activation, and sealed calibration are governed gates: each requires
+a resolved execution binding that states its temperature and reasoning unless
+the model rejects the parameter itself, and sealed calibration re-checks the
+binding before any sealed exposure (ADR-0014 section 4).
 
 The integrated Analyze view now emits one digest-bound
 `rubrist/analysis-workflow-measurement/v1` report. Coding completion, named
@@ -589,6 +606,7 @@ over HTTP without MCP.
 - [MCP reference](tools/mcp/README.md) — commands, available tools, and current limitations.
 - [Self-hosting](docs/self-hosting.md) — deployment and operations.
 - [Architecture](docs/architecture.md) — runtime components and evidence boundaries.
+- [Typed-question evaluators](docs/typed-question-evaluators.md) — when a TypeSafe yes-or-no evaluator fits, and how to author one.
 - [Guided onboarding](docs/beginner-onboarding-journey.md), [Analyze](docs/analyze-journey.md), and [trace-to-test](docs/trace-to-test-journey.md) — detailed workflows.
 - [Product charter](PRODUCT.md), [glossary](docs/glossary.md), and [architecture decisions](docs/decisions/README.md) — product scope and terminology.
 
@@ -635,7 +653,6 @@ deploy           Release-owned Compose bundles for self-hosting
 tools/ci         Standalone CI gate client and examples
 tools/mcp        Stdio MCP server over the HTTP API
 tools/sim        Optional end-to-end simulation harness
-spec             Portable SkillFormat specification
 ```
 
 The architectural overview and core invariants are documented in [docs/architecture.md](docs/architecture.md).

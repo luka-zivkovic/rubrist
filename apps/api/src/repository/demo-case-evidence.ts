@@ -61,6 +61,16 @@ export class DemoCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
   ) {}
 
   async recordVerdict(input: RecordVerdictInput): Promise<VerdictRecord> {
+    // Parity with the PG check: only an evaluator's verdict carries call
+    // provenance, and its score needs the call's observation.
+    if ((input.observed || input.evaluatorScore) && input.source !== "llm_judge") {
+      throw new Error("Only an evaluator's verdict records call provenance");
+    }
+    if (input.evaluatorScore && !input.observed) throw new Error("An evaluator score needs the call's observation");
+    // And only an evaluator records a verdict that states no rationale.
+    if ("rationaleStatus" in input.payload && input.source !== "llm_judge") {
+      throw new Error("Only an evaluator's verdict may state no rationale");
+    }
     if (input.externalRunId) {
       const existing = this.store.verdicts.find(
         (candidate) =>
@@ -102,6 +112,8 @@ export class DemoCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
       actorUserId: input.actorUserId ?? null,
       payload: input.payload,
       externalRunId: input.externalRunId ?? null,
+      observed: input.observed ?? null,
+      evaluatorScore: input.evaluatorScore ?? null,
       createdAt
     };
     this.store.verdicts.push(record);

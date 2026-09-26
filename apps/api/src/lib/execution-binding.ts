@@ -3,7 +3,6 @@ import {
   ExecutionBindingSchema,
   type ExecutionBinding,
   type ExecutionBindingInput,
-  type ModelBinding,
   type SkillVersion
 } from "@rubrist/shared";
 import { endpointBaseUrlDigest } from "./evaluator-identity.js";
@@ -29,19 +28,25 @@ export function platformOpenAIBaseUrl(): string | null {
  * digest and kept beside the binding. An OpenAI binding on the managed
  * endpoint records the platform's OPENAI_BASE_URL override, when one is set,
  * as its custom endpoint: evidence names the endpoint the calls reach. The
- * result is validated with the stored binding's rules. Typed-question
- * bindings arrive with their definitions in Batch 8E, so none is accepted yet.
+ * result is validated with the stored binding's rules. A typed-question
+ * binding is accepted only where the caller saves a typed-question
+ * definition with it (`typedQuestion`); every other flow saves a prompted
+ * definition, which only a prompted binding runs.
  */
 export function executionBindingFromInput(
   raw: ExecutionBindingInput,
-  platform: { openAIBaseUrl: string | null } = { openAIBaseUrl: platformOpenAIBaseUrl() }
+  platform: { openAIBaseUrl: string | null } = { openAIBaseUrl: platformOpenAIBaseUrl() },
+  options: { typedQuestion?: boolean } = {}
 ): { executionBinding: ExecutionBinding; customEndpointUrl: string | null } {
   const issues = (error: { issues: Array<{ path: PropertyKey[]; message: string }> }) =>
     error.issues.map((issue) => `${issue.path.map(String).join(".") || "binding"}: ${issue.message}`).join("; ");
   const input = ExecutionBindingInputSchema.safeParse(raw);
   if (!input.success) throw new ExecutionBindingInputError(issues(input.error));
-  if (input.data.provider === "typesafe" || input.data.verdictProtocol === "typed-question/v1") {
-    throw new ExecutionBindingInputError("typed-question evaluators aren't available yet; bind a prompted evaluator to a prompted provider");
+  const typed = input.data.provider === "typesafe" || input.data.verdictProtocol === "typed-question/v1";
+  if (typed !== (options.typedQuestion === true)) {
+    throw new ExecutionBindingInputError(typed
+      ? "typed-question evaluators aren't available here; bind a prompted evaluator to a prompted provider"
+      : "a typed-question definition runs on the typesafe provider with typed-question/v1");
   }
   const { endpoint, ...rest } = input.data;
   let stored: ExecutionBinding["endpoint"];
@@ -64,10 +69,14 @@ export function executionBindingFromInput(
   return { executionBinding: parsed.data, customEndpointUrl };
 }
 
-/** Why a submitted binding can't be saved, for a 400; `null` when it can. */
-export function executionBindingInputProblem(input: ExecutionBindingInput): string | null {
+/**
+ * Why a submitted binding can't be saved, for a 400; `null` when it can. As
+ * for executionBindingFromInput, a typed-question binding is saved only with
+ * a typed-question definition (`typedQuestion`).
+ */
+export function executionBindingInputProblem(input: ExecutionBindingInput, options: { typedQuestion?: boolean } = {}): string | null {
   try {
-    executionBindingFromInput(input);
+    executionBindingFromInput(input, undefined, options);
     return null;
   } catch (error) {
     if (error instanceof ExecutionBindingInputError) return `Invalid execution binding: ${error.message}`;
@@ -101,57 +110,4 @@ export function verifiedEndpointUrl(
   return baseUrl !== null && endpointBaseUrlDigest(baseUrl) === binding.endpoint.baseUrlDigest
     ? { ok: true, baseUrl }
     : { ok: false };
-}
-
-/** v1 evidence can't state this version's binding (Batch 8D). */
-export class LegacyEvidenceUnsupportedError extends Error {
-  readonly code = "v1_evidence_unsupported_binding";
-
-  constructor(what: string) {
-    super(`${what} can't state this evaluator's execution binding; it needs an explicit temperature and a v1-expressible endpoint until v2 evidence replaces v1 (Batch 8D)`);
-    this.name = "LegacyEvidenceUnsupportedError";
-  }
-}
-
-/**
- * TEMPORARY (Batch 8D): the v1 model binding that v1 receipts, suite
- * manifests, and skill-format exports still record, derived from the v2
- * binding. `null` when v1 can't state it: an unset temperature (the mock,
- * which takes no sampling, keeps v1's recorded 0), a typed-question
- * provider, or an OpenAI binding on a recorded override endpoint.
- *
- * It is lossy: v1 has no protocol, reasoning, output token limit, or
- * routing, so distinct v2 bindings can share a v1 view and a v1 skillDigest.
- * v2 evidence, which carries the whole binding, replaces it in 8D-4 and 8D-5.
- */
-export function legacyModelBinding(version: Pick<SkillVersion, "executionBinding" | "customEndpointUrl">): ModelBinding | null {
-  const binding = version.executionBinding;
-  const temperature = binding.provider === "mock" ? 0 : binding.sampling.temperature;
-  if (temperature === null || binding.provider === "typesafe") return null;
-  if (binding.provider === "openai" && binding.endpoint.kind === "custom") return null;
-  return {
-    provider: binding.provider,
-    modelId: binding.modelId,
-    modelVersion: binding.modelVersion,
-    temperature,
-    ...(binding.sampling.topP !== null ? { topP: binding.sampling.topP } : {}),
-    ...(binding.provider === "custom" && version.customEndpointUrl !== null ? { baseUrl: version.customEndpointUrl } : {})
-  };
-}
-
-/**
- * TEMPORARY (Batch 8D): the v1 binding sealed calibration v1 may execute.
- * Calibration v1 still runs through the v1 providers, so it runs only a
- * binding those providers send exactly: a forced tool or function, no
- * reasoning, no top-p, Anthropic's fixed 1,200 output tokens (OpenAI's
- * none), no OpenRouter routing, and no recorded override endpoint.
- * Everything else waits for calibration v2 (8D-4), which runs the executor.
- */
-export function legacyCalibrationBinding(version: Pick<SkillVersion, "executionBinding" | "customEndpointUrl">): ModelBinding | null {
-  const binding = version.executionBinding;
-  const legacy = legacyModelBinding(version);
-  if (legacy === null || binding.provider === "mock") return legacy;
-  const forced = binding.verdictProtocol === "anthropic.forced-tool/v1" || binding.verdictProtocol === "openai.forced-function/v1";
-  const limit = binding.provider === "anthropic" ? binding.outputTokenLimit === 1_200 : binding.outputTokenLimit === null;
-  return forced && limit && binding.reasoning === null && binding.sampling.topP === null && binding.routing === null ? legacy : null;
 }

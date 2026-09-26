@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ExecutionBindingSchema } from "./evaluator-execution.js";
+import { EVALUATOR_DEFINITION_TEXT_MAX, ExecutionBindingSchema } from "./evaluator-execution.js";
 import {
   HttpUrlSchema,
   JudgeProviderCredentialSourceSchema,
@@ -14,7 +14,7 @@ import { ManualTraceImportInputSchema } from "./traces.js";
 // after creation — only this metadata + a non-secret prefix for identification.
 // BYO judge provider keys. The raw key is never in any schema that a
 // client can receive — keyDisplay is the only renderable form.
-export const JudgeKeyProviderSchema = z.enum(["anthropic", "openai", "openrouter", "custom"]);
+export const JudgeKeyProviderSchema = z.enum(["anthropic", "openai", "openrouter", "custom", "typesafe"]);
 export type JudgeKeyProvider = z.infer<typeof JudgeKeyProviderSchema>;
 
 export const JudgeProviderKeySchema = z.object({
@@ -78,7 +78,9 @@ export type SetupResponse = z.infer<typeof SetupResponseSchema>;
 // keyless wiring tests, so the bootstrap input must accept it (issue #150).
 // Mock stays explicit-only: strict judge paths still refuse to SILENTLY
 // degrade a real-provider binding to mock verdicts.
-export const AgentBootstrapProviderSchema = z.enum([...JudgeKeyProviderSchema.options, "mock"]);
+// A bootstrap creates a prompted evaluator, so it takes every key provider
+// except TypeSafe, which runs only typed questions (ADR-0014 section 5).
+export const AgentBootstrapProviderSchema = z.enum([...JudgeKeyProviderSchema.exclude(["typesafe"]).options, "mock"]);
 export type AgentBootstrapProvider = z.infer<typeof AgentBootstrapProviderSchema>;
 
 export const AgentBootstrapModelInputSchema = z
@@ -127,10 +129,10 @@ export const AgentBootstrapRequestSchema = z.object({
   }).strict(),
   skill: z.object({
     name: z.string().trim().min(1).max(120).optional(),
-    rubricMarkdown: z.string().trim().min(1).max(100_000),
+    rubricMarkdown: z.string().trim().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX),
     // Omit for the safe built-in prompt that references the rubric. A supplied
     // prompt is accepted only after the endpoint's diagnostic validation.
-    prompt: z.string().trim().min(1).max(100_000).optional(),
+    prompt: z.string().trim().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),
     model: AgentBootstrapModelInputSchema
   }),
   // Optional project-scoped provider credential. If omitted, the deployment's

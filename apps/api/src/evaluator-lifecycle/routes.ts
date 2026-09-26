@@ -9,18 +9,31 @@ import {
   EvaluatorLifecycleProjectionSchema,
   EvaluatorLifecycleRetireInputSchema,
   EvaluatorLifecycleTransitionResultSchema,
-  type EvaluatorCandidateCreateResult
+  type EvaluatorCandidateCreateInput,
+  type EvaluatorCandidateCreateResult,
+  type ResolutionRecord,
+  mutableModelAlias
 } from "@rubrist/shared";
+import { canonicalJson, sha256Digest } from "../lib/canonical-json.js";
 import {
   EvaluatorLifecycleRepositoryError,
   type EvaluatorLifecycleAccess,
   type EvaluatorLifecycleProjectRole,
-  type EvaluatorLifecycleRepository
+  type EvaluatorLifecycleRepository,
+  type ResolvedBinding
 } from "./repository.js";
 import {
   evaluatorCandidateRequestDigest,
   evaluatorLifecycleDigest
 } from "../lib/evaluator-lifecycle.js";
+import { ExecutionBindingInputError, executionBindingFromInput } from "../lib/execution-binding.js";
+import {
+  resolutionNeeded,
+  resolveGovernedBinding,
+  resolveSavedBinding,
+  type BindingResolutionServices,
+  type GovernedBinding
+} from "../lib/binding-resolution.js";
 
 const BODY_LIMIT = 512 * 1024;
 const ResourceIdSchema = z.string().trim().min(1).max(240);
@@ -46,6 +59,8 @@ export interface CreateEvaluatorLifecycleRouterOptions {
     datasetRevisionId: string;
     actorUserId: string;
   }) => Promise<void>) | undefined;
+  /** Probes a binding at a governed gate; without it, an unresolved binding stays unresolved. */
+  bindingResolution?: BindingResolutionServices | undefined;
 }
 
 export function createEvaluatorLifecycleRouter(options: CreateEvaluatorLifecycleRouterOptions): Hono {
@@ -62,7 +77,14 @@ export function createEvaluatorLifecycleRouter(options: CreateEvaluatorLifecycle
     const body = await c.req.json().catch(() => null);
     const parsed = EvaluatorCandidateCreateInputSchema.safeParse(body);
     if (!parsed.success) return invalid(c,"candidate",parsed.error);
-    const result = await callRepository(c,() => options.repository!.createCandidate(actor,parsed.data));
+    // The governed gate needs the binding resolved; a replay needs nothing.
+    let resolution: ResolvedBinding | null = null;
+    if (!(await options.repository!.candidateExists(actor,parsed.data.idempotencyKey))) {
+      const resolved = await resolveCandidateBinding(c,options,actor.projectId,parsed.data);
+      if (resolved instanceof Response) return resolved;
+      resolution = resolved;
+    }
+    const result = await callRepository(c,() => options.repository!.createCandidate(actor,parsed.data,resolution));
     if (result instanceof Response) return result;
     const verified = EvaluatorCandidateCreateResultSchema.safeParse(result);
     if (!verified.success || !candidateResultMatches(actor,parsed.data,verified.data)) {
@@ -120,6 +142,8 @@ export function createEvaluatorLifecycleRouter(options: CreateEvaluatorLifecycle
     if (skillVersionId instanceof Response) return skillVersionId;
     const parsed = EvaluatorLifecycleActivateInputSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return invalid(c,"activation",parsed.error);
+    // An unresolved binding resolves the first time a governed gate needs it.
+    await resolveWhenUnresolved(options,actor.projectId,skillVersionId,"activation",parsed.data.idempotencyKey);
     const result = await callRepository(c,() => options.repository!.activate(actor,skillVersionId,parsed.data));
     if (result instanceof Response) return result;
     const verified = EvaluatorLifecycleTransitionResultSchema.safeParse(result);
@@ -144,7 +168,111 @@ export function createEvaluatorLifecycleRouter(options: CreateEvaluatorLifecycle
     }
     return c.json({ result: verified.data },verified.data.replayed ? 200 : 201);
   });
+  router.get("/:skillVersionId/resolution", async (c) => {
+    const access = await resolveAccess(c,options,false);
+    if (access instanceof Response) return access;
+    const skillVersionId = resource(c,"skillVersionId");
+    if (skillVersionId instanceof Response) return skillVersionId;
+    const governed = await options.repository!.getGovernedBinding(access,skillVersionId);
+    if (!governed) return c.json({ error: "Evaluator version not found", code: "evaluator_lifecycle_not_found" },404);
+    return c.json({ skillVersionId, record: governed.record });
+  });
+
+  // Resolution on demand (ADR-0014 section 4); a failed binding stays failed.
+  router.post("/:skillVersionId/resolution", async (c) => {
+    const actor = await resolveAccess(c,options,true);
+    if (actor instanceof Response) return actor;
+    const skillVersionId = resource(c,"skillVersionId");
+    if (skillVersionId instanceof Response) return skillVersionId;
+    if (!options.bindingResolution) {
+      return c.json({ error: "Resolution needs provider access this deployment doesn't configure", code: "evaluator_lifecycle_unsupported" },501);
+    }
+    const record = await resolveWhenUnresolved(options,actor.projectId,skillVersionId,"on_demand",`on-demand:${actor.userId}:${new Date().toISOString()}`);
+    if (record === undefined) return c.json({ error: "Evaluator version not found", code: "evaluator_lifecycle_not_found" },404);
+    return c.json({ skillVersionId, record });
+  });
   return router;
+}
+
+/** Resolves a candidate's binding before creation, recording the attempt against its request. */
+async function resolveCandidateBinding(
+  c: Context,
+  options: CreateEvaluatorLifecycleRouterOptions,
+  projectId: string,
+  input: EvaluatorCandidateCreateInput
+): Promise<ResolvedBinding | null | Response> {
+  if (!options.bindingResolution) return null;
+  let stored: ReturnType<typeof executionBindingFromInput>;
+  try {
+    stored = executionBindingFromInput(input.executionBinding, undefined, { typedQuestion: input.typedQuestion !== undefined });
+  } catch (error) {
+    if (!(error instanceof ExecutionBindingInputError)) throw error;
+    return c.json({ error: error.message, code: "evaluator_lifecycle_invalid_execution_binding", details: {} },400);
+  }
+  // Candidates are binary evaluators.
+  const governed: GovernedBinding = {
+    projectId,
+    executionBinding: stored.executionBinding,
+    customEndpointUrl: stored.customEndpointUrl,
+    spec: { verdictKind: "binary", scalarRange: null, categoricalChoiceScores: null }
+  };
+  const record = await resolveGovernedBinding(options.bindingResolution,governed);
+  await options.repository!.recordResolution({
+    projectId, skillVersionId: null, executionBinding: stored.executionBinding, kind: "resolution",
+    triggerKind: "candidate_creation", triggerRef: input.idempotencyKey, outcome: record.status, probes: record.probes
+  },null);
+  return { bindingDigest: sha256Digest(stored.executionBinding), record };
+}
+
+/**
+ * Resolution after save (ADR-0014 section 4), for the gate worker: a
+ * just-saved version's binding is resolved when it has no record or only an
+ * unresolved one, and the attempt is recorded against the save. A resolved
+ * record that lacks an answer only a gate needs is left to the gate, since
+ * resolution after save never probes reasoning; a failed one is fixed only by
+ * a new version. The mock makes no call, and a mutable alias is refused at
+ * every governed gate, so neither is probed.
+ */
+export function savedVersionResolver(
+  repository: EvaluatorLifecycleRepository,
+  services: BindingResolutionServices
+): (job: { projectId: string; skillVersionId: string }) => Promise<void> {
+  return async ({ projectId, skillVersionId }) => {
+    const governed = await repository.getGovernedBinding({ projectId }, skillVersionId);
+    if (!governed) return;
+    const binding = governed.binding.executionBinding;
+    if (binding.provider === "mock" || mutableModelAlias(binding.modelId) !== null) return;
+    if (governed.record !== null && governed.record.status !== "unresolved") return;
+    const record = await resolveSavedBinding(services, governed.binding);
+    await repository.recordResolution({
+      projectId, skillVersionId, executionBinding: binding, kind: "resolution",
+      triggerKind: "version_save", triggerRef: `version-save:${skillVersionId}`, outcome: record.status, probes: record.probes
+    }, record);
+  };
+}
+
+/**
+ * Resolves a saved version's binding when a gate needs it (no record, an
+ * unresolved one, or a resolved one missing an answer a gate needs) and
+ * stores the result. A failed binding is fixed only by a new evaluator
+ * version. Returns the latest record, or `undefined` when the version isn't
+ * in the project.
+ */
+async function resolveWhenUnresolved(
+  options: CreateEvaluatorLifecycleRouterOptions,
+  projectId: string,
+  skillVersionId: string,
+  triggerKind: "activation" | "on_demand",
+  triggerRef: string
+): Promise<ResolutionRecord | null | undefined> {
+  const governed = await options.repository!.getGovernedBinding({ projectId },skillVersionId);
+  if (!governed) return undefined;
+  if (!options.bindingResolution || !resolutionNeeded(governed.binding.executionBinding,governed.record)) return governed.record;
+  const record = await resolveGovernedBinding(options.bindingResolution,governed.binding);
+  return options.repository!.recordResolution({
+    projectId, skillVersionId, executionBinding: governed.binding.executionBinding, kind: "resolution",
+    triggerKind, triggerRef, outcome: record.status, probes: record.probes
+  },record);
 }
 
 async function resolveAccess(
@@ -191,8 +319,10 @@ function candidateResultMatches(
     lifecycle.createdByUserId===actor.userId && lifecycle.idempotencyKey===input.idempotencyKey &&
     lifecycle.requestDigest===evaluatorCandidateRequestDigest(actor.projectId,input) &&
     result.skill.name===input.skillName && result.skill.description===input.skillDescription &&
-    result.skill.currentVersion.rubricMarkdown===input.rubricMarkdown &&
-    result.skill.currentVersion.prompt===input.prompt &&
+    result.skill.currentVersion.rubricMarkdown===(input.rubricMarkdown ?? null) &&
+    result.skill.currentVersion.prompt===(input.prompt ?? null) &&
+    canonicalJson(result.skill.currentVersion.typedQuestion)===canonicalJson(input.typedQuestion ?? null) &&
+    result.skill.currentVersion.decisionThreshold===(input.decisionThreshold ?? null) &&
     result.projection.currentEvent.state==="candidate" &&
     result.projection.currentEvent.transition==="candidate_created" &&
     result.projection.currentEvent.actorUserId===actor.userId &&

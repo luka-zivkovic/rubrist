@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EvaluatorScoreSchema, ObservedCallSchema } from "./evaluator-execution.js";
 
 export const VerdictDistributionSchema = z.object({
   pass: z.number().int().nonnegative(),
@@ -41,9 +42,20 @@ export const BinaryAbstainedVerdictPayloadSchema = z.object({
   rationale: z.string()
 }).strict();
 
+// A typed-question evaluator's verdict (ADR-0014 section 5): pass or fail on
+// its decision threshold, with no rationale. It says so explicitly instead of
+// carrying empty text; the probability behind it is the verdict record's
+// evaluator score.
+export const BinaryTypedQuestionVerdictPayloadSchema = z.object({
+  kind: z.literal("binary"),
+  pass: z.boolean(),
+  rationaleStatus: z.literal("not_provided")
+}).strict();
+
 export const BinaryVerdictPayloadSchema = z.union([
   BinaryClassifiedVerdictPayloadSchema,
-  BinaryAbstainedVerdictPayloadSchema
+  BinaryAbstainedVerdictPayloadSchema,
+  BinaryTypedQuestionVerdictPayloadSchema
 ]);
 
 export const ScalarVerdictPayloadSchema = z
@@ -74,6 +86,20 @@ export const VerdictPayloadSchema = z.union([
 ]);
 export type VerdictPayload = z.infer<typeof VerdictPayloadSchema>;
 
+// What a person records: any verdict shape that states its reason. Only a
+// typed-question evaluator records a verdict without one.
+export const HumanVerdictPayloadSchema = z.union([
+  BinaryClassifiedVerdictPayloadSchema,
+  BinaryAbstainedVerdictPayloadSchema,
+  ScalarVerdictPayloadSchema,
+  CategoricalVerdictPayloadSchema
+]);
+
+/** A verdict's rationale, or null when its evaluator states none (a typed-question verdict). */
+export function payloadRationale(payload: VerdictPayload): string | null {
+  return "rationale" in payload ? payload.rationale : null;
+}
+
 export const VerdictRecordSchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -87,6 +113,10 @@ export const VerdictRecordSchema = z.object({
   actorName: z.string().nullable().optional(),
   payload: VerdictPayloadSchema,
   externalRunId: z.string().nullable(),
+  // For an evaluator's verdict: what its call observed and the evaluator's
+  // own score (ADR-0014 section 6); null for people and imports.
+  observed: ObservedCallSchema.nullable().optional(),
+  evaluatorScore: EvaluatorScoreSchema.nullable().optional(),
   createdAt: z.string()
 });
 export type VerdictRecord = z.infer<typeof VerdictRecordSchema>;

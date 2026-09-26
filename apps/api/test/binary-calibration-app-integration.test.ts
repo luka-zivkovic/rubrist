@@ -17,7 +17,7 @@ import {
 
 const PROJECT_ID = "proj_langsmith_support";
 const fixtureBytes = readFileSync(new URL(
-  "../../../contracts/fixtures/binary-calibration-v1.complete.json",
+  "../../../contracts/fixtures/binary-calibration-v2.complete.json",
   import.meta.url
 ));
 const fixture = JSON.parse(fixtureBytes.toString("utf8")) as {
@@ -86,6 +86,14 @@ class AppCalibrationRepository implements BinaryCalibrationControlRepository {
       createdAt: "2026-08-23T00:00:00.000Z"
     };
   }
+  async getGovernedBinding(): Promise<null> {
+    return null;
+  }
+
+  async recordResolution(): Promise<null> {
+    return null;
+  }
+
   async getArtifactStatus(
     access: BinaryCalibrationProjectAccess,
     artifactId: string

@@ -3,14 +3,17 @@ import {
   MockJudgeProvider,
   assertCredential,
   assertPromptedBinding,
+  assertTypedQuestionBinding,
+  executeTypedQuestion,
   executeVerdict,
   resolveEndpointBaseUrl,
+  type EvaluatorVerdict,
   type JudgePrompt,
   type JudgeProvider,
   type JudgeVerdict,
   type StructuredJudgeResult,
-  type StructuredVerdict,
   type Trace,
+  type TypedQuestionEvaluator,
   type VerdictSpec
 } from "@rubrist/audit/runtime";
 import {
@@ -22,6 +25,7 @@ import {
   type VerdictPayload
 } from "@rubrist/shared";
 import { endpointUrlFor } from "./execution-binding.js";
+import { promptedText } from "./evaluator-definition.js";
 
 // Factory keyed by an evaluator version's immutable execution binding
 // (ADR-0014 section 2). The worker and the eval-as-a-service endpoint build
@@ -36,8 +40,15 @@ export interface JudgeProviderOptions {
   apiKey?: string;
 }
 
-/** What the runtime needs from an evaluator version: its binding, its endpoint URL, and what the protocol renders. */
-export type EvaluatorRuntimeVersion = Pick<SkillVersion, "executionBinding" | "customEndpointUrl" | "rubricMarkdown" | "prompt">;
+/**
+ * What the runtime needs from an evaluator version: its binding, its endpoint
+ * URL, and its definition: the rubric and prompt a prompted protocol renders,
+ * or the question and threshold a typed-question one asks with.
+ */
+export type EvaluatorRuntimeVersion = Pick<
+  SkillVersion,
+  "executionBinding" | "customEndpointUrl" | "rubricMarkdown" | "prompt" | "typedQuestion" | "decisionThreshold"
+>;
 export type JudgeProviderFactory = (version: EvaluatorRuntimeVersion, opts?: JudgeProviderOptions) => JudgeProvider;
 
 const warned = new Set<string>();
@@ -66,6 +77,7 @@ const PROVIDER_LABELS: Record<JudgeProviderId, string> = {
   openai: "OpenAI",
   openrouter: "OpenRouter",
   custom: "Custom OpenAI-compatible",
+  typesafe: "TypeSafe",
   mock: "Mock (local testing)"
 };
 
@@ -73,6 +85,7 @@ export function judgeProviderEnvironmentKey(provider: ExecutionProviderId): stri
   if (provider === "anthropic") return process.env.ANTHROPIC_API_KEY;
   if (provider === "openai") return process.env.OPENAI_API_KEY;
   if (provider === "openrouter") return process.env.OPENROUTER_API_KEY;
+  if (provider === "typesafe") return process.env.TYPESAFE_API_KEY;
   return undefined;
 }
 
@@ -92,7 +105,7 @@ export function judgeProviderAvailability(
   projectKeyProviders?: ReadonlySet<string>,
   allowMock = true
 ): JudgeProviderAvailabilityItem[] {
-  const providers: JudgeProviderId[] = ["anthropic", "openai", "openrouter", "custom", "mock"];
+  const providers: JudgeProviderId[] = ["anthropic", "openai", "openrouter", "custom", "typesafe", "mock"];
   return providers.map((provider) => {
     if (provider === "mock") {
       return {
@@ -110,28 +123,62 @@ export function judgeProviderAvailability(
       label: PROVIDER_LABELS[provider],
       available: hasProjectKey || hasEnvironmentKey,
       credentialSource: hasProjectKey ? "project" as const : hasEnvironmentKey ? "environment" as const : null,
-      modelSelection: provider === "custom" ? "custom" as const : "catalog" as const
+      // Custom and TypeSafe models are named by the author; the rest come from a catalog.
+      modelSelection: provider === "custom" || provider === "typesafe" ? "custom" as const : "catalog" as const
     };
   });
 }
 
+/** A typed-question version's question and threshold, or null for a prompted version. */
+function typedQuestionEvaluator(version: EvaluatorRuntimeVersion): TypedQuestionEvaluator | null {
+  if (version.typedQuestion === null || version.decisionThreshold === null) return null;
+  return { question: version.typedQuestion, threshold: version.decisionThreshold };
+}
+
 /**
- * A provider backed by the v2 executor. It judges with the version's own
- * rubric and prompt, which the pinned protocol renders; the JudgePrompt the
- * worker builds is that same rendering (an API test holds them equal), kept
- * for the recorded request.
+ * The providers with a credential that could run an evaluator in place of
+ * `unavailable`'s: TypeSafe runs only typed-question evaluators, and every
+ * other provider only prompted ones. It answers "which provider can I save
+ * with instead?", so it never offers one that can't run the same evaluator.
+ */
+export function runnableInstead(availability: ReadonlyArray<JudgeProviderAvailabilityItem>, unavailable: string): JudgeProviderId[] {
+  const typed = unavailable === "typesafe";
+  return availability
+    .filter((option) => option.available && (option.provider === "typesafe") === typed)
+    .map((option) => option.provider);
+}
+
+/**
+ * A provider backed by the v2 executor. A prompted version judges with its
+ * own rubric and prompt, which the pinned protocol renders; the JudgePrompt
+ * the worker builds is that same rendering (an API test holds them equal),
+ * kept for the recorded request. A typed-question version asks its question
+ * through the typed-question adapter (ADR-0014 section 5), and its verdict
+ * states no rationale.
  */
 class ExecutionBindingJudgeProvider implements JudgeProvider {
   readonly name: string;
   readonly modelName: string;
+  private readonly typedQuestion: TypedQuestionEvaluator | null;
 
   constructor(private readonly version: EvaluatorRuntimeVersion, private readonly apiKey: string | null) {
     this.name = version.executionBinding.provider;
     this.modelName = version.executionBinding.modelId;
-    // Whatever executeVerdict would refuse before sending is refused here, at
-    // construction, before any call-start marker, so the item is recorded as
-    // never attempted rather than as a call with an unknown outcome.
+    // The binding, the definition it runs, and the credential are refused
+    // here, at construction, before any call-start marker, so the item is
+    // recorded as never attempted rather than as a call with an unknown
+    // outcome. The executors refuse anything else before sending, too.
     const binding = version.executionBinding;
+    this.typedQuestion = typedQuestionEvaluator(version);
+    const typed = binding.verdictProtocol === "typed-question/v1";
+    if (typed !== (this.typedQuestion !== null)) {
+      throw new EvaluatorCallError("internal", "a version asks a typed question exactly when it runs typed-question/v1", { physicalCall: false });
+    }
+    if (typed) {
+      assertTypedQuestionBinding(binding);
+      assertCredential(binding.provider, apiKey);
+      return;
+    }
     assertPromptedBinding(binding);
     if (binding.provider !== "mock") {
       resolveEndpointBaseUrl(binding, endpointUrlFor(version));
@@ -139,8 +186,8 @@ class ExecutionBindingJudgeProvider implements JudgeProvider {
     }
   }
 
-  // The regression gate's pass/fail/ambiguous judgment: a binary structured
-  // verdict through the same protocol, in the legacy shape the gate reads.
+  // The regression gate's pass/fail/ambiguous judgment: a binary verdict
+  // through the same protocol, in the legacy shape the gate reads.
   async judge(input: { prompt: JudgePrompt; trace: Trace; outputSchema: object }): Promise<JudgeVerdict> {
     const result = await this.judgeStructured({
       prompt: input.prompt,
@@ -151,15 +198,21 @@ class ExecutionBindingJudgeProvider implements JudgeProvider {
   }
 
   async judgeStructured(input: { prompt: JudgePrompt; trace: Trace; spec: VerdictSpec }): Promise<StructuredJudgeResult> {
-    const result = await executeVerdict({
-      binding: this.version.executionBinding,
-      apiKey: this.apiKey,
-      customBaseUrl: endpointUrlFor(this.version),
-      rubricMarkdown: this.version.rubricMarkdown,
-      prompt: this.version.prompt,
-      trace: input.trace,
-      spec: input.spec
-    });
+    const result = this.typedQuestion !== null
+      ? await executeTypedQuestion({
+          binding: this.version.executionBinding,
+          apiKey: this.apiKey,
+          evaluator: this.typedQuestion,
+          trace: input.trace
+        })
+      : await executeVerdict({
+          binding: this.version.executionBinding,
+          apiKey: this.apiKey,
+          customBaseUrl: endpointUrlFor(this.version),
+          ...promptedText(this.version),
+          trace: input.trace,
+          spec: input.spec
+        });
     return {
       verdict: result.verdict,
       ...(result.usage ? { usage: result.usage } : {}),
@@ -168,7 +221,8 @@ class ExecutionBindingJudgeProvider implements JudgeProvider {
         requestId: result.observed.requestId,
         responseId: result.observed.responseId,
         systemFingerprint: result.observed.systemFingerprint
-      }
+      },
+      observed: result.observed
     };
   }
 }
@@ -191,9 +245,50 @@ export function createJudgeProvider(version: EvaluatorRuntimeVersion, opts?: Jud
   const apiKey = resolveJudgeProviderApiKey(provider, opts?.apiKey);
   if (!apiKey) {
     warnOnce(provider, `${provider} has no API key; judge falling back to MockJudgeProvider.`);
-    return new MockJudgeProvider();
+    const typedQuestion = typedQuestionEvaluator(version);
+    return typedQuestion !== null && version.executionBinding.verdictProtocol === "typed-question/v1"
+      ? typedQuestionStandIn(typedQuestion)
+      : new MockJudgeProvider();
   }
   return new ExecutionBindingJudgeProvider(version, apiKey);
+}
+
+/**
+ * A demo stand-in for a typed-question version: a heuristic's score (the
+ * mock's, unless the demo injected another) read as P(pass), so the verdict
+ * keeps the typed-question shape (pass or fail on the threshold, no
+ * rationale). Like the prompted mock, it observes no call, so it never
+ * counts as evidence.
+ */
+export function typedQuestionStandIn(
+  evaluator: TypedQuestionEvaluator,
+  heuristic: Pick<JudgeProvider, "judge"> = new MockJudgeProvider()
+): JudgeProvider {
+  return new TypedQuestionMockProvider(evaluator, heuristic);
+}
+
+class TypedQuestionMockProvider implements JudgeProvider {
+  readonly name = "mock";
+  readonly modelName = "mock-heuristic-v1";
+
+  constructor(private readonly evaluator: TypedQuestionEvaluator, private readonly heuristic: Pick<JudgeProvider, "judge">) {}
+
+  async judge(input: { prompt: JudgePrompt; trace: Trace; outputSchema: object }): Promise<JudgeVerdict> {
+    return structuredVerdictToLegacy((await this.judgeStructured({ ...input, spec: { verdictKind: "binary", scalarRange: null, categoricalChoiceScores: null } })).verdict);
+  }
+
+  async judgeStructured(input: { prompt: JudgePrompt; trace: Trace; spec: VerdictSpec }): Promise<StructuredJudgeResult> {
+    const { score: probability } = await this.heuristic.judge({ prompt: input.prompt, trace: input.trace, outputSchema: {} });
+    return {
+      verdict: {
+        kind: "typed-question",
+        label: probability >= this.evaluator.threshold ? "pass" : "fail",
+        probability,
+        threshold: this.evaluator.threshold,
+        rationaleStatus: "not_provided"
+      }
+    };
+  }
 }
 
 // is this error the provider rejecting the CREDENTIAL (as opposed to a
@@ -221,7 +316,12 @@ export function specFromSkillVersion(skillVersion: SkillVersion): VerdictSpec {
 
 // Map the provider's structured output onto the shared tagged-union payload —
 // the v2 verdict the trust layer (κ / convergence / self-consistency) reads.
-export function structuredVerdictToPayload(verdict: StructuredVerdict): VerdictPayload {
+export function structuredVerdictToPayload(verdict: EvaluatorVerdict): VerdictPayload {
+  // A typed-question verdict is pass or fail on its threshold and states no
+  // rationale; its probability is the verdict record's evaluator score.
+  if (verdict.kind === "typed-question") {
+    return { kind: "binary", pass: verdict.label === "pass", rationaleStatus: "not_provided" };
+  }
   // failingStep rides the payload (append-only compatible; absent for
   // step-less cases and whenever the judge omitted it).
   const step = verdict.failingStep !== undefined ? { failingStep: verdict.failingStep } : {};
@@ -248,8 +348,17 @@ export function structuredVerdictToPayload(verdict: StructuredVerdict): VerdictP
 // still read judge_runs). The v2 `verdicts` table remains the exact record.
 // The label threshold is single-sourced in verdictLabelFromPayload so this
 // projection and eval-run resultLabels can never disagree about one verdict.
-export function structuredVerdictToLegacy(verdict: StructuredVerdict): JudgeVerdict {
+export function structuredVerdictToLegacy(verdict: EvaluatorVerdict): JudgeVerdict {
   const label = verdictLabelFromPayload(structuredVerdictToPayload(verdict));
+  // A typed-question verdict's score is its probability of passing, and it
+  // states no reason.
+  if (verdict.kind === "typed-question") {
+    return {
+      label,
+      score: verdict.probability,
+      confidence: verdict.label === "fail" ? 1 - verdict.probability : verdict.probability
+    };
+  }
   if (verdict.kind === "scalar") {
     const [min, max] = verdict.range;
     const span = max - min || 1;

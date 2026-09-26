@@ -8,7 +8,7 @@ import type {
   CreatedCriterion,
   CreateEvaluatorSuiteManifestInput,
   EvaluatorSuite,
-  EvaluatorSuiteManifest,
+  EvaluatorSuiteManifestV2,
   EvaluatorExecutionContext,
   ApiKey,
   CreatedApiKey,
@@ -56,7 +56,7 @@ import type {
   RunComparison,
   JudgeKeyProvider,
   JudgeProviderKey,
-  SkillFormatExample,
+  SkillFormatV2Example,
   Skill,
   SkillVersion,
   CaseSource,
@@ -335,21 +335,21 @@ export class PgRepository implements RubristRepository {
     projectId: string,
     input: CreateEvaluatorSuiteManifestInput,
     context: { actorUserId?: string | undefined }
-  ): Promise<EvaluatorSuiteManifest> {
+  ): Promise<EvaluatorSuiteManifestV2> {
     return this.criterionSuiteRepository.createEvaluatorSuiteManifest(projectId, input, context);
   }
 
   async listEvaluatorSuiteManifests(
     projectId: string,
     suiteId?: string | undefined
-  ): Promise<EvaluatorSuiteManifest[]> {
+  ): Promise<EvaluatorSuiteManifestV2[]> {
     return this.criterionSuiteRepository.listEvaluatorSuiteManifests(projectId, suiteId);
   }
 
   async getEvaluatorSuiteManifest(
     projectId: string,
     manifestId: string
-  ): Promise<EvaluatorSuiteManifest | null> {
+  ): Promise<EvaluatorSuiteManifestV2 | null> {
     return this.criterionSuiteRepository.getEvaluatorSuiteManifest(projectId, manifestId);
   }
 
@@ -412,7 +412,7 @@ export class PgRepository implements RubristRepository {
     projectId: string,
     cap: number,
     criterionVersionId?: string | undefined
-  ): Promise<SkillFormatExample[]> {
+  ): Promise<SkillFormatV2Example[]> {
     return this.goldenEvidenceRepository.getSkillFormatExamples(projectId, cap, criterionVersionId);
   }
 

@@ -1,16 +1,12 @@
 import { EvaluatorCallError } from "@rubrist/audit/runtime";
-import type { ExecutionBinding, SkillVersion } from "@rubrist/shared";
+import { AssessmentReceiptV2Schema, type ExecutionBinding } from "@rubrist/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
-import { skillDigest } from "../src/lib/assessment-receipt.js";
 import { endpointBaseUrlDigest } from "../src/lib/evaluator-identity.js";
 import {
   ExecutionBindingInputError,
-  LegacyEvidenceUnsupportedError,
   executionBindingFromInput,
   executionBindingInputProblem,
-  legacyCalibrationBinding,
-  legacyModelBinding,
   verifiedEndpointUrl
 } from "../src/lib/execution-binding.js";
 import { createJudgeProvider, createStrictJudgeProvider } from "../src/lib/judge-provider.js";
@@ -19,8 +15,9 @@ import { recoverStaleEvalRunItemExecutions } from "../src/workers/eval-run.js";
 import { isPermanentError } from "../src/workers/judge.js";
 import { MOCK_BINDING, SEEDED_BINDING, bindingInput, runtimeVersion } from "./fixtures/execution-binding.js";
 
-// The v2 binding switch (Batch 8D-2) and the temporary v1 evidence view that
-// lasts until v2 evidence replaces it.
+// Execution bindings in use (ADR-0014 section 2): bindings at the API boundary,
+// release evidence on any binding, stale eval item recovery, executor failures
+// in the workers, and the provider's refusals.
 
 const PROJECT = "proj_langsmith_support";
 const UNSET_TEMPERATURE: ExecutionBinding = { ...SEEDED_BINDING, sampling: { temperature: null, topP: null } };
@@ -40,6 +37,7 @@ const view = (executionBinding: ExecutionBinding, customEndpointUrl: string | nu
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   delete process.env.OPENAI_BASE_URL;
 });
 
@@ -52,32 +50,9 @@ async function mintKey(app: ReturnType<typeof createApp>): Promise<string> {
   return (await response.json() as { key: string }).key;
 }
 
-describe("the temporary v1 evidence view", () => {
-  it("states only bindings v1 can express, and says why it can't otherwise", () => {
-    expect(legacyModelBinding(view(SEEDED_BINDING))).toEqual({ provider: "anthropic", modelId: "claude-sonnet-4-6", modelVersion: "claude-sonnet-4-6", temperature: 0 });
-    expect(legacyModelBinding(view(MOCK_BINDING))).toMatchObject({ provider: "mock", temperature: 0 });
-    expect(legacyModelBinding(view(UNSET_TEMPERATURE))).toBeNull();
-    expect(legacyModelBinding(view(OPENAI_OVERRIDE))).toBeNull();
-    expect(() => skillDigest({ ...view(UNSET_TEMPERATURE) } as SkillVersion)).toThrow(LegacyEvidenceUnsupportedError);
-  });
-
-  it("lets sealed calibration v1 run only a binding the v1 providers send exactly", () => {
-    expect(legacyCalibrationBinding(view(SEEDED_BINDING))).toBeNull();
-    const forcedTool: ExecutionBinding = { ...SEEDED_BINDING, verdictProtocol: "anthropic.forced-tool/v1", reasoning: null };
-    expect(legacyCalibrationBinding(view(forcedTool))).toMatchObject({ provider: "anthropic", temperature: 0 });
-    expect(legacyCalibrationBinding(view({ ...forcedTool, outputTokenLimit: 4_000 }))).toBeNull();
-    expect(legacyCalibrationBinding(view({ ...forcedTool, reasoning: SEEDED_BINDING.reasoning }))).toBeNull();
-    const openRouter: ExecutionBinding = {
-      ...forcedTool, provider: "openrouter", verdictProtocol: "openai.forced-function/v1", outputTokenLimit: null,
-      routing: { requireParameters: true, allowFallbacks: false }
-    };
-    expect(legacyCalibrationBinding(view(openRouter))).toBeNull();
-    expect(legacyCalibrationBinding(view(MOCK_BINDING))).toMatchObject({ provider: "mock" });
-  });
-});
-
-describe("release evidence refusal", () => {
-  it("refuses a release-evidence batch before any trace or call when v1 can't state the binding", async () => {
+describe("release evidence on any binding", () => {
+  it("states an unset-temperature binding exactly in the release receipt", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", undefined);
     const repository = new DemoRepository();
     const app = createApp(repository);
     const key = await mintKey(app);
@@ -89,32 +64,18 @@ describe("release evidence refusal", () => {
     expect(created.status).toBe(201);
     const versionId = (await created.json() as { version: { id: string } }).version.id;
 
-    const refused = await app.request("/api/v1/judge/batch", {
+    const submitted = await app.request("/api/v1/judge/batch", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ purpose: "release_evidence", skillVersionId: versionId, items: [{ clientItemId: "a", input: { q: 1 }, output: { a: 1 }, metadata: {} }] })
     });
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ code: "v1_evidence_unsupported_binding" });
-    expect((await repository.listEvalRuns(PROJECT)).filter((run) => run.skillVersionId === versionId)).toHaveLength(0);
-  });
-
-  it("refuses in the repository too, so no release run can end unable to mint its receipt", async () => {
-    const repository = new DemoRepository();
-    const version = await repository.createSkillVersion("skill_support_quality", {
-      rubricMarkdown: "Pass grounded answers.",
-      prompt: "Judge the answer.",
-      executionBinding: bindingInput(UNSET_TEMPERATURE),
-      outputSchema: { type: "object" },
-      verdictKind: "binary",
-      timeScope: "new"
-    }, { projectId: PROJECT });
-    await expect(repository.createEvalRun({
-      projectId: PROJECT,
-      skillVersionId: version.version.id,
-      trigger: "release_evidence",
-      items: []
-    })).rejects.toBeInstanceOf(LegacyEvidenceUnsupportedError);
+    expect(submitted.status).toBe(202);
+    const { evalRunId } = await submitted.json() as { evalRunId: string };
+    const receipt = AssessmentReceiptV2Schema.parse(await (await app.request(
+      `/api/v1/eval-runs/${evalRunId}/assessment-receipt`,
+      { headers: { authorization: `Bearer ${key}` } }
+    )).json());
+    expect(receipt.evaluator.executionBinding).toEqual(UNSET_TEMPERATURE);
   });
 });
 
@@ -128,7 +89,7 @@ describe("stale eval item recovery", () => {
     const repository = {
       listStaleEvalRunItemExecutions: async () => [execution("poisoned"), execution("healthy")],
       failEvalRunItem: async (input: { evalRunItemId: string }) => {
-        if (input.evalRunItemId === "poisoned") throw new LegacyEvidenceUnsupportedError("An assessment receipt v1");
+        if (input.evalRunItemId === "poisoned") throw new Error("this item can't be recorded");
         failed.push(input.evalRunItemId);
       }
     };
@@ -189,21 +150,17 @@ describe("the provider refuses what can't be sent, when it is built", () => {
 });
 
 describe("binding input at the API boundary", () => {
-  it("refuses typed-question bindings until their definitions exist", async () => {
-    expect(() => executionBindingFromInput({
-      ...bindingInput(MOCK_BINDING), provider: "typesafe", verdictProtocol: "typed-question/v1"
-    }, { openAIBaseUrl: null })).toThrow(/typed-question evaluators aren't available yet/);
-    const app = createApp(new DemoRepository());
-    const response = await app.request("/api/skills/skill_support_quality/versions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        rubricMarkdown: "r", prompt: "p",
-        executionBinding: { ...bindingInput(MOCK_BINDING), provider: "typesafe", modelId: "jev-1.13.0", modelVersion: "jev-1.13.0", verdictProtocol: "typed-question/v1" }
-      })
+  it("saves a typed-question binding only with a typed-question definition", () => {
+    const typed = { ...bindingInput(MOCK_BINDING), provider: "typesafe", modelId: "jev-1.13.0", modelVersion: "jev-1.13.0", verdictProtocol: "typed-question/v1" } as const;
+    expect(() => executionBindingFromInput(typed, { openAIBaseUrl: null })).toThrow(/typed-question evaluators aren't available here/);
+    expect(executionBindingFromInput(typed, { openAIBaseUrl: null }, { typedQuestion: true }).executionBinding).toMatchObject({
+      provider: "typesafe", verdictProtocol: "typed-question/v1", endpoint: { kind: "managed" }
     });
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({ error: expect.stringMatching(/^Invalid execution binding: /) });
+    expect(() => executionBindingFromInput(bindingInput(MOCK_BINDING), { openAIBaseUrl: null }, { typedQuestion: true }))
+      .toThrow(/a typed-question definition runs on the typesafe provider/);
+    expect(executionBindingInputProblem(typed)).toMatch(/^Invalid execution binding: typed-question evaluators/);
+    expect(executionBindingInputProblem(typed, { typedQuestion: true })).toBeNull();
+    expect(executionBindingInputProblem(bindingInput(MOCK_BINDING), { typedQuestion: true })).toMatch(/runs on the typesafe provider/);
   });
 
   it("takes canonical provider ids only, since the binding is identity", () => {

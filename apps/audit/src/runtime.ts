@@ -1,7 +1,5 @@
 export { MockJudgeProvider } from "./llm/mock.js";
-export { AnthropicJudgeProvider } from "./llm/anthropic.js";
-export { OpenAIJudgeProvider } from "./llm/openai.js";
-export type { JudgeProvider, StructuredJudgeResult } from "./llm/provider.js";
+export type { EvaluatorVerdict, JudgeProvider, StructuredJudgeResult } from "./llm/provider.js";
 export { DEFAULT_OUTPUT_SCHEMA } from "./skill/default-output-schema.js";
 // The "merge personal judging prompts into one governed team skill" compiler —
 // the onboarding pitch's only implementation. No platform call site yet; the
@@ -37,11 +35,34 @@ export {
   MANAGED_BASE_URLS,
   assertCredential,
   assertPromptedBinding,
+  assertTypedQuestionBinding,
   endpointBaseUrlDigest,
   resolveEndpointBaseUrl
 } from "./execution/binding.js";
-export type { ExecutionBinding, PromptedExecutionBinding, ReasoningSettings } from "./execution/binding.js";
+export type {
+  ExecutionBinding,
+  PromptedExecutionBinding,
+  ReasoningSettings,
+  TypedQuestionExecutionBinding
+} from "./execution/binding.js";
 export { EvaluatorCallError, failureKindForStatus } from "./execution/failure.js";
 export type { EvaluatorFailureKind, ObservedProvenance, ProviderErrorDetail, TokenUsage } from "./execution/failure.js";
-export { buildVerdictHttpRequest, executeVerdict } from "./execution/execute.js";
-export type { ExecutionFetch, VerdictExecutionInput, VerdictExecutionResult, VerdictHttpRequest } from "./execution/execute.js";
+export { buildVerdictHttpRequest, executeTypedQuestion, executeVerdict } from "./execution/execute.js";
+export type {
+  ExecutionFetch,
+  TypedQuestionExecutionInput,
+  TypedQuestionExecutionResult,
+  VerdictExecutionInput,
+  VerdictExecutionResult,
+  VerdictHttpRequest
+} from "./execution/execute.js";
+export {
+  TYPED_QUESTION_KEY,
+  TYPED_QUESTION_PROTOCOL,
+  TypedQuestionStateError,
+  parseTypedQuestionResponse,
+  typedQuestionRequestText,
+  typedQuestionStateText,
+  typedQuestionText
+} from "./protocols/typed-question.js";
+export type { TypedQuestion, TypedQuestionEvaluator, TypedQuestionVerdict } from "./protocols/typed-question.js";

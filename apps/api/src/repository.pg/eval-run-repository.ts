@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { ExecutionBindingSchema, type EvalRun, type EvalRunDetail, type EvalRunItem } from "@rubrist/shared";
+import type { EvalRun, EvalRunDetail, EvalRunItem } from "@rubrist/shared";
 import type { Pool } from "pg";
-import { LegacyEvidenceUnsupportedError, legacyModelBinding } from "../lib/execution-binding.js";
 import { computeEvalRunSpend } from "../repository.js";
 import type {
   CompleteEvalRunItemInputDb,
@@ -23,7 +22,7 @@ import {
   bumpEvalRunCounters,
   mintAssessmentReceiptWithClient
 } from "./assessment-receipt-commands.js";
-import { parseJson, rowToEvalRun, rowToEvalRunItem, toIso } from "./mappers.js";
+import { rowToEvalRun, rowToEvalRunItem, toIso } from "./mappers.js";
 
 // PostgreSQL evaluation-run creation, durable dispatch, item execution, and
 // terminalization. Queue retries and receipt minting retain their existing
@@ -97,20 +96,6 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      if (input.trigger === "release_evidence") {
-        // A release-evidence run ends in a v1 receipt, so refuse before any
-        // item runs when v1 can't state the binding (Batch 8D).
-        const version = (await client.query(
-          `select execution_binding, custom_endpoint_url from skill_versions where id=$1 and project_id=$2`,
-          [input.skillVersionId, input.projectId]
-        )).rows[0];
-        if (version && legacyModelBinding({
-          executionBinding: ExecutionBindingSchema.parse(parseJson(version.execution_binding)),
-          customEndpointUrl: version.custom_endpoint_url == null ? null : String(version.custom_endpoint_url)
-        }) === null) {
-          throw new LegacyEvidenceUnsupportedError("An assessment receipt v1");
-        }
-      }
       if (input.datasetRevisionId) {
         const revision = await client.query(
           `select source_kind from dataset_revisions where id=$1 and project_id=$2 for key share`,
@@ -673,9 +658,13 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
          set status = 'failed', error = $4, execution_token = null,
              execution_claimed_at = null, provider_call_started_at = null,
              provider_call_returned_at = null, delivery_deadline_at = null,
+             failure_kind = $6, not_attempted = $7, observed = $8::jsonb,
              finished_at = now()
          where id = $1 and eval_run_id = $2 and project_id = $3 and status = 'pending'
            and ($5::text is null or execution_token = $5)
+           -- An item whose call has started was attempted; a stale snapshot
+           -- that says otherwise changes nothing, and the next sweep records it.
+           and (not $7 or $9 or provider_call_started_at is null)
            and exists (
              select 1 from eval_runs run
              where run.id = eval_run_items.eval_run_id
@@ -683,7 +672,11 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
                and run.status in ('pending', 'running')
            )
          returning id`,
-        [input.evalRunItemId, input.evalRunId, input.projectId, input.error, input.executionToken ?? null]
+        [input.evalRunItemId, input.evalRunId, input.projectId, input.error, input.executionToken ?? null,
+          input.failure.state === "failure" ? input.failure.failureKind : null,
+          input.failure.state === "not_attempted",
+          input.failure.state === "failure" ? JSON.stringify(input.failure.observed) : null,
+          input.failure.state === "not_attempted" && input.failure.executorRefused === true]
       );
       if (!itemResult.rows[0]) {
         await client.query("rollback");

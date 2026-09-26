@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import type { ResolutionRecord } from "@rubrist/shared";
+import type { BindingResolutionServices } from "../src/lib/binding-resolution.js";
+import { SEEDED_BINDING } from "./fixtures/execution-binding.js";
 import {
   createBinaryCalibrationArtifactRouter,
   createBinaryCalibrationControlRouter
@@ -29,7 +32,7 @@ const API_KEY_HEADERS = {
 const CREATED_AT = "2026-08-23T00:00:00.000Z";
 
 const fixtureBytes = readFileSync(new URL(
-  "../../../contracts/fixtures/binary-calibration-v1.complete.json",
+  "../../../contracts/fixtures/binary-calibration-v2.complete.json",
   import.meta.url
 ));
 const fixtureArtifact = JSON.parse(fixtureBytes.toString("utf8")) as {
@@ -55,7 +58,7 @@ function runProjection(): BinaryCalibrationRunProjection {
     plannedObservations: 3,
     accountedObservations: 3,
     artifactId: fixtureArtifact.artifactId,
-    artifactDigest: "sha256:f68a7aae8216dcf91510f63d72b0f8955bb5d0cae1ae0abc633245d0d183283c",
+    artifactDigest: "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7",
     evidenceDigest: fixtureArtifact.evidenceDigest,
     createdAt: CREATED_AT,
     startedAt: CREATED_AT,
@@ -97,11 +100,23 @@ class FakeCalibrationRepository implements BinaryCalibrationControlRepository {
       artifactId,
       calibrationRunId: fixtureArtifact.calibrationRunId,
       canonicalBytes: fixtureBytes,
-      artifactDigest: "sha256:f68a7aae8216dcf91510f63d72b0f8955bb5d0cae1ae0abc633245d0d183283c",
+      artifactDigest: "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7",
       evidenceDigest: fixtureArtifact.evidenceDigest,
       createdAt: CREATED_AT,
       ...this.artifactOverride
     };
+  }
+
+  governed: Awaited<ReturnType<BinaryCalibrationControlRepository["getGovernedBinding"]>> = null;
+  resolutions: Array<{ attempt: unknown; record: unknown }> = [];
+
+  async getGovernedBinding() {
+    return this.governed;
+  }
+
+  async recordResolution(attempt: unknown, record: ResolutionRecord) {
+    this.resolutions.push({ attempt, record });
+    return record;
   }
 
   async getArtifactStatus(
@@ -131,6 +146,7 @@ class FakeCalibrationRepository implements BinaryCalibrationControlRepository {
 function routers(input: {
   repository?: FakeCalibrationRepository | null;
   databaseMode?: boolean;
+  bindingResolution?: BindingResolutionServices;
 } = {}) {
   const repository = input.repository === undefined
     ? new FakeCalibrationRepository()
@@ -144,7 +160,8 @@ function routers(input: {
       ...(c.req.header("x-test-api-key") ? { apiKeyId: c.req.header("x-test-api-key") } : {})
     }),
     resolveProjectRole: async ({ userId }: { userId: string }) =>
-      userId === "owner" ? "owner" as const : userId === "member" ? "member" as const : null
+      userId === "owner" ? "owner" as const : userId === "member" ? "member" as const : null,
+    ...(input.bindingResolution ? { bindingResolution: input.bindingResolution } : {})
   };
   const app = new Hono();
   app.route("/api/binary-calibration-runs", createBinaryCalibrationControlRouter(dependencies));
@@ -264,7 +281,7 @@ describe("binary calibration control API", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(response.headers.get("x-rubrist-artifact-digest")).toBe(
-      "sha256:f68a7aae8216dcf91510f63d72b0f8955bb5d0cae1ae0abc633245d0d183283c"
+      "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7"
     );
     expect(response.headers.get("x-rubrist-evidence-digest")).toBe(fixtureArtifact.evidenceDigest);
     expect(response.headers.get("x-rubrist-canonicalization")).toBe("rubrist-canonical-json/v1");
@@ -392,5 +409,41 @@ describe("binary calibration control API", () => {
       error: "Sealed reuse is ineligible",
       code: "binary_calibration_ineligible"
     });
+  });
+
+  it("resolves an unresolved binding before creating the run, and never probes one the run refuses", async () => {
+    const sent: string[] = [];
+    const bindingResolution: BindingResolutionServices = {
+      credential: async () => ({ apiKey: "sk-project", source: "project" }),
+      capabilityFetch: async () => new Response("{}", { status: 404 }),
+      fetch: async (url) => {
+        sent.push(url);
+        return new Response(JSON.stringify({
+          id: "msg", model: "claude-sonnet-4-6", stop_reason: "end_turn",
+          content: [{ type: "text", text: JSON.stringify({ label: "pass", score: 0.9, rationale: "ok" }) }]
+        }));
+      }
+    };
+    const { app, repository } = routers({ bindingResolution });
+    const governed = (modelId: string) => ({
+      projectId: PROJECT_ID,
+      executionBinding: { ...SEEDED_BINDING, modelId, modelVersion: modelId },
+      customEndpointUrl: null,
+      spec: { verdictKind: "binary" as const, scalarRange: null, categoricalChoiceScores: null }
+    });
+    repository!.governed = { binding: governed("claude-sonnet-4-6"), record: null };
+    const launch = () => app.request("/api/binary-calibration-runs", {
+      method: "POST", headers: { ...JSON_HEADERS, ...OWNER_HEADERS }, body: JSON.stringify(launchInput)
+    });
+    expect((await launch()).status).toBe(202);
+    expect(sent).toEqual(["https://api.anthropic.com/v1/messages"]);
+    expect(repository!.resolutions).toEqual([{
+      attempt: expect.objectContaining({ triggerKind: "binary_calibration", triggerRef: launchInput.idempotencyKey, outcome: "resolved" }),
+      record: expect.objectContaining({ status: "resolved", credentialSource: "project" })
+    }]);
+
+    repository!.governed = { binding: governed("claude-sonnet-latest"), record: null };
+    await launch();
+    expect(sent).toHaveLength(1);
   });
 });

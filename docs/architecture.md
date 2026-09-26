@@ -61,7 +61,7 @@ manifest revisions. The canonical manifest bytes are the artifact of record;
 relational member rows support ownership and execution checks. A manifest pins
 ordered criterion definitions, exact evaluator versions, applicability, and an
 optional independent-repetition plan. It cannot represent customer release
-policy. Assessment receipt v1 remains a separate artifact per criterion.
+policy. The assessment receipt remains a separate artifact per criterion.
 
 ### Human review
 
@@ -97,13 +97,50 @@ agreement is one.
 
 In Postgres mode, an owner launches an explicit single-trial run bound to one
 binary evaluator, criterion version, complete governed sealed-validation
-revision, selection provenance, execution model binding, provider policy, and
-authorization/completion exposure snapshots. The repository acquires a
-durable revision lease before execution. The worker receives one protected
-payload without truth, records provider-call start durably immediately before
-physical dispatch, and makes exactly one call with the requested parameters.
-Hidden SDK retries and parameter-changing fallbacks are disabled; unsupported
-non-null `topP` is rejected before dispatch.
+revision, selection provenance, the evaluator's v2 identity (definition digest
+and execution binding), provider policy, and authorization/completion exposure
+snapshots. The repository acquires a durable revision lease before execution.
+The worker receives one protected payload without truth and runs it through
+the v2 executor, which sends exactly the pinned binding through its verdict
+protocol in one physical call, with no retries and no parameter-changing
+fallbacks (ADR-0014). A typed-question evaluator's attempt asks its question
+through typed-question/v1 and records pass or fail on its threshold; it never
+abstains (ADR-0014 section 5 and decision 8). Provider-call start is recorded durably after
+every check that can refuse the call and immediately before dispatch, so a
+refusal counts no call. The mock makes no call, so it can't be calibrated.
+
+Creating a run is a governed gate (ADR-0014 sections 2 and 4). It needs a
+resolved execution binding that states its temperature and reasoning, unless
+the resolution shows the model rejecting that parameter itself. An unresolved
+binding resolves at the gate with up to three probes over a fixed,
+non-sensitive input. A failed binding is fixed only by a new evaluator
+version. Before a run's first authorization, and so before any sealed
+exposure, the worker re-checks the binding: the confirming probe again, and a
+probe of each setting the binding leaves unset. A resolution that no longer
+holds rejects the run. A transient error leaves the run waiting and retries
+after a back-off; it never fails the binding. Every resolution attempt and
+re-check is appended against the gate, request, or run that triggered it. The
+latest resolution is the version's record, which is not identity.
+
+Resolution also runs after save: the gate worker confirms a newly saved
+version's binding before its regression gate, with the confirming probe and,
+where temperature is unset, a temperature probe (ADR-0014 section 4). It runs
+only while the version has no record or an unresolved one, and never blocks
+the gate; an attempt that can't finish leaves the binding unresolved until a
+governed gate needs it. The in-memory demo runs its gate inline, without the
+worker, so it skips resolution after save. Before save, an owner can run the
+capability check (`POST /api/judge/capability-check`): up to 6 probes over
+the same fixed input, with the credential and endpoint the saved binding
+would use, derived as saving derives them, so a check never sends a key
+anywhere a saved binding couldn't. It reports which protocol, temperature,
+and reasoning the model takes, the documented default reasoning, and what the
+provider publishes, within a 60-second budget, and says when it ended early.
+Each owner may start 10 checks a minute per project, and a project runs at
+most 2 at once. The check records nothing: ADR-0014 carries its outcomes into
+the resolution record (TARGET), but the record is built from resolution's own
+probes after save (CURRENT). A check against a custom endpoint reaches the
+URL the owner names, as the saved binding's calls would; restricting which
+hosts a custom endpoint may name is not yet enforced (CURRENT).
 
 Binary provider output is pass, fail, or ambiguous. Pass and fail are the two
 classification outcomes; ambiguous is an explicit evaluator abstention. The
@@ -118,7 +155,9 @@ rechecks exposure, derives aggregate statistics from the private salted
 ledger, writes exact canonical public artifact bytes, and releases the lease.
 
 The public artifact contains aggregate counts, metrics, confidence intervals,
-and requested/observed provider provenance. It contains no item identity,
+the evaluator identity (never the rubric or prompt text), and requested and
+observed provider provenance, including the OpenRouter upstream that served a
+call. It contains no item identity,
 protected payload, per-item truth or prediction, rationale, provider body, or
 request/response identifier. The private ledger has no application, HTTP,
 project-key, browser, analytics, CDC, debug, or operator-export read surface.
@@ -130,8 +169,10 @@ The frozen contract and conformance corpus cover repeated-trial artifacts, but
 the current producer runtime accepts only
 `{ kind: "single", trialsPerItem: 1 }`. Dailies has an independent local
 contract verifier and consumes explicitly configured artifacts through its
-config v6, policy v2, report v6, runner, and CLI. It does not perform a network
-or latest-status lookup.
+config v6, policy v2, report v6, runner, and CLI. It still verifies
+calibration v1 and moves to v2 evidence with Rubrist's receipt v2 (Dailies
+ADR-0008), so until then it can't consume the v2 artifacts Rubrist mints. It
+does not perform a network or latest-status lookup.
 
 ### Governed Analyze populations and coding studies
 
@@ -174,10 +215,15 @@ still use the promoted criterion through the existing nonsealed path.
 Candidate creation is now an owner-session Analyze command over the exact
 promoted criterion, frozen nonsealed governed batch, immutable truth revision,
 and at least one resolved pass/fail item. The same transaction creates the
-sole stable skill lineage when necessary, one immutable version, a copied
-known-failure regression revision, a durable developer exposure, and the
-append-only `candidate` seed event. No legacy writer may mint a version on this
-lineage without the complete bundle.
+sole stable skill lineage when necessary, one immutable version (a prompted
+rubric and prompt, or a typed-question question and decision threshold), a
+copied known-failure regression revision, a durable developer exposure, and
+the append-only `candidate` seed event. No legacy writer may mint a version on this
+lineage without the complete bundle. Candidate creation and activation are
+governed gates: they require a resolved execution binding with explicit
+temperature and reasoning where the model takes them (ADR-0014 section 2),
+resolved beforehand outside the transaction, and the candidate's resolution
+becomes its version's record.
 
 Lifecycle state overrides `skill_versions.status` for every
 `analysis_promotion` lineage. Candidates and needs-review versions are allowed

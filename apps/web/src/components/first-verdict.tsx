@@ -46,7 +46,8 @@ export function FirstVerdictCard({
   }, [dashboard.currentVersionResultCount, dashboard.skill.currentVersion.id]);
 
   if (!detail) return null;
-  const rubric = dashboard.skill.currentVersion.rubricMarkdown.trim();
+  // A typed-question version has no rubric; its views arrive in Batch 8F.
+  const rubric = (dashboard.skill.currentVersion.rubricMarkdown ?? "").trim();
   const excerpt = rubric.length > 720 ? `${rubric.slice(0, 720).trimEnd()}…` : rubric;
   const isFirst = dashboard.currentVersionResultCount === 1;
 
@@ -64,7 +65,9 @@ export function FirstVerdictCard({
       <CardContent className="grid grid-cols-2 gap-5">
         <div>
           <Eyebrow>Why the Check said this</Eyebrow>
-          <div className="mt-2 text-[13px] leading-[1.6] text-ink-2">{detail.judgeRun.reasoning}</div>
+          <div className="mt-2 text-[13px] leading-[1.6] text-ink-2">
+            {detail.judgeRun.reasoning ?? <span className="text-ink-3">This evaluator states no rationale.</span>}
+          </div>
           <Button className="mt-3" size="sm" variant="outline" onClick={() => onOpenCase(detail.judgeRun.caseId)}>
             Open the recorded Run <ArrowRight />
           </Button>

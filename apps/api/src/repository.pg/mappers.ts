@@ -1,6 +1,6 @@
 import type {
   ApiKey,
-  AssessmentReceipt,
+  AssessmentReceiptV2,
   Criterion,
   CriterionVersion,
   Dataset,
@@ -45,9 +45,11 @@ import type {
 import {
   ApiKeyCapabilitySchema,
   deriveGateCheckDecision,
+  EvaluatorFailureKindSchema,
   IronsideConnectionTestResultSchema,
   LangfuseConnectionTestResultSchema,
   LangSmithConnectionTestResultSchema,
+  ObservedCallSchema,
   RegressionRunResultSchema,
   SkillSchema,
   SkillVersionSchema,
@@ -55,7 +57,7 @@ import {
   VerdictPayloadSchema,
   VerdictRecordSchema
 } from "@rubrist/shared";
-import { parseCanonicalReceiptBytes, receiptArtifactDigest } from "../lib/assessment-receipt.js";
+import { parseCanonicalReceiptV2Bytes, receiptArtifactDigest } from "../lib/assessment-receipt-v2.js";
 import type {
   AssessmentReceiptArtifact,
   AssessmentReceiptArtifactSource,
@@ -138,6 +140,21 @@ export function rowToEvaluatorSuite(row: Record<string, unknown>): EvaluatorSuit
   };
 }
 
+/**
+ * A skill version's definition text: a prompted version's rubric and prompt,
+ * or a typed-question version's question and decision threshold.
+ */
+export function rowToEvaluatorDefinitionText(row: Record<string, unknown>): Pick<
+  SkillVersion, "rubricMarkdown" | "prompt" | "typedQuestion" | "decisionThreshold"
+> {
+  return {
+    rubricMarkdown: row.rubric_markdown == null ? null : String(row.rubric_markdown),
+    prompt: row.prompt == null ? null : String(row.prompt),
+    typedQuestion: row.typed_question == null ? null : parseJson(row.typed_question) as SkillVersion["typedQuestion"],
+    decisionThreshold: row.decision_threshold == null ? null : Number(row.decision_threshold)
+  };
+}
+
 export function rowToSkill(row: Record<string, unknown>): Skill {
   return SkillSchema.parse({
     id: String(row.id),
@@ -154,8 +171,7 @@ export function rowToSkill(row: Record<string, unknown>): Skill {
       criterionVersionId: String(row.version_criterion_version_id),
       version: String(row.version),
       status: toSkillStatus(row.version_status),
-      rubricMarkdown: String(row.rubric_markdown),
-      prompt: String(row.prompt),
+      ...rowToEvaluatorDefinitionText(row),
       executionBinding: parseJson(row.execution_binding),
       customEndpointUrl: row.custom_endpoint_url == null ? null : String(row.custom_endpoint_url),
       outputSchema: parseJson(row.output_schema),
@@ -203,8 +219,7 @@ export function rowToSkillVersion(row: Record<string, unknown>): SkillVersion {
     criterionVersionId: String(row.criterion_version_id),
     version: String(row.version),
     status: toSkillStatus(row.status),
-    rubricMarkdown: String(row.rubric_markdown),
-    prompt: String(row.prompt),
+    ...rowToEvaluatorDefinitionText(row),
     executionBinding: parseJson(row.execution_binding),
     customEndpointUrl: row.custom_endpoint_url == null ? null : String(row.custom_endpoint_url),
     outputSchema: parseJson(row.output_schema),
@@ -237,7 +252,7 @@ export function rowToJudgeRun(row: Record<string, unknown>): JudgeRun {
     skillVersionId: String(row.skill_version_id),
     verdict: row.verdict === "fail" ? "fail" : row.verdict === "ambiguous" ? "ambiguous" : "pass",
     score: Number(row.score),
-    reasoning: String(row.reasoning),
+    reasoning: row.reasoning == null ? null : String(row.reasoning),
     ...(row.latency_ms === null || row.latency_ms === undefined ? {} : { latencyMs: Number(row.latency_ms) }),
     providerMetadata: {
       model: typeof metadata.model === "string" ? metadata.model : null,
@@ -473,9 +488,9 @@ export function rowToEvalRun(row: Record<string, unknown>): EvalRun {
 
 export function rowToAssessmentReceiptArtifact(row: Record<string, unknown>): AssessmentReceiptArtifact {
   const canonicalBytes = Buffer.from(row.canonical_bytes as Uint8Array);
-  let receipt: AssessmentReceipt;
+  let receipt: AssessmentReceiptV2;
   try {
-    receipt = parseCanonicalReceiptBytes(canonicalBytes);
+    receipt = parseCanonicalReceiptV2Bytes(canonicalBytes);
   } catch (error) {
     throw new AssessmentReceiptIntegrityError(
       `Persisted assessment receipt bytes failed validation: ${error instanceof Error ? error.message : String(error)}`
@@ -526,9 +541,9 @@ export function rowToAssessmentReceiptArtifact(row: Record<string, unknown>): As
 
 export function rowToAssessmentReceiptComparison(row: Record<string, unknown>): AssessmentReceiptComparison {
   const consumerCanonicalBytes = Buffer.from(row.consumer_canonical_bytes as Uint8Array);
-  let receipt: AssessmentReceipt;
+  let receipt: AssessmentReceiptV2;
   try {
-    receipt = parseCanonicalReceiptBytes(consumerCanonicalBytes);
+    receipt = parseCanonicalReceiptV2Bytes(consumerCanonicalBytes);
   } catch (error) {
     throw new AssessmentReceiptIntegrityError(
       `Persisted consumer receipt bytes failed validation: ${error instanceof Error ? error.message : String(error)}`
@@ -610,6 +625,9 @@ export function rowToEvalRunItem(row: Record<string, unknown>): EvalRunItem {
       : parseJson(row.provider_metadata) as EvalRunItem["providerMetadata"],
     cached: Boolean(row.cached),
     error: row.error === null || row.error === undefined ? null : String(row.error),
+    failureKind: row.failure_kind == null ? null : EvaluatorFailureKindSchema.parse(row.failure_kind),
+    notAttempted: Boolean(row.not_attempted),
+    observed: row.observed == null ? null : ObservedCallSchema.parse(parseJson(row.observed)),
     createdAt: toIso(row.created_at),
     finishedAt: row.finished_at ? toIso(row.finished_at) : null
   };
@@ -692,9 +710,8 @@ export function rowToExceptionCase(row: Record<string, unknown>): ExceptionCase 
     ? null
     : String(row.latest_judge_run_id);
   const judgeRunId = String(row.judge_run_id ?? row.id ?? "");
-  const latestReason = row.latest_reasoning === null || row.latest_reasoning === undefined
-    ? null
-    : String(row.latest_reasoning);
+  // The legacy exception queue shows "" for a verdict that states no reason.
+  const latestReason = String(row.latest_reasoning ?? "");
   const reason = String(row.reasoning ?? "");
   const rejudgedSince = latestJudgeRunId && latestJudgeRunId !== judgeRunId && latestVerdict && (
     latestVerdict !== verdict || latestReason !== reason
@@ -702,7 +719,7 @@ export function rowToExceptionCase(row: Record<string, unknown>): ExceptionCase 
     ? {
         judgeRunId: latestJudgeRunId,
         verdict: latestVerdict,
-        reason: latestReason ?? "",
+        reason: latestReason,
         createdAt: row.latest_created_at ? toIso(row.latest_created_at) : toIso(row.created_at)
       }
     : null;
@@ -868,6 +885,8 @@ export function rowToVerdictRecord(row: Record<string, unknown>): VerdictRecord 
     actorName: row.actor_name === null || row.actor_name === undefined ? null : String(row.actor_name),
     payload: VerdictPayloadSchema.parse(parseJson(row.payload)),
     externalRunId: row.external_run_id === null || row.external_run_id === undefined ? null : String(row.external_run_id),
+    observed: row.observed == null ? null : parseJson(row.observed),
+    evaluatorScore: row.evaluator_score == null ? null : parseJson(row.evaluator_score),
     createdAt: toIso(row.created_at)
   });
 }

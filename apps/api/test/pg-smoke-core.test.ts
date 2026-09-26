@@ -8,7 +8,7 @@ import { PgRepository } from "../src/repository.pg.js";
 import { dispatchEvalRunOnce } from "../src/workers/gate.js";
 
 import { contentDigest } from "../src/lib/canonical-json.js";
-import { buildAssessmentReceipt, evidenceDigestForReceipt } from "../src/lib/assessment-receipt.js";
+import { parseCanonicalReceiptV2Bytes } from "../src/lib/assessment-receipt-v2.js";
 
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { runPgSmoke, seedSkill } from "./pg-smoke-support.js";
@@ -126,9 +126,13 @@ runPgSmoke("PgRepository smoke", () => {
       for (const [index, item] of run.items.entries()) {
         const verdictId = `receipt_verdict_${index}`;
         await pool.query(
-          `insert into verdicts (id, project_id, case_id, skill_version_id, source, verdict_kind, payload)
-           values ($1,'proj_test',$2,'skillv_test','llm_judge','binary','{"kind":"binary","pass":true,"rationale":"ok"}')`,
-          [verdictId, imported.caseId]
+          `insert into verdicts (id, project_id, case_id, skill_version_id, source, verdict_kind, payload, observed, evaluator_score)
+           values ($1,'proj_test',$2,'skillv_test','llm_judge','binary','{"kind":"binary","pass":true,"rationale":"ok"}',$3::jsonb,
+                   '{"value":0.9,"kind":"self_reported_score"}'::jsonb)`,
+          [verdictId, imported.caseId, JSON.stringify({
+            model: "mock-observed-v1", requestId: `request-${index}`, responseId: `response-${index}`, systemFingerprint: null,
+            upstreamProvider: null, thinkingReturned: null, reasoningTokens: null
+          })]
         );
         await repo.completeEvalRunItem({
           projectId: "proj_test",
@@ -146,16 +150,17 @@ runPgSmoke("PgRepository smoke", () => {
       }
 
       const detail = await repo.getEvalRunDetail("proj_test", run.id);
-      const version = await repo.getSkillVersion("proj_test", "skillv_test");
-      if (!detail || !version) throw new Error("release receipt fixture missing");
+      if (!detail) throw new Error("release receipt fixture missing");
       expect(detail.trigger).toBe("release_evidence");
       expect(detail.items.map((item) => item.clientItemId).sort()).toEqual(["dailies-a", "dailies-b"]);
       expect(detail.items.every((item) => item.contentDigest === digest)).toBe(true);
       expect(detail.items.every((item) => item.providerMetadata?.model === "mock-observed-v1")).toBe(true);
-      const receipt = buildAssessmentReceipt({ run: detail, skillVersion: version });
+      const artifact = await repo.getOrFreezeAssessmentReceipt("proj_test", run.id);
+      const receipt = parseCanonicalReceiptV2Bytes(artifact!.canonicalBytes, { evalRunId: run.id, skillVersionId: "skillv_test" });
+      expect(receipt.status).toBe("complete");
       expect(receipt.items.map((item) => item.clientItemId)).toEqual(["dailies-a", "dailies-b"]);
       expect(receipt.items.every((item) => item.caseId === imported.caseId)).toBe(true);
-      expect(receipt.evidenceDigest).toBe(evidenceDigestForReceipt(receipt));
+      expect(receipt.items.map((item) => item.observed?.requestId).sort()).toEqual(["request-0", "request-1"]);
 
       await pool.query(
         `insert into judge_runs (id, project_id, case_id, skill_version_id, verdict, score, reasoning)
@@ -495,6 +500,13 @@ runPgSmoke("PgRepository smoke", () => {
       await repo.setJudgeProviderKey("proj_test", "custom", "custom-compatible-key-12345678", undefined);
       expect(await repo.getJudgeProviderCredential("proj_test", "openrouter")).toBe("openrouter-secret-key-12345678");
       expect(await repo.getJudgeProviderCredential("proj_test", "custom")).toBe("custom-compatible-key-12345678");
+      // TypeSafe keys run typed-question evaluators (ADR-0014 section 5).
+      await repo.setJudgeProviderKey("proj_test", "typesafe", "typesafe-secret-key-12345678", undefined);
+      expect(await repo.getJudgeProviderCredential("proj_test", "typesafe")).toBe("typesafe-secret-key-12345678");
+      await expect(pool.query(
+        `insert into judge_provider_keys (id, project_id, provider, encrypted_credentials, key_display)
+         values ('jpk_unknown', 'proj_test', 'jev', 'x', 'x')`
+      )).rejects.toMatchObject({ code: "23514" });
 
       // Replace overwrites; delete removes; foreign project sees nothing.
       await repo.setJudgeProviderKey("proj_test", "anthropic", "test-anthropic-replacement-key-999999", undefined);

@@ -1,11 +1,15 @@
-import { createHash } from "node:crypto";
 import type {
-  BinaryCalibrationArtifact,
-  BinaryCalibrationCompletionEligibilityReason,
-  BinaryCalibrationErrorCode,
-  BinaryCalibrationPrivateProviderObservation,
-  ModelBinding
+  BinaryCalibrationV2Artifact,
+  BinaryCalibrationV2CompletionEligibilityReason,
+  BinaryCalibrationV2PrivateProviderObservation,
+  CapabilityProbe,
+  EvaluatorItemState,
+  ExecutionBinding,
+  ResolutionRecord,
+  TypedQuestion
 } from "@rubrist/shared";
+import type { GovernedBinding } from "../lib/binding-resolution.js";
+import type { ResolutionAttemptInput } from "../evaluator-lifecycle/resolution.pg.js";
 
 export type BinaryCalibrationProjectRole = "owner" | "member";
 
@@ -99,17 +103,6 @@ export interface BinaryCalibrationArtifactStatusProjection {
 }
 
 /**
- * Digest basis for a custom endpoint: SHA-256 over the UTF-8 bytes of the
- * domain-separated exact stored URL. Callers must not normalize or resolve it.
- */
-export function binaryCalibrationBaseUrlDigest(baseUrl: string): string {
-  return `sha256:${createHash("sha256")
-    .update("rubrist/binary-calibration-base-url/v1\0", "utf8")
-    .update(baseUrl, "utf8")
-    .digest("hex")}`;
-}
-
-/**
  * HTTP/session-facing persistence. This surface intentionally cannot load a
  * sealed item or the private ledger. Authentication is resolved before calls;
  * every read remains project-scoped to prevent cross-project identifier leaks.
@@ -132,6 +125,22 @@ export interface BinaryCalibrationControlRepository {
     access: BinaryCalibrationProjectAccess,
     artifactId: string
   ): Promise<BinaryCalibrationArtifactStatusProjection>;
+  /** A version's binding and latest resolution record, for the gate at run creation; `null` when absent. */
+  getGovernedBinding(
+    access: BinaryCalibrationProjectAccess,
+    skillVersionId: string
+  ): Promise<{ binding: GovernedBinding; record: ResolutionRecord | null } | null>;
+  /** Appends a resolution attempt and stores it as the version's latest record (a failed one is kept). */
+  recordResolution(attempt: ResolutionAttemptInput, record: ResolutionRecord): Promise<ResolutionRecord | null>;
+}
+
+/** What the re-check before authorization reads (ADR-0014 section 4). */
+export interface BinaryCalibrationRecheckTarget {
+  binding: GovernedBinding;
+  /** Whether the run already passed authorization; only the first authorization is re-checked. */
+  authorized: boolean;
+  /** How long ago, by the database clock, the run's latest re-check ended unknown, so a transient error backs off. */
+  msSinceUnknownRecheck: number | null;
 }
 
 export interface BinaryCalibrationExecutionClaim {
@@ -141,17 +150,6 @@ export interface BinaryCalibrationExecutionClaim {
   claimExpiresAt: string;
 }
 
-export interface BinaryCalibrationRequestedModelBinding {
-  provider: string;
-  modelId: string;
-  modelVersion: string;
-  temperatureDecimal: string;
-  topPDecimal: string | null;
-  endpointKind: "managed" | "custom";
-  baseUrlDigest: string | null;
-  requestedBindingDigest: string;
-}
-
 export interface BinaryCalibrationAuthorizedRun {
   claim: BinaryCalibrationExecutionClaim;
   projectId: string;
@@ -159,15 +157,15 @@ export interface BinaryCalibrationAuthorizedRun {
   revisionDigest: string;
   itemCount: number;
   skillVersionId: string;
-  requestedModelBinding: BinaryCalibrationRequestedModelBinding;
-  /** Exact stored binding used for provider construction; never persisted in public bytes. */
-  executionModelBinding: ModelBinding;
+  /** The execution binding the run pins, which every call sends exactly (ADR-0014 section 2). */
+  executionBinding: ExecutionBinding;
+  /** A custom provider's configured base URL, checked against the binding's digest; never in public bytes. */
+  customEndpointUrl: string | null;
   providerDataHandling: BinaryCalibrationProviderDataHandlingPolicy;
-  evaluator: {
-    rubricMarkdown: string;
-    prompt: string;
-    outputSchema: unknown;
-  };
+  /** What each call judges with: a prompted rubric and prompt, or a typed question and its threshold. */
+  evaluator:
+    | { kind: "prompted"; rubricMarkdown: string; prompt: string }
+    | { kind: "typed-question"; question: TypedQuestion; threshold: number };
   authorization: {
     snapshotDigest: string;
     eventId: string;
@@ -185,25 +183,20 @@ export interface BinaryCalibrationAttemptWorkItem {
 }
 
 export interface CompleteBinaryCalibrationAttemptInput {
-  terminalEvaluatorOutcome:
-    | "evaluator_pass"
-    | "evaluator_fail"
-    | "abstained"
-    | "errored"
-    | "unevaluated";
+  /** The shared item result (ADR-0014 section 6). */
+  result: EvaluatorItemState;
   attemptState: "not_started" | "started" | "terminal";
-  errorCode: BinaryCalibrationErrorCode | null;
-  providerObservation: BinaryCalibrationPrivateProviderObservation;
+  providerObservation: BinaryCalibrationV2PrivateProviderObservation;
 }
 
 export interface BinaryCalibrationMintResult {
   run: BinaryCalibrationRunProjection;
-  artifact: BinaryCalibrationArtifact;
+  artifact: BinaryCalibrationV2Artifact;
   artifactCopy: BinaryCalibrationArtifactCopy;
   completion: {
     state: "protected" | "exposed";
     eligibility: "eligible" | "ineligible";
-    reasons: BinaryCalibrationCompletionEligibilityReason[];
+    reasons: BinaryCalibrationV2CompletionEligibilityReason[];
     snapshotDigest: string;
     eventId: string;
     recordedAt: string;
@@ -226,6 +219,14 @@ export interface BinaryCalibrationExecutionRepository {
     claim: BinaryCalibrationExecutionClaim,
     claimTtlMs: number
   ): Promise<BinaryCalibrationExecutionClaim>;
+  getRecheckTarget(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationRecheckTarget>;
+  /** Records a re-check against the run it guards; it never changes the resolution record. */
+  recordRecheck(
+    claim: BinaryCalibrationExecutionClaim,
+    result: { outcome: "holds" | "no_longer_holds" | "unknown"; probes: readonly CapabilityProbe[] }
+  ): Promise<void>;
+  /** Rejects a run the re-check stopped, before any lease or exposure. */
+  rejectBeforeAuthorization(claim: BinaryCalibrationExecutionClaim, reason: "resolution_no_longer_holds"): Promise<void>;
   authorizeRun(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationAuthorizedRun>;
   /** Permanently accounts stale `started` rows as errored/outcome_unknown. */
   recoverStartedAttempts(claim: BinaryCalibrationExecutionClaim): Promise<number>;

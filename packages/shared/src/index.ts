@@ -5,7 +5,8 @@ import {
   JudgeProviderCredentialSourceSchema,
   JudgeProviderIdSchema,
   MinimumVerdictOutputSchema,
-  ModelBindingSchema,
+  TypedQuestionOutputSchema,
+  isTypedQuestionOutputSchema,
   RubricProvenanceSchema,
   RUBRIC_TEMPLATE_VARIABLE,
   SkillStatusSchema,
@@ -17,7 +18,6 @@ import {
   defaultJudgePromptTemplate,
   MUTABLE_MODEL_ALIAS_RULE_VERSION,
   mutableModelAlias,
-  normalizeJudgeProviderId,
   promptReferencesRubric,
   renderJudgePromptContent,
   verdictOutputSchema
@@ -28,7 +28,6 @@ import type {
   JudgePromptDiagnostic,
   JudgeProviderCredentialSource,
   JudgeProviderId,
-  ModelBinding,
   RubricProvenance,
   SkillStatus,
   VerdictKind,
@@ -54,19 +53,22 @@ import type {
   RetentionPruneResult,
   UpdateProjectSettingsInput
 } from "./projects.js";
-import { ExecutionBindingInputSchema } from "./evaluator-execution.js";
-import { SkillSchema, SkillVersionSchema } from "./skills.js";
+import { EVALUATOR_DEFINITION_TEXT_MAX, ExecutionBindingInputSchema, TypedQuestionSchema } from "./evaluator-execution.js";
+import { SkillSchema, SkillVersionSchema, defaultEvaluatorOutputSchema, evaluatorDefinitionInputIssues } from "./skills.js";
 import type { Skill, SkillVersion } from "./skills.js";
 import {
   BinaryAbstainedVerdictPayloadSchema,
   BinaryClassifiedVerdictPayloadSchema,
+  BinaryTypedQuestionVerdictPayloadSchema,
   BinaryVerdictPayloadSchema,
   CategoricalVerdictPayloadSchema,
+  HumanVerdictPayloadSchema,
   ScalarVerdictPayloadSchema,
   VerdictDistributionSchema,
   VerdictPayloadSchema,
   VerdictRecordSchema,
-  VerdictSourceSchema
+  VerdictSourceSchema,
+  payloadRationale
 } from "./verdicts.js";
 import type {
   VerdictDistribution,
@@ -97,17 +99,18 @@ import {
 export {
   BinaryAbstainedVerdictPayloadSchema,
   BinaryClassifiedVerdictPayloadSchema,
+  BinaryTypedQuestionVerdictPayloadSchema,
   BinaryVerdictPayloadSchema,
   CategoricalVerdictPayloadSchema,
   DeleteProjectInputSchema,
   GOLDEN_GATE_ARMS_AT,
   GOLDEN_GATE_RECOMMENDED,
+  HumanVerdictPayloadSchema,
   JsonSchemaSchema,
   JudgeProviderCredentialSourceSchema,
   JudgeProviderIdSchema,
   KAPPA_MIN_SHARED_CASES,
   MinimumVerdictOutputSchema,
-  ModelBindingSchema,
   PROJECT_NAME_MAX_LENGTH,
   ProjectModeSchema,
   ProjectSchema,
@@ -120,6 +123,7 @@ export {
   SkillSchema,
   SkillStatusSchema,
   SkillVersionSchema,
+  TypedQuestionOutputSchema,
   UpdateProjectSettingsInputSchema,
   VerdictDistributionSchema,
   VerdictKindSchema,
@@ -129,10 +133,13 @@ export {
   VerdictSourceSchema,
   compileJudgePrompt,
   containsLoneUtf16Surrogate,
+  isTypedQuestionOutputSchema,
+  defaultEvaluatorOutputSchema,
   defaultJudgePromptTemplate,
+  evaluatorDefinitionInputIssues,
   MUTABLE_MODEL_ALIAS_RULE_VERSION,
   mutableModelAlias,
-  normalizeJudgeProviderId,
+  payloadRationale,
   promptReferencesRubric,
   renderJudgePromptContent,
   verdictOutputSchema
@@ -144,7 +151,6 @@ export type {
   JudgePromptDiagnostic,
   JudgeProviderCredentialSource,
   JudgeProviderId,
-  ModelBinding,
   Project,
   ProjectMode,
   ProjectSettings,
@@ -404,7 +410,6 @@ export * from "./skill-format-v2.js";
 export * from "./criterion-governance.js";
 
 
-export * from "./binary-calibration.js";
 
 
 export * from "./production-calibration.js";
@@ -545,7 +550,8 @@ export const JudgeRunSchema = z.object({
   skillVersionId: z.string(),
   verdict: VerdictLabelSchema,
   score: z.number().min(0).max(1),
-  reasoning: z.string(),
+  // Null when the evaluator states no reason: a typed-question verdict.
+  reasoning: z.string().nullable(),
   // Wall-clock duration of the provider call when the provider execution path
   // captures it; other current run sources may not report a duration.
   latencyMs: z.number().int().nonnegative().optional(),
@@ -735,10 +741,17 @@ export type SkillVersionTimeScope = z.infer<typeof SkillVersionTimeScopeSchema>;
 export const CreateSkillVersionInputSchema = z
   .object({
     criterionVersionId: z.string().min(1).optional(),
-    rubricMarkdown: z.string().min(1),
-    prompt: z.string().min(1),
+    // A prompted version's definition text.
+    rubricMarkdown: z.string().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),
+    prompt: z.string().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),
+    // A typed-question version's question and decision threshold (ADR-0014
+    // section 5). The threshold is chosen on nonsealed data and has no default.
+    typedQuestion: TypedQuestionSchema.optional(),
+    decisionThreshold: z.number().gt(0).lt(1).optional(),
     executionBinding: ExecutionBindingInputSchema,
-    outputSchema: JsonSchemaSchema.default(MinimumVerdictOutputSchema),
+    // Defaults to the minimum verdict schema; a typed-question version's
+    // contract is fixed, so it sends none.
+    outputSchema: JsonSchemaSchema.optional(),
     verdictKind: VerdictKindSchema.default("binary"),
     scalarRange: z.tuple([z.number(), z.number()]).optional(),
     categoricalChoiceScores: z.record(z.string(), z.number().min(0).max(1)).optional(),
@@ -757,7 +770,11 @@ export const CreateSkillVersionInputSchema = z
     { message: "categorical skill versions require a non-empty categoricalChoiceScores map" }
   )
   .refine((v) => v.verdictKind === "scalar" || v.scalarRange === undefined, { message: "scalarRange is only valid for scalar kinds" })
-  .refine((v) => v.verdictKind === "categorical" || v.categoricalChoiceScores === undefined, { message: "categoricalChoiceScores is only valid for categorical kinds" });
+  .refine((v) => v.verdictKind === "categorical" || v.categoricalChoiceScores === undefined, { message: "categoricalChoiceScores is only valid for categorical kinds" })
+  .superRefine((v, ctx) => {
+    for (const { path, message } of evaluatorDefinitionInputIssues(v)) ctx.addIssue({ code: "custom", path: [path], message });
+  })
+  .transform((v) => ({ ...v, outputSchema: v.outputSchema ?? defaultEvaluatorOutputSchema(v.executionBinding.verdictProtocol) }));
 export type CreateSkillVersionInput = z.infer<typeof CreateSkillVersionInputSchema>;
 
 // Beginner onboarding creates the first real Check over the project's seeded
@@ -843,7 +860,8 @@ export const RegressionCaseDiffSchema = z.object({
   agreedLabel: VerdictLabelSchema.exclude(["ambiguous"]),
   newLabel: VerdictLabelSchema,
   change: RegressionCaseChangeSchema,
-  rationale: z.string().max(REGRESSION_RATIONALE_MAX_LENGTH)
+  // Null when the evaluator states no reason: a typed-question verdict.
+  rationale: z.string().max(REGRESSION_RATIONALE_MAX_LENGTH).nullable()
 });
 export type RegressionCaseDiff = z.infer<typeof RegressionCaseDiffSchema>;
 

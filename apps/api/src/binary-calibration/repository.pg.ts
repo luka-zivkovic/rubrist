@@ -1,20 +1,34 @@
 import { randomBytes } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
-  type BinaryCalibrationArtifact,
-  type BinaryCalibrationErrorCode,
-  type BinaryCalibrationPrivateLedger
+  EVALUATOR_IDENTITY_BASIS,
+  ExecutionBindingSchema,
+  type BinaryCalibrationV2Artifact,
+  type BinaryCalibrationV2PrivateLedger,
+  type CapabilityProbe,
+  type ResolutionRecord
 } from "@rubrist/shared";
+import type { GovernedBinding } from "../lib/binding-resolution.js";
+import {
+  appendResolutionAttempt,
+  loadGovernedBinding,
+  msSinceUnknownRecheck,
+  loadResolutionRecord,
+  saveResolutionRecord,
+  type ResolutionAttemptInput
+} from "../evaluator-lifecycle/resolution.pg.js";
 
 import { sha256Digest } from "../lib/canonical-json.js";
 import {
-  binaryCalibrationArtifactDigest,
-  binaryCalibrationPrivateLedgerCommitmentDigest,
-  buildBinaryCalibrationArtifact,
-  canonicalBinaryCalibrationArtifactBytes,
-  canonicalBinaryCalibrationPrivateLedgerBytes,
-  verifyBinaryCalibrationPrivateLedgerForArtifact
-} from "../lib/binary-calibration.js";
+  BINARY_CALIBRATION_V2_CONTRACT,
+  BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
+  binaryCalibrationV2ArtifactDigest,
+  binaryCalibrationV2PrivateLedgerCommitmentDigest,
+  buildBinaryCalibrationV2Artifact,
+  canonicalBinaryCalibrationV2ArtifactBytes,
+  canonicalBinaryCalibrationV2PrivateLedgerBytes,
+  verifyBinaryCalibrationV2PrivateLedgerForArtifact
+} from "../lib/binary-calibration-v2.js";
 
 import type {
   BinaryCalibrationActor,
@@ -28,6 +42,7 @@ import type {
   BinaryCalibrationExecutionRepository,
   BinaryCalibrationMintResult,
   BinaryCalibrationProjectAccess,
+  BinaryCalibrationRecheckTarget,
   BinaryCalibrationRunProjection,
   CompleteBinaryCalibrationAttemptInput,
   CreateBinaryCalibrationRunInput
@@ -36,9 +51,11 @@ import type {
 import {
   deriveRunIdentity,
   evaluateEligibility,
+  evaluatorVersionHoldsPin,
   insertExposureCheck,
   loadAuthorizedRun,
   loadExposureCheck,
+  loadPinnedVersionRow,
   requireActiveRevisionLease,
   requireClaim,
   snapshotRecord
@@ -48,6 +65,8 @@ import {
   aggregateTrial,
   artifactCopyFromRow,
   asStringArray,
+  attemptColumnsFor,
+  attemptResultFromRow,
   claimFromRow,
   databaseClock,
   insertEvaluatorExecutionAuthorization,
@@ -55,7 +74,6 @@ import {
   nullableString,
   parseJson,
   repoError,
-  requestedBindingFromRun,
   requireOwner,
   requireProjectOwner,
   rowToRun,
@@ -107,9 +125,8 @@ export class PgBinaryCalibrationRepository implements
           `insert into binary_calibration_runs
              (id,project_id,dataset_revision_id,revision_digest,truth_content_digest,item_count,
               criterion_id,criterion_version_id,criterion_digest,skill_id,skill_version_id,
-              skill_digest,output_contract_digest,requested_provider,requested_model_id,
-              requested_model_version,temperature_decimal,top_p_decimal,endpoint_kind,
-              base_url_digest,requested_binding_digest,suite_manifest_id,suite_manifest_digest,
+              skill_digest,output_contract_digest,requested_provider,definition_digest,
+              execution_binding,requested_binding_digest,suite_manifest_id,suite_manifest_digest,
               suite_member_position,governed_review_batch_id,governed_review_batch_digest,
               review_instruction_version_id,review_instruction_digest,population_id,population_digest,
               draw_digest,representative_of_population_id,representative_ineligible_reasons,
@@ -117,19 +134,17 @@ export class PgBinaryCalibrationRepository implements
               provider_policy_id,provider_policy_digest,provider_policy_canonical_bytes,
               payload_transmission,idempotency_key,request_digest,state,planned_observations)
            values
-             ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-              $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,'single',1,$36,
-              $37,$38,$39,$40,$41,$42,'queued',$6)
+             ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19,$20,
+              $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,'single',1,$32,
+              $33,$34,$35,$36,$37,$38,'queued',$6)
            returning *`,
           [
             runId, actor.projectId, input.datasetRevisionId, derived.revisionDigest,
             derived.truthContentDigest, derived.itemCount, derived.criterionId,
             derived.criterionVersionId, derived.criterionDigest, derived.skillVersion.skillId,
             derived.skillVersion.id, derived.skillDigest, derived.outputContractDigest,
-            derived.requestedBinding.provider, derived.requestedBinding.modelId,
-            derived.requestedBinding.modelVersion, derived.requestedBinding.temperatureDecimal,
-            derived.requestedBinding.topPDecimal, derived.requestedBinding.endpointKind,
-            derived.requestedBinding.baseUrlDigest, derived.requestedBinding.requestedBindingDigest,
+            derived.executionBinding.provider, derived.definitionDigest,
+            JSON.stringify(derived.executionBinding), derived.requestedBindingDigest,
             derived.suiteBinding?.manifestId ?? null, derived.suiteBinding?.manifestDigest ?? null,
             derived.suiteBinding?.memberPosition ?? null, derived.origin.batchId,
             derived.origin.batchDigest, derived.origin.instructionVersionId,
@@ -147,6 +162,75 @@ export class PgBinaryCalibrationRepository implements
       } catch (error) {
         throw mapPgError(error);
       }
+    });
+  }
+
+  async getGovernedBinding(
+    access: BinaryCalibrationProjectAccess,
+    skillVersionId: string
+  ): Promise<{ binding: GovernedBinding; record: ResolutionRecord | null } | null> {
+    const binding = await loadGovernedBinding(this.pool, access.projectId, skillVersionId);
+    if (!binding) return null;
+    return { binding, record: await loadResolutionRecord(this.pool, access.projectId, skillVersionId, binding.executionBinding) };
+  }
+
+  async recordResolution(attempt: ResolutionAttemptInput, record: ResolutionRecord): Promise<ResolutionRecord | null> {
+    return this.transaction(async (client) => {
+      await appendResolutionAttempt(client, attempt);
+      return attempt.skillVersionId === null
+        ? record
+        : saveResolutionRecord(client, attempt.projectId, attempt.skillVersionId, attempt.executionBinding, record);
+    });
+  }
+
+  async getRecheckTarget(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationRecheckTarget> {
+    const run = await requireClaim(this.pool, claim, false);
+    const binding = await loadGovernedBinding(this.pool, String(run.project_id), String(run.skill_version_id));
+    if (!binding) throw repoError("state_conflict", "binary calibration evaluator version is unavailable");
+    return {
+      // The run pins its binding; the re-check probes exactly it.
+      binding: { ...binding, executionBinding: ExecutionBindingSchema.parse(parseJson(run.execution_binding)) },
+      authorized: run.authorization_check_id !== null && run.authorization_check_id !== undefined,
+      msSinceUnknownRecheck: await msSinceUnknownRecheck(this.pool, String(run.project_id), String(run.id))
+    };
+  }
+
+  async recordRecheck(
+    claim: BinaryCalibrationExecutionClaim,
+    result: { outcome: "holds" | "no_longer_holds" | "unknown"; probes: readonly CapabilityProbe[] }
+  ): Promise<void> {
+    await this.transaction(async (client) => {
+      const run = await requireClaim(client, claim, true);
+      await appendResolutionAttempt(client, {
+        projectId: String(run.project_id),
+        skillVersionId: String(run.skill_version_id),
+        executionBinding: ExecutionBindingSchema.parse(parseJson(run.execution_binding)),
+        kind: "recheck",
+        triggerKind: "binary_calibration_run",
+        triggerRef: String(run.id),
+        outcome: result.outcome,
+        probes: result.probes
+      });
+    });
+  }
+
+  async rejectBeforeAuthorization(
+    claim: BinaryCalibrationExecutionClaim,
+    reason: "resolution_no_longer_holds"
+  ): Promise<void> {
+    await this.transaction(async (client) => {
+      const run = await requireClaim(client, claim, true);
+      if (run.authorization_check_id) {
+        throw repoError("state_conflict", "binary calibration run is already authorized");
+      }
+      const rejectedAt = await databaseClock(client);
+      await client.query(
+        `update binary_calibration_runs
+         set state='rejected',rejection_reason=$2,completed_at=$3::timestamptz,
+             claim_worker_id=null,claim_token=null,claim_expires_at=null
+         where id=$1`,
+        [run.id, reason, rejectedAt]
+      );
     });
   }
 
@@ -304,6 +388,21 @@ export class PgBinaryCalibrationRepository implements
       if (run.authorization_check_id) {
         await requireActiveRevisionLease(client, run);
         return { run, rejected: false };
+      }
+
+      // Before any lease or exposure: the version must still hold the
+      // identity the run pinned, or the run is rejected and nothing is exposed.
+      const version = await loadPinnedVersionRow(client, run);
+      if (version === null || !evaluatorVersionHoldsPin(run, version)) {
+        const rejectedAt = await databaseClock(client);
+        await client.query(
+          `update binary_calibration_runs
+           set state='rejected',rejection_reason='evaluator_version_changed',completed_at=$2::timestamptz,
+               claim_worker_id=null,claim_token=null,claim_expires_at=null
+           where id=$1`,
+          [run.id, rejectedAt]
+        );
+        return { run, rejected: true };
       }
 
       const eligibility = await evaluateEligibility(client, run, "authorization");
@@ -478,16 +577,18 @@ export class PgBinaryCalibrationRepository implements
       if (input.providerObservation.provider !== String(run.requested_provider)) {
         throw repoError("conflict", "attempt provider observation does not match the pinned requested provider");
       }
+      const columns = attemptColumnsFor(input.result);
       const result = await client.query(
         `update binary_calibration_attempts
          set accounting_state='accounted',terminal_evaluator_outcome=$3,attempt_state=$4,
              error_code=$5,observed_model=$6,observed_version=$7,system_fingerprint=$8,
-             accounted_at=date_trunc('milliseconds',clock_timestamp())
+             upstream_provider=$9,accounted_at=date_trunc('milliseconds',clock_timestamp())
          where id=$1 and run_id=$2 and accounting_state='pending'
          returning id`,
-        [attemptId, run.id, input.terminalEvaluatorOutcome, input.attemptState,
-          input.errorCode, input.providerObservation.observedModel,
-          input.providerObservation.observedVersion, input.providerObservation.systemFingerprint]
+        [attemptId, run.id, columns.terminalEvaluatorOutcome, input.attemptState,
+          columns.errorCode, input.providerObservation.observedModel,
+          input.providerObservation.observedVersion, input.providerObservation.systemFingerprint,
+          input.providerObservation.upstreamProvider]
       );
       if (!result.rows[0]) throw repoError("state_conflict", "binary calibration attempt is already accounted or missing");
       await client.query(
@@ -539,7 +640,7 @@ export class PgBinaryCalibrationRepository implements
         `select dataset_revision_item_digest,truth_label,trial_index,
                 terminal_evaluator_outcome,attempt_state,error_code,
                 physical_provider_calls,provider,observed_model,observed_version,
-                system_fingerprint,commitment_salt
+                system_fingerprint,upstream_provider,commitment_salt
          from binary_calibration_attempts where run_id=$1
          order by trial_index,dataset_revision_item_digest`,
         [run.id]
@@ -553,23 +654,22 @@ export class PgBinaryCalibrationRepository implements
         datasetRevisionItemDigest: String(row.dataset_revision_item_digest),
         trialIndex: Number(row.trial_index),
         truthLabel: row.truth_label === "pass" ? "pass" as const : "fail" as const,
-        terminalEvaluatorOutcome: String(row.terminal_evaluator_outcome) as
-          BinaryCalibrationPrivateLedger["records"][number]["terminalEvaluatorOutcome"],
+        result: attemptResultFromRow(row),
         attemptState: String(row.attempt_state) as
-          BinaryCalibrationPrivateLedger["records"][number]["attemptState"],
-        errorCode: row.error_code === null ? null : String(row.error_code) as BinaryCalibrationErrorCode,
+          BinaryCalibrationV2PrivateLedger["records"][number]["attemptState"],
         physicalProviderCalls: Number(row.physical_provider_calls),
         providerObservation: {
           provider: String(row.provider),
           observedModel: nullableString(row.observed_model),
           observedVersion: nullableString(row.observed_version),
-          systemFingerprint: nullableString(row.system_fingerprint)
+          systemFingerprint: nullableString(row.system_fingerprint),
+          upstreamProvider: nullableString(row.upstream_provider)
         },
         commitmentSalt: String(row.commitment_salt)
       }));
-      const ledger: BinaryCalibrationPrivateLedger = {
-        contract: "rubrist/binary-calibration-private-ledger/v1",
-        schemaVersion: 1,
+      const ledger: BinaryCalibrationV2PrivateLedger = {
+        contract: BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
+        schemaVersion: 2,
         canonicalizationVersion: "rubrist-canonical-json/v1",
         artifactId,
         calibrationRunId: run.id,
@@ -580,12 +680,12 @@ export class PgBinaryCalibrationRepository implements
         trialsPerItem: 1,
         records
       };
-      const ledgerBytes = canonicalBinaryCalibrationPrivateLedgerBytes(ledger);
-      const ledgerCommitment = binaryCalibrationPrivateLedgerCommitmentDigest(ledger);
+      const ledgerBytes = canonicalBinaryCalibrationV2PrivateLedgerBytes(ledger);
+      const ledgerCommitment = binaryCalibrationV2PrivateLedgerCommitmentDigest(ledger);
       const aggregate = aggregateTrial(records);
       const authorization = await loadExposureCheck(client, String(run.authorization_check_id));
       const artifactCreatedAt = await databaseClock(client);
-      const artifact = buildBinaryCalibrationArtifact({
+      const artifact = buildBinaryCalibrationV2Artifact({
         artifactId,
         calibrationRunId: run.id,
         projectId: run.project_id,
@@ -601,9 +701,14 @@ export class PgBinaryCalibrationRepository implements
         evaluator: {
           skillId: String(run.skill_id),
           skillVersionId: String(run.skill_version_id),
+          identity: {
+            basis: EVALUATOR_IDENTITY_BASIS,
+            definitionDigest: String(run.definition_digest),
+            executionBinding: ExecutionBindingSchema.parse(parseJson(run.execution_binding))
+          },
           skillDigest: String(run.skill_digest),
           outputContractDigest: String(run.output_contract_digest),
-          requestedModelBinding: requestedBindingFromRun(run)
+          requestedBindingDigest: String(run.requested_binding_digest)
         },
         suiteBinding: run.suite_manifest_id === null ? null : {
           manifestId: String(run.suite_manifest_id),
@@ -621,8 +726,8 @@ export class PgBinaryCalibrationRepository implements
           semanticLeakageDetection: "unsupported",
           representativeOfPopulationId: nullableString(run.representative_of_population_id),
           representativeIneligibleReasons: asStringArray(run.representative_ineligible_reasons) as
-            BinaryCalibrationArtifact["truth"]["representativeIneligibleReasons"],
-          selectionMethod: String(run.selection_method) as BinaryCalibrationArtifact["truth"]["selectionMethod"],
+            BinaryCalibrationV2Artifact["truth"]["representativeIneligibleReasons"],
+          selectionMethod: String(run.selection_method) as BinaryCalibrationV2Artifact["truth"]["selectionMethod"],
           origin: {
             governedReviewBatchId: String(run.governed_review_batch_id),
             governedReviewBatchDigest: String(run.governed_review_batch_digest),
@@ -655,7 +760,7 @@ export class PgBinaryCalibrationRepository implements
           definitionVersion: "sealed-binary-calibration-execution/v1",
           providerDataHandling: {
             executionEnvironment: String(run.execution_environment) as
-              BinaryCalibrationArtifact["execution"]["providerDataHandling"]["executionEnvironment"],
+              BinaryCalibrationV2Artifact["execution"]["providerDataHandling"]["executionEnvironment"],
             policyId: String(run.provider_policy_id),
             policyDigest: String(run.provider_policy_digest),
             payloadTransmission: "sealed_payload_to_pinned_provider"
@@ -672,25 +777,26 @@ export class PgBinaryCalibrationRepository implements
           providerIdentityGroups: aggregate.providerIdentityGroups
         }]
       });
-      verifyBinaryCalibrationPrivateLedgerForArtifact(ledger, artifact);
-      const artifactBytes = canonicalBinaryCalibrationArtifactBytes(artifact);
-      const artifactDigest = binaryCalibrationArtifactDigest(artifactBytes);
+      verifyBinaryCalibrationV2PrivateLedgerForArtifact(ledger, artifact);
+      const artifactBytes = canonicalBinaryCalibrationV2ArtifactBytes(artifact);
+      const artifactDigest = binaryCalibrationV2ArtifactDigest(artifactBytes);
 
       await client.query(`set constraints binary_calibration_private_ledger_artifact_fk deferred`);
       await client.query(
         `insert into binary_calibration_private_ledgers
            (id,run_id,project_id,artifact_id,contract,canonical_bytes,commitment_digest,created_at)
-         values ($1,$2,$3,$4,'rubrist/binary-calibration-private-ledger/v1',$5,$6,$7::timestamptz)`,
-        [ledgerId, run.id, run.project_id, artifactId, ledgerBytes, ledgerCommitment, artifactCreatedAt]
+         values ($1,$2,$3,$4,$5,$6,$7,$8::timestamptz)`,
+        [ledgerId, run.id, run.project_id, artifactId, BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
+          ledgerBytes, ledgerCommitment, artifactCreatedAt]
       );
       const artifactRow = (await client.query(
         `insert into binary_calibration_artifacts
            (id,run_id,project_id,private_ledger_id,artifact_revision,predecessor_artifact_id,
             correction_reason,status,contract,canonical_bytes,artifact_digest,evidence_digest,created_at)
-         values ($1,$2,$3,$4,1,null,null,$5,'rubrist/binary-calibration/v1',$6,$7,$8,$9::timestamptz)
+         values ($1,$2,$3,$4,1,null,null,$5,$6,$7,$8,$9,$10::timestamptz)
          returning id,run_id,canonical_bytes,artifact_digest,evidence_digest,created_at`,
-        [artifactId, run.id, run.project_id, ledgerId, artifact.status, artifactBytes,
-          artifactDigest, artifact.evidenceDigest, artifactCreatedAt]
+        [artifactId, run.id, run.project_id, ledgerId, artifact.status, BINARY_CALIBRATION_V2_CONTRACT,
+          artifactBytes, artifactDigest, artifact.evidenceDigest, artifactCreatedAt]
       )).rows[0];
       const terminalState = artifact.status === "complete" ? "complete" : "incomplete";
       const terminalRun = (await client.query<RunRow>(
