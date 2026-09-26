@@ -130,7 +130,7 @@ export function SkillVersionsScreen() {
       <SectionHead
         eyebrow="Immutable evaluator history"
         title="Evaluator versions"
-        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect the guide, prompt, result format, and evidence attached to it."
+        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a guide and prompt, or a typed question), result format, and evidence attached to it."
         right={
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
@@ -477,7 +477,8 @@ export function SkillVersionDetailScreen() {
                   <div className="mt-0.5 text-[11.5px] leading-5 text-ink-3">
                     {verdictKindDescription(v.verdictKind, {
                       scalarRange: v.scalarRange,
-                      categoricalChoiceScores: v.categoricalChoiceScores
+                      categoricalChoiceScores: v.categoricalChoiceScores,
+                      decisionThreshold: v.decisionThreshold
                     })}
                   </div>
                 </div>

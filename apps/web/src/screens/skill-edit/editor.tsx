@@ -156,6 +156,16 @@ export function SkillVersionEditor({
         />
       ) : null}
 
+      {!typed && v.typedQuestion !== null ? (
+        <MarginNote tone="signal" who={`v${v.version} · typed question`} className="mb-5">
+          v{v.version} is a typed question answered by TypeSafe.{" "}
+          {availableProviderOptions.some((option) => option.provider === "typesafe")
+            ? "With another provider, this draft is a prompted evaluator: write its review guide and judge instructions, or choose TypeSafe to keep the question."
+            : <>TypeSafe has no key, so this draft is a prompted evaluator: write its review guide and judge instructions, or add a TypeSafe key in{" "}
+              <button type="button" className="underline cursor-pointer" onClick={() => navigate("/settings")}>Settings</button> to keep the question.</>}
+        </MarginNote>
+      ) : null}
+
       {typed ? (
         <TypedQuestionCard draft={typedDraft} setDraft={setTypedDraft} />
       ) : (
@@ -315,7 +325,8 @@ export function SkillVersionEditor({
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Provider">
             <select
-              value={provider}
+              aria-label="Provider"
+              value={selectedProviderOption ? provider : ""}
               disabled={availableProviderOptions.length === 0}
               onChange={(event) => {
                 const next = event.target.value as JudgeProviderId;
@@ -327,7 +338,9 @@ export function SkillVersionEditor({
               }}
               className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 text-[12.5px] text-ink focus-visible:border-ink"
             >
-              {availableProviderOptions.length === 0 ? <option value="mock">Configure a provider in Settings</option> : null}
+              {availableProviderOptions.length === 0 ? <option value="">Configure a provider in Settings</option> : null}
+              {/* A version whose provider has no key starts on none, so every listed provider is a real choice. */}
+              {availableProviderOptions.length > 0 && !selectedProviderOption ? <option value="" disabled>Choose a provider</option> : null}
               {availableProviderOptions.map((option) => (
                 <option key={option.provider} value={option.provider}>{option.label}</option>
               ))}
@@ -345,7 +358,7 @@ export function SkillVersionEditor({
 
           {provider === "custom" ? (
             <Field label="OpenAI-compatible base URL">
-              <TextInput value={baseUrl} onChange={(value) => { setBaseUrl(value); picker.modelPicked(); }} placeholder="https://api.example.com/v1" mono />
+              <TextInput label="OpenAI-compatible base URL" value={baseUrl} onChange={(value) => { setBaseUrl(value); picker.modelPicked(); }} placeholder="https://api.example.com/v1" mono />
               {!baseUrlValid ? <span className="text-[11px] text-signal">Enter a full http(s) base URL.</span> : null}
             </Field>
           ) : provider === "typesafe" ? null : (
@@ -390,6 +403,7 @@ export function SkillVersionEditor({
           {provider === "custom" || provider === "typesafe" ? (
             <Field label={provider === "typesafe" ? "TypeSafe model ID" : "Custom model ID"}>
               <TextInput
+                label={provider === "typesafe" ? "TypeSafe model ID" : "Custom model ID"}
                 value={modelId}
                 onChange={(value) => {
                   setModelId(value);
@@ -457,7 +471,7 @@ export function SkillVersionEditor({
         </CardContent>
       </Card>
 
-      {!hasConfiguredRealProvider ? (
+      {!typed && !hasConfiguredRealProvider ? (
         <MarginNote tone="neutral" who="Requested model" className="mb-5">
           {availableProviderOptions.some((option) => option.provider === "mock")
             ? "Only the local mock is available."
@@ -524,6 +538,13 @@ export function SkillVersionEditor({
         />
       ) : null}
 
+      {!typed && (rubric.trim() === "" || prompt.trim() === "") ? (
+        <ul className="mb-4 flex list-disc flex-col gap-0.5 pl-4 text-[11.5px] text-ink-3">
+          {rubric.trim() === "" ? <li>Write the review guide.</li> : null}
+          {prompt.trim() === "" ? <li>Write the judge instructions, under Judge prompt template · advanced.</li> : null}
+        </ul>
+      ) : null}
+
       {submitError ? <div className="mb-4 text-[12px] text-signal">{submitError}</div> : null}
 
       <div className="flex items-center gap-2">
@@ -555,15 +576,19 @@ function TextInput({
   value,
   onChange,
   placeholder,
-  mono
+  mono,
+  label
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   mono?: boolean;
+  /** The field's accessible name. */
+  label: string;
 }) {
   return (
     <input
+      aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}

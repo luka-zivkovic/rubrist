@@ -191,6 +191,7 @@ export function SkillScreen() {
               verdictKind={v.verdictKind}
               scalarRange={v.scalarRange}
               categoricalChoiceScores={v.categoricalChoiceScores}
+              decisionThreshold={v.decisionThreshold}
             />
           ) : null}
           {shownTab === "schema" ? <SchemaView schema={v.outputSchema} /> : null}
@@ -256,13 +257,15 @@ function BindingView({
   customEndpointUrl,
   verdictKind,
   scalarRange,
-  categoricalChoiceScores
+  categoricalChoiceScores,
+  decisionThreshold
 }: {
   binding: Skill["currentVersion"]["executionBinding"];
   customEndpointUrl: string | null;
   verdictKind: Skill["currentVersion"]["verdictKind"];
   scalarRange: Skill["currentVersion"]["scalarRange"];
   categoricalChoiceScores: Skill["currentVersion"]["categoricalChoiceScores"];
+  decisionThreshold: Skill["currentVersion"]["decisionThreshold"];
 }) {
   return (
     <div>
@@ -299,7 +302,7 @@ function BindingView({
           <div>
             <div className="font-mono">{verdictKind}</div>
             <div className="mt-0.5 text-[11.5px] leading-5 text-ink-3">
-              {verdictKindDescription(verdictKind, { scalarRange, categoricalChoiceScores })}
+              {verdictKindDescription(verdictKind, { scalarRange, categoricalChoiceScores, decisionThreshold })}
             </div>
           </div>
         </CardContent>

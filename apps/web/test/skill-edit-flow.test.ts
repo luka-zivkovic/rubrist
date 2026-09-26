@@ -116,16 +116,28 @@ describe("guided evaluator editing", () => {
     expect(html).toContain("Decision threshold: 0.7");
     expect(html).not.toContain("Review guide");
 
-    // Switching a prompted version to a typed question changes the definition and the binding.
+    // Switching a prompted version to a typed question replaces the guide and instructions, and the binding.
     const switched = renderToStaticMarkup(createElement(SkillChangeReview, {
-      base, rubricMarkdown: "", prompt: "", typedQuestion: question, decisionThreshold: 0.7,
+      base, rubricMarkdown: "# kept in the editor", prompt: "kept too", typedQuestion: question, decisionThreshold: 0.7,
       executionBinding: jev, verdictKind: "binary", timeScope: "new"
     }));
-    expect(switched).toContain("2 evaluator fields changed");
+    expect(switched).toContain("4 evaluator fields changed");
     expect(switched).toContain("threshold none → 0.7");
+    expect(switched).toContain("Review guide");
+    expect(switched).not.toContain("# kept in the editor");
+
+    // And back: the new guide and instructions are shown and counted, and the question goes.
+    const back = renderToStaticMarkup(createElement(SkillChangeReview, {
+      base: typedBase, rubricMarkdown: "# New guide", prompt: "Judge against {{rubric_markdown}}.", typedQuestion: null, decisionThreshold: null,
+      executionBinding: { ...base.executionBinding, endpoint: { kind: "managed" } }, verdictKind: "binary", timeScope: "new"
+    }));
+    expect(back).toContain("4 evaluator fields changed");
+    expect(back).toContain("threshold 0.6 → none");
+    expect(back).toContain("# New guide");
+    expect(back).toContain("Is the reply grounded?");
 
     expect(skillVersionChangeLabels({ ...typedBase, id: "next", decisionThreshold: 0.7 }, typedBase)).toEqual(["decision threshold"]);
-    expect(skillVersionChangeLabels({ ...typedBase, id: "next" }, base)).toEqual(["review guide", "judge instructions", "typed question", "decision threshold", "execution binding"]);
+    expect(skillVersionChangeLabels({ ...typedBase, id: "next" }, base)).toEqual(["definition kind", "execution binding"]);
   });
 
   it("summarizes what changed for the version-history ledger", () => {

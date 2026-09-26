@@ -23,7 +23,7 @@ import {
 import { useDashboard } from "@/lib/dashboard-context";
 import { useCriterion } from "@/lib/criterion-context";
 import { skillCriterionVersionId } from "@/lib/criterion-scope";
-import { executionBindingFields, executionBindingInputFromFields } from "@/lib/execution-binding-draft";
+import { executionBindingFields } from "@/lib/execution-binding-draft";
 import { promptedProviderOptions, resolveJudgeProviderSelection } from "@/lib/judge-provider-selection";
 import { firstResultPath, isBench, markSetupReceipt } from "@/lib/journey";
 import {
@@ -37,12 +37,11 @@ import {
   type OnboardingCheckDraft
 } from "@/lib/onboarding-check";
 import { STARTER_SKILLS, findStarterSkill, type StarterSkill } from "@/lib/starter-skills";
-import { shouldRegenerateVerdictOutputSchema, skillEditOperationIsCurrent } from "@/lib/skill-edit-flow";
+import { skillEditOperationIsCurrent } from "@/lib/skill-edit-flow";
+import { skillVersionInputFromDraft } from "../lib/skill-version-input.js";
 import {
   compileJudgePrompt,
-  defaultEvaluatorOutputSchema,
   takesSamplingSettings,
-  verdictOutputSchema,
   type CriterionVersion,
   type CreateSkillVersionInput,
   type JudgeModel,
@@ -284,6 +283,8 @@ export function SkillEditScreen() {
       setOnboardingEvidenceInventory(evidenceInventory);
       const v = s.currentVersion;
       setBaseVersion(v);
+      // The typed question loads with the version, whichever content a starter or draft applies.
+      setTypedDraft(typedQuestionDraftFrom(v));
       // First-project setup authors prompted evaluators from starter
       // templates; the editor also authors typed questions on TypeSafe.
       const editorProviders = firstRun ? promptedProviderOptions(availability.providers) : availability.providers;
@@ -475,7 +476,8 @@ export function SkillEditScreen() {
       setModels([]);
       setModelsError(null);
       setModelsLoading(false);
-      setModelVersion(modelId.trim());
+      // A loaded version keeps the model version it saved; a newly named model starts from its id.
+      setModelVersion((current) => current.trim() === "" ? modelId.trim() : current);
       return;
     }
 
@@ -540,55 +542,21 @@ export function SkillEditScreen() {
   const buildInput = useCallback(
     (extra?: { overrideReason?: string }): CreateSkillVersionInput | null => {
       if (!skill) return null;
-      const v = skill.currentVersion;
       // Settings not in the editor carry over from the version being edited,
       // the same base the change review compares against.
-      const executionBinding = executionBindingInputFromFields(
-        { provider, modelId, modelVersion, baseUrl, ...pickerSavedFields(temperature) },
-        (baseVersion ?? v).executionBinding
-      );
-      if (executionBinding === null) return null;
-      if (executionBinding.provider === "typesafe") {
-        // A typed question's verdict is binary, under its protocol's one fixed output contract.
-        const definition = typedQuestionFromDraft(typedDraft);
-        if (definition === null) return null;
-        return {
-          ...(skillCriterionVersionId(skill) ? { criterionVersionId: skillCriterionVersionId(skill)! } : {}),
-          ...definition,
-          executionBinding,
-          outputSchema: defaultEvaluatorOutputSchema(executionBinding.verdictProtocol),
-          verdictKind: "binary",
-          timeScope,
-          ...(extra?.overrideReason ? { overrideReason: extra.overrideReason } : {})
-        };
-      }
-      const regenerateOutputSchema = shouldRegenerateVerdictOutputSchema({
-        firstRun,
-        starterSuppliedContract: starterSuppliedOutputContract,
-        base: v,
-        current: {
-          verdictKind,
-          scalarRange,
-          categoricalChoiceScores: choiceScores
-        }
-      });
-      const input: CreateSkillVersionInput = {
-        ...(skillCriterionVersionId(skill) ? { criterionVersionId: skillCriterionVersionId(skill)! } : {}),
+      return skillVersionInputFromDraft({
+        base: baseVersion ?? skill.currentVersion,
+        criterionVersionId: skillCriterionVersionId(skill),
+        binding: { provider, modelId, modelVersion, baseUrl, ...pickerSavedFields(temperature) },
         rubricMarkdown: rubric,
         prompt,
-        executionBinding,
-        outputSchema: regenerateOutputSchema
-          ? verdictOutputSchema({ verdictKind, scalarRange, categoricalChoiceScores: choiceScores })
-          : v.outputSchema,
-        verdictKind,
+        typedQuestion: typedDraft,
+        verdict: { verdictKind, scalarRange, categoricalChoiceScores: choiceScores },
         timeScope,
-        ...(verdictKind === "scalar" && scalarRange ? { scalarRange } : {}),
-        ...(verdictKind === "categorical" && choiceScores
-          ? { categoricalChoiceScores: choiceScores }
-          : {}),
-        ...(extra?.overrideReason ? { overrideReason: extra.overrideReason } : {})
-      };
-      return input;
+        firstRun,
+        starterSuppliedContract: starterSuppliedOutputContract,
+        overrideReason: extra?.overrideReason
+      });
     },
     [skill, baseVersion, rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
   );
@@ -823,7 +791,8 @@ export function SkillEditScreen() {
   );
   const availableProviderOptions = providerOptions.filter((option) => option.available);
   const selectedProviderOption = availableProviderOptions.find((option) => option.provider === provider);
-  const hasConfiguredRealProvider = availableProviderOptions.some((option) => option.provider !== "mock");
+  // A prompted evaluator needs a key for a prompted provider; TypeSafe runs only typed questions.
+  const hasConfiguredRealProvider = availableProviderOptions.some((option) => option.provider !== "mock" && option.provider !== "typesafe");
   const changeInput = draftInput;
 
   if (firstRun) {

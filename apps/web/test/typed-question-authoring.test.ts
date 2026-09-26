@@ -36,7 +36,7 @@ describe("the typed-question draft", () => {
   it("has no default threshold, and refuses one at or outside 0 and 1", () => {
     for (const threshold of ["", " ", "0", "1", "1.5", "-0.1", "abc"]) {
       expect(typedQuestionFromDraft({ ...DRAFT, threshold }), threshold).toBeNull();
-      expect(typedQuestionDraftProblems({ ...DRAFT, threshold })).toEqual(["Choose a decision threshold above 0 and below 1, on nonsealed data."]);
+      expect(typedQuestionDraftProblems({ ...DRAFT, threshold })).toEqual(["Choose a decision threshold above 0 and below 1, on development cases."]);
     }
     expect(typedQuestionFromDraft({ ...DRAFT, threshold: "0.001" })?.decisionThreshold).toBe(0.001);
   });
@@ -46,14 +46,22 @@ describe("the typed-question draft", () => {
       "Write the question.",
       "Say what makes the answer true.",
       "Say what makes the answer false.",
-      "Choose a decision threshold above 0 and below 1, on nonsealed data."
+      "Choose a decision threshold above 0 and below 1, on development cases."
     ]);
     expect(typedQuestionFromDraft({ ...DRAFT, falseCriterion: "  " })).toBeNull();
     expect(typedQuestionDraftProblems(DRAFT)).toEqual([]);
   });
 
-  it("refuses text the question contract rejects", () => {
+  it("refuses text the question contract rejects, and says why", () => {
     expect(typedQuestionFromDraft({ ...DRAFT, instructions: "Is it \ud800 grounded?" })).toBeNull();
+    expect(typedQuestionDraftProblems({ ...DRAFT, instructions: "Is it \ud800 grounded?" })).toEqual(["Remove the unsupported characters from the question."]);
+    expect(typedQuestionDraftProblems({ ...DRAFT, falseCriterion: "No\u0000" })).toEqual(["Remove the unsupported characters from what makes the answer false."]);
+    expect(typedQuestionDraftProblems({ ...DRAFT, instructions: "x".repeat(20_001) })).toEqual(["Shorten the question to 20,000 characters."]);
+    expect(typedQuestionDraftProblems({ ...DRAFT, trueCriterion: "x".repeat(5_001) })).toEqual(["Shorten what makes the answer true to 5,000 characters."]);
+  });
+
+  it("reads a decimal comma as a point", () => {
+    expect(typedQuestionFromDraft({ ...DRAFT, threshold: "0,62" })?.decisionThreshold).toBe(0.62);
   });
 });
 
@@ -62,11 +70,18 @@ describe("the typed-question editor card", () => {
     const empty = renderToStaticMarkup(createElement(TypedQuestionCard, { draft: EMPTY_TYPED_QUESTION_DRAFT, setDraft: vi.fn() }));
     expect(empty).toContain("Typed question");
     expect(empty).toContain('placeholder="choose one"');
-    expect(empty).toContain("Choose a decision threshold above 0 and below 1, on nonsealed data.");
+    expect(empty).toContain("Choose a decision threshold above 0 and below 1, on development cases.");
     expect(empty).toContain("it never abstains and states no rationale");
     const complete = renderToStaticMarkup(createElement(TypedQuestionCard, { draft: DRAFT, setDraft: vi.fn() }));
     expect(complete).not.toContain("<li>");
     expect(complete).toContain('value="0.62"');
+    expect(complete).toContain('inputMode="decimal"');
+    expect(complete).toContain('maxLength="20000"');
+    expect(complete).not.toContain("aria-invalid");
+    // Text the contract refuses marks its field invalid; the list describes every field.
+    const refused = renderToStaticMarkup(createElement(TypedQuestionCard, { draft: { ...DRAFT, instructions: "x\u0000" }, setDraft: vi.fn() }));
+    expect(refused).toContain('aria-invalid="true"');
+    expect(refused).toContain("Remove the unsupported characters from the question.");
   });
 });
 
@@ -78,5 +93,14 @@ describe("the typed-question view", () => {
     expect(html).toContain("It doesn&#x27;t.");
     expect(html).toContain("pass when p ≥ 0.62");
     expect(html).toContain("it never abstains and states no rationale");
+  });
+});
+
+describe("the result-type copy", () => {
+  it("says a typed version passes on its threshold and never abstains", async () => {
+    const { verdictKindDescription } = await import("../src/lib/verdict-kind.js");
+    expect(verdictKindDescription("binary", { decisionThreshold: 0.6 }))
+      .toBe("Returns pass when the model's probability that the answer is true reaches 0.6, and fail otherwise. It never abstains.");
+    expect(verdictKindDescription("binary")).toContain("Use ambiguous");
   });
 });

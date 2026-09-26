@@ -176,13 +176,19 @@ export function SkillChangeReview({
   verdictKind: VerdictKind;
   timeScope: SkillVersionTimeScope;
 }) {
-  // A typed question replaces the review guide and judge instructions, in either direction.
-  const typed = typedQuestion !== null || base.typedQuestion !== null;
+  // A typed question takes the place of the review guide and judge
+  // instructions. Each side shows the definition it has, so a switch between
+  // kinds shows both.
+  const newTyped = typedQuestion !== null;
+  const showQuestion = newTyped || base.typedQuestion !== null;
+  const showPrompted = !newTyped || base.typedQuestion === null;
   const beforeQuestion = questionSource(base.typedQuestion, base.decisionThreshold);
   const afterQuestion = questionSource(typedQuestion, decisionThreshold);
-  const questionChanged = typed && afterQuestion !== beforeQuestion;
-  const rubricChanged = !typed && rubricMarkdown !== base.rubricMarkdown;
-  const promptChanged = !typed && prompt !== base.prompt;
+  const afterRubric = newTyped ? "" : rubricMarkdown;
+  const afterPrompt = newTyped ? "" : prompt;
+  const questionChanged = showQuestion && afterQuestion !== beforeQuestion;
+  const rubricChanged = showPrompted && afterRubric !== (base.rubricMarkdown ?? "");
+  const promptChanged = showPrompted && afterPrompt !== (base.prompt ?? "");
   const bindingChanged = !inputMatchesVersion(executionBinding, base);
   const verdictChanged = verdictKind !== base.verdictKind;
   const changedCount = [questionChanged, rubricChanged, promptChanged, bindingChanged, verdictChanged].filter(Boolean).length;
@@ -203,20 +209,21 @@ export function SkillChangeReview({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-2 lg:grid-cols-4">
-          {typed ? (
-            <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2 sm:col-span-2">
+          {showQuestion ? (
+            <div className={cn("rounded-sm border border-rule-soft bg-paper-3 px-3 py-2", !showPrompted && "sm:col-span-2")}>
               <div className="text-ink-3">Typed question</div>
               <div className="mt-0.5 font-medium text-ink">{questionChanged ? "Changed" : "No change"}</div>
               <div className="text-[10.5px] text-ink-3">
                 threshold {base.decisionThreshold ?? "none"} → {decisionThreshold ?? "none"}
               </div>
             </div>
-          ) : (
+          ) : null}
+          {showPrompted ? (
             <>
               <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2">
                 <div className="text-ink-3">Review guide</div>
                 <div className="mt-0.5 font-medium text-ink">{rubricChanged ? "Changed" : "No change"}</div>
-                <div className="text-[10.5px] text-ink-3">{lineCount(base.rubricMarkdown ?? "")} → {lineCount(rubricMarkdown)} lines</div>
+                <div className="text-[10.5px] text-ink-3">{lineCount(base.rubricMarkdown ?? "")} → {lineCount(afterRubric)} lines</div>
               </div>
               <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2">
                 <div className="text-ink-3">Judge instructions</div>
@@ -224,7 +231,7 @@ export function SkillChangeReview({
                 <div className="text-[10.5px] text-ink-3">exact prompt source</div>
               </div>
             </>
-          )}
+          ) : null}
           <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2">
             <div className="text-ink-3">Execution binding</div>
             <div className="mt-0.5 font-medium text-ink">{bindingChanged ? "Changed" : "No change"}</div>
@@ -250,10 +257,10 @@ export function SkillChangeReview({
                 />
               ) : null}
               {rubricChanged ? (
-                <SourceComparison label="Review guide" version={base.version} before={base.rubricMarkdown ?? ""} after={rubricMarkdown} />
+                <SourceComparison label="Review guide" version={base.version} before={base.rubricMarkdown ?? ""} after={afterRubric} />
               ) : null}
               {promptChanged ? (
-                <SourceComparison label="Judge instructions" version={base.version} before={base.prompt ?? ""} after={prompt} />
+                <SourceComparison label="Judge instructions" version={base.version} before={base.prompt ?? ""} after={afterPrompt} />
               ) : null}
             </div>
           </details>
