@@ -3,7 +3,7 @@
 Status: **accepted Batch 1A storage contract**
 
 The receipt body is the closed
-[`rubrist/assessment-receipt/v2`](../contracts/assessment-receipt-v2.md) wire
+[`rubrist/assessment-receipt/v1`](../contracts/assessment-receipt-v1.md) wire
 contract, which replaced receipt v1 in Batch 8D (Rubrist ADR-0014). This
 document specifies how Rubrist preserves and serves those exact bytes; it does
 not add fields to the receipt.
@@ -18,7 +18,7 @@ not add fields to the receipt.
 | `id` | Stable artifact identity. |
 | `project_id`, `eval_run_id` | Owning assessment identity. |
 | `receipt_id` | Receipt identity; unique across artifacts. |
-| `contract_version` | The receipt's `schemaVersion`; every artifact holds receipt v2 and writes `2`. |
+| `contract_version` | The receipt's `schemaVersion`; every artifact holds `rubrist/assessment-receipt/v1` and writes `1`. |
 | `artifact_revision` | Positive lineage revision; root is `1`. |
 | `canonical_bytes` | Exact canonical UTF-8 receipt bytes as `bytea`. |
 | `artifact_digest` | `sha256:` digest over all `canonical_bytes`. |
@@ -38,7 +38,7 @@ its digest, and `match|diverged` result against one persisted artifact. It is
 append-only and deduplicated by artifact plus consumer byte digest.
 
 The comparison endpoint accepts canonical receipt bytes, as
-[`contracts/assessment-receipt-v2.md`](../contracts/assessment-receipt-v2.md)
+[`contracts/assessment-receipt-v1.md`](../contracts/assessment-receipt-v1.md)
 defines them.
 
 ## Item evidence
@@ -107,7 +107,7 @@ root artifact ── read ──────────────────
 | Candidate | Result |
 | --- | --- |
 | Unknown project/run or non-release run | Reject. |
-| Invalid receipt v2 schema, semantic rule, or evidence digest | Reject. |
+| Invalid receipt schema, semantic rule, or evidence digest | Reject. |
 | Different `projectId` or `evalRunId` | Reject identity swap. |
 | Reused `receiptId` | Reject. |
 | Valid correction with a reason | Append next revision linked to current latest artifact. |

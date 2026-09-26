@@ -42,7 +42,7 @@ Request body (strict; unknown fields are rejected):
 | `costs?` | `{ falsePositive, falseNegative, humanReview? }` for the advisor; `null` or omitted means no advice. |
 
 The response is `{ artifact, summary, projectRole }`: the
-`rubrist/production-calibration/v2` artifact, and a summary with record counts
+`rubrist/production-calibration/v1` artifact, and a summary with record counts
 (total, decisions, actions, outcomes), each question with its answer types and
 its decision and outcome counts, the model identities seen, and the
 question-set digests. The route is the fourth import shape after Ironside,
@@ -101,7 +101,7 @@ it.
 
 ## How it differs from sealed binary calibration
 
-[Sealed binary calibration](../contracts/binary-calibration-v2.md) is Rubrist's
+[Sealed binary calibration](../contracts/binary-calibration-v1.md) is Rubrist's
 governed evidence: one exact evaluator version, one governed-blind
 sealed-validation revision, independent human truth, a private salted ledger,
 and a digest-pinned aggregate artifact. Production calibration is none of
@@ -125,7 +125,7 @@ provider identity. Production intervals use the same pinned z constant,
 binary64 operation order, and exact 0/1 endpoint bounds as the sealed contract;
 only the bound encoding differs. Production calibration is a measurement of
 your traffic, not a governed calibration claim, and it does not extend or replace the
-`rubrist/binary-calibration/v2` contract.
+`rubrist/binary-calibration/v1` contract.
 
 ## Input records: `rubrist/production-decision-record/v1`
 
@@ -158,7 +158,7 @@ winner are counted as conflicts. Actions
 and outcomes whose decision is not in the input are dropped from the join and
 counted as orphans in the artifact.
 
-## Output artifact: `rubrist/production-calibration/v2`
+## Output artifact: `rubrist/production-calibration/v1`
 
 `buildProductionCalibrationArtifact(records, { now, window?, ... })` produces
 one `ProductionCalibrationArtifact`. `now` is a required parameter because the
@@ -168,9 +168,8 @@ outside the window, superseded and conflicting outcomes, decisions tagged
 `synthetic: "true"`, question sets seen, model identities seen), the
 parameters used, and one entry per question and answer type.
 
-Version 2 replaced version 1 on 2026-09-24, before any report was stored. It
-adds score-question metrics and the window, and its metric definitions are
-`production-calibration-metrics/v2`. The input record contract is unchanged.
+It covers boolean, choice, and score questions over the window, and its
+metric definitions are `production-calibration-metrics/v1`.
 
 The **window** selects decisions by their `at`: `from` is inclusive, `to` is
 exclusive, and either may be null for no bound. The preview route sends no
@@ -480,4 +479,4 @@ Changing retention, erasing, purging, and deleting snapshots are owner-only
   as given; the analysis ignores values of the wrong type for a question.
 - **Governed evidence.** The artifact is not digest-pinned, has no private
   ledger commitment, and is not admissible where a sealed
-  `rubrist/binary-calibration/v2` artifact is required.
+  `rubrist/binary-calibration/v1` artifact is required.

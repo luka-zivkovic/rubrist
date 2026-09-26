@@ -3,8 +3,8 @@ import type { Pool, PoolClient } from "pg";
 import {
   EVALUATOR_IDENTITY_BASIS,
   ExecutionBindingSchema,
-  type BinaryCalibrationV2Artifact,
-  type BinaryCalibrationV2PrivateLedger,
+  type BinaryCalibrationArtifact,
+  type BinaryCalibrationPrivateLedger,
   type CapabilityProbe,
   type ResolutionRecord
 } from "@rubrist/shared";
@@ -20,15 +20,15 @@ import {
 
 import { sha256Digest } from "../lib/canonical-json.js";
 import {
-  BINARY_CALIBRATION_V2_CONTRACT,
-  BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
-  binaryCalibrationV2ArtifactDigest,
-  binaryCalibrationV2PrivateLedgerCommitmentDigest,
-  buildBinaryCalibrationV2Artifact,
-  canonicalBinaryCalibrationV2ArtifactBytes,
-  canonicalBinaryCalibrationV2PrivateLedgerBytes,
-  verifyBinaryCalibrationV2PrivateLedgerForArtifact
-} from "../lib/binary-calibration-v2.js";
+  BINARY_CALIBRATION_CONTRACT,
+  BINARY_CALIBRATION_PRIVATE_LEDGER_CONTRACT,
+  binaryCalibrationArtifactDigest,
+  binaryCalibrationPrivateLedgerCommitmentDigest,
+  buildBinaryCalibrationArtifact,
+  canonicalBinaryCalibrationArtifactBytes,
+  canonicalBinaryCalibrationPrivateLedgerBytes,
+  verifyBinaryCalibrationPrivateLedgerForArtifact
+} from "../lib/binary-calibration.js";
 
 import type {
   BinaryCalibrationActor,
@@ -656,7 +656,7 @@ export class PgBinaryCalibrationRepository implements
         truthLabel: row.truth_label === "pass" ? "pass" as const : "fail" as const,
         result: attemptResultFromRow(row),
         attemptState: String(row.attempt_state) as
-          BinaryCalibrationV2PrivateLedger["records"][number]["attemptState"],
+          BinaryCalibrationPrivateLedger["records"][number]["attemptState"],
         physicalProviderCalls: Number(row.physical_provider_calls),
         providerObservation: {
           provider: String(row.provider),
@@ -667,9 +667,9 @@ export class PgBinaryCalibrationRepository implements
         },
         commitmentSalt: String(row.commitment_salt)
       }));
-      const ledger: BinaryCalibrationV2PrivateLedger = {
-        contract: BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
-        schemaVersion: 2,
+      const ledger: BinaryCalibrationPrivateLedger = {
+        contract: BINARY_CALIBRATION_PRIVATE_LEDGER_CONTRACT,
+        schemaVersion: 1,
         canonicalizationVersion: "rubrist-canonical-json/v1",
         artifactId,
         calibrationRunId: run.id,
@@ -680,12 +680,12 @@ export class PgBinaryCalibrationRepository implements
         trialsPerItem: 1,
         records
       };
-      const ledgerBytes = canonicalBinaryCalibrationV2PrivateLedgerBytes(ledger);
-      const ledgerCommitment = binaryCalibrationV2PrivateLedgerCommitmentDigest(ledger);
+      const ledgerBytes = canonicalBinaryCalibrationPrivateLedgerBytes(ledger);
+      const ledgerCommitment = binaryCalibrationPrivateLedgerCommitmentDigest(ledger);
       const aggregate = aggregateTrial(records);
       const authorization = await loadExposureCheck(client, String(run.authorization_check_id));
       const artifactCreatedAt = await databaseClock(client);
-      const artifact = buildBinaryCalibrationV2Artifact({
+      const artifact = buildBinaryCalibrationArtifact({
         artifactId,
         calibrationRunId: run.id,
         projectId: run.project_id,
@@ -726,8 +726,8 @@ export class PgBinaryCalibrationRepository implements
           semanticLeakageDetection: "unsupported",
           representativeOfPopulationId: nullableString(run.representative_of_population_id),
           representativeIneligibleReasons: asStringArray(run.representative_ineligible_reasons) as
-            BinaryCalibrationV2Artifact["truth"]["representativeIneligibleReasons"],
-          selectionMethod: String(run.selection_method) as BinaryCalibrationV2Artifact["truth"]["selectionMethod"],
+            BinaryCalibrationArtifact["truth"]["representativeIneligibleReasons"],
+          selectionMethod: String(run.selection_method) as BinaryCalibrationArtifact["truth"]["selectionMethod"],
           origin: {
             governedReviewBatchId: String(run.governed_review_batch_id),
             governedReviewBatchDigest: String(run.governed_review_batch_digest),
@@ -760,7 +760,7 @@ export class PgBinaryCalibrationRepository implements
           definitionVersion: "sealed-binary-calibration-execution/v1",
           providerDataHandling: {
             executionEnvironment: String(run.execution_environment) as
-              BinaryCalibrationV2Artifact["execution"]["providerDataHandling"]["executionEnvironment"],
+              BinaryCalibrationArtifact["execution"]["providerDataHandling"]["executionEnvironment"],
             policyId: String(run.provider_policy_id),
             policyDigest: String(run.provider_policy_digest),
             payloadTransmission: "sealed_payload_to_pinned_provider"
@@ -777,16 +777,16 @@ export class PgBinaryCalibrationRepository implements
           providerIdentityGroups: aggregate.providerIdentityGroups
         }]
       });
-      verifyBinaryCalibrationV2PrivateLedgerForArtifact(ledger, artifact);
-      const artifactBytes = canonicalBinaryCalibrationV2ArtifactBytes(artifact);
-      const artifactDigest = binaryCalibrationV2ArtifactDigest(artifactBytes);
+      verifyBinaryCalibrationPrivateLedgerForArtifact(ledger, artifact);
+      const artifactBytes = canonicalBinaryCalibrationArtifactBytes(artifact);
+      const artifactDigest = binaryCalibrationArtifactDigest(artifactBytes);
 
       await client.query(`set constraints binary_calibration_private_ledger_artifact_fk deferred`);
       await client.query(
         `insert into binary_calibration_private_ledgers
            (id,run_id,project_id,artifact_id,contract,canonical_bytes,commitment_digest,created_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8::timestamptz)`,
-        [ledgerId, run.id, run.project_id, artifactId, BINARY_CALIBRATION_V2_PRIVATE_LEDGER_CONTRACT,
+        [ledgerId, run.id, run.project_id, artifactId, BINARY_CALIBRATION_PRIVATE_LEDGER_CONTRACT,
           ledgerBytes, ledgerCommitment, artifactCreatedAt]
       );
       const artifactRow = (await client.query(
@@ -795,7 +795,7 @@ export class PgBinaryCalibrationRepository implements
             correction_reason,status,contract,canonical_bytes,artifact_digest,evidence_digest,created_at)
          values ($1,$2,$3,$4,1,null,null,$5,$6,$7,$8,$9,$10::timestamptz)
          returning id,run_id,canonical_bytes,artifact_digest,evidence_digest,created_at`,
-        [artifactId, run.id, run.project_id, ledgerId, artifact.status, BINARY_CALIBRATION_V2_CONTRACT,
+        [artifactId, run.id, run.project_id, ledgerId, artifact.status, BINARY_CALIBRATION_CONTRACT,
           artifactBytes, artifactDigest, artifact.evidenceDigest, artifactCreatedAt]
       )).rows[0];
       const terminalState = artifact.status === "complete" ? "complete" : "incomplete";

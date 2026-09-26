@@ -319,7 +319,7 @@ Rubrist complements tracing platforms rather than replacing them. It can import 
 - Native Ironside project verification, settled trace-version import, cursor recovery, and criterion-specific assessment writeback.
 - Agent-trajectory evaluation with ordered steps and expected failing-step labels.
 - Per-project Anthropic or OpenAI judge keys encrypted at rest.
-- Judge Cards and portable [skill-format/v2](contracts/skill-format-v2.md) exports.
+- Judge Cards and portable [skill-format/v1](contracts/skill-format-v1.md) exports.
 - A small CI gate client in [`tools/ci/gate.mjs`](tools/ci/gate.mjs).
 
 </details>
@@ -392,18 +392,18 @@ Unchanged examples reuse recorded verdicts; edited examples are judged again. In
 available. New release integrations submit `purpose: "release_evidence"` to
 `POST /api/v1/judge/batch`, verify the policy-free assessment receipt, and
 apply thresholds or ship/hold policy in the release layer—not in Rubrist.
-Receipt v2 is a closed wire contract with portable schema and interoperability
-fixtures in [`contracts/`](contracts/). It states the evaluator's execution
+The assessment receipt is a closed wire contract with portable schema and
+interoperability fixtures in [`contracts/`](contracts/). It states the evaluator's execution
 binding and definition digest, and for each item an outcome, a failure, or
 that it was never attempted, with the evaluator's score and what its call
 observed. Calibration transport is the
-separate aggregate-only `rubrist/binary-calibration/v2` contract (ADR-0009, as
+separate aggregate-only `rubrist/binary-calibration/v1` contract (ADR-0009, as
 ADR-0014 revises it). The current Postgres runtime executes one trial per
 governed sealed binary item through the evaluator's exact execution binding
 and mints that separate artifact; it is not added to the receipt.
-Dailies independently verifies receipt v2 and calibration v2 and consumes
-explicitly configured local artifacts through config v6, policy v2, report v6,
-runner, and CLI paths. It performs no network or latest-artifact
+Dailies independently verifies the receipt and the calibration artifact and
+consumes explicitly configured local artifacts through its suite
+configuration, release policy, suite report, runner, and CLI paths. It performs no network or latest-artifact
 lookup. Other uncertainty transport remains unresolved. Current receipts are
 derived once at terminalization and persisted as exact canonical bytes in
 append-only PostgreSQL artifacts. A terminal run without one freezes once on
@@ -494,10 +494,10 @@ the historical artifact.
 The frozen contract supports repeated-trial evidence, but the current Rubrist
 runtime does not execute it. Dailies consumes explicitly configured local
 calibration artifacts and emits calibration-aware release reports over
-calibration v2 (Dailies ADR-0008). It never fetches a latest
+the calibration artifact (Dailies ADR-0008 and ADR-0010). It never fetches a latest
 artifact or Rubrist status, and it has no access to the private ledger.
 
-See the [binary-calibration contract](contracts/binary-calibration-v2.md),
+See the [binary-calibration contract](contracts/binary-calibration-v1.md),
 [ADR-0009](docs/decisions/0009-binary-calibration-artifact-contract.md), and
 the [runtime architecture](docs/architecture.md).
 
@@ -517,9 +517,9 @@ at execution time. Single-criterion routes continue to work for projects with
 one criterion and fail closed when selection would be ambiguous.
 
 An owner can publish an immutable
-[`rubrist/evaluator-suite-manifest/v2`](contracts/evaluator-suite-manifest-v2.md)
+[`rubrist/evaluator-suite-manifest/v1`](contracts/evaluator-suite-manifest-v1.md)
 artifact that orders criterion definitions and binds each one to an exact
-evaluator version, its v2 `skillDigest`, output contract, applicability rule,
+evaluator version, its `skillDigest`, output contract, applicability rule,
 and optional independent-trial plan. The manifest contains no release roles,
 weights, thresholds, aggregate score, or ship decision. Each criterion is
 still assessed through a separate assessment receipt; Dailies or

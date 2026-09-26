@@ -108,7 +108,7 @@ describe("stored production report client", () => {
   const snapshot = {
     id: "pcs_1",
     projectId: "project_1",
-    reportContract: "rubrist/production-calibration/v2",
+    reportContract: "rubrist/production-calibration/v1",
     artifactDigest: `sha256:${"b".repeat(64)}`,
     window: { from: "2026-09-01T00:00:00.000Z", to: null },
     parameters: { bins: 10 },

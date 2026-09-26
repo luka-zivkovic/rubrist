@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
-  BinaryCalibrationV2ErrorCode,
-  BinaryCalibrationV2PrivateProviderObservation
+  BinaryCalibrationErrorCode,
+  BinaryCalibrationPrivateProviderObservation
 } from "@rubrist/shared";
 import {
   BinaryCalibrationProviderError,
@@ -70,7 +70,7 @@ class FakeExecutionRepository implements BinaryCalibrationExecutionRepository {
   claimAvailableAt = 0;
   attemptState: "not_started" | "started" | "terminal" = "not_started";
   physicalProviderCalls = 0;
-  recoveredError: BinaryCalibrationV2ErrorCode | null = null;
+  recoveredError: BinaryCalibrationErrorCode | null = null;
   completeInputs: CompleteBinaryCalibrationAttemptInput[] = [];
   finalizeCalls = 0;
   recoveryMarks = 0;
@@ -381,7 +381,7 @@ describe("sealed binary calibration worker", () => {
       upstreamProvider: null,
       requestId: "REQUEST_ID_CANARY",
       raw: "RAW_CANARY"
-    } as BinaryCalibrationV2PrivateProviderObservation;
+    } as BinaryCalibrationPrivateProviderObservation;
     const executeProvider: BinaryCalibrationProviderExecutor = async ({ beforePhysicalCall }) => {
       await beforePhysicalCall();
       return {

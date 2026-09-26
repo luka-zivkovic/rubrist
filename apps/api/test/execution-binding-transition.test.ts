@@ -1,5 +1,5 @@
 import { EvaluatorCallError } from "@rubrist/audit/runtime";
-import { AssessmentReceiptV2Schema, type ExecutionBinding } from "@rubrist/shared";
+import { AssessmentReceiptSchema, type ExecutionBinding } from "@rubrist/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { endpointBaseUrlDigest } from "../src/lib/evaluator-identity.js";
@@ -71,7 +71,7 @@ describe("release evidence on any binding", () => {
     });
     expect(submitted.status).toBe(202);
     const { evalRunId } = await submitted.json() as { evalRunId: string };
-    const receipt = AssessmentReceiptV2Schema.parse(await (await app.request(
+    const receipt = AssessmentReceiptSchema.parse(await (await app.request(
       `/api/v1/eval-runs/${evalRunId}/assessment-receipt`,
       { headers: { authorization: `Bearer ${key}` } }
     )).json());

@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AssessmentReceiptV2Schema, MinimumVerdictOutputSchema } from "@rubrist/shared";
+import { AssessmentReceiptSchema, MinimumVerdictOutputSchema } from "@rubrist/shared";
 import type { PoolClient } from "pg";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
-  parseCanonicalReceiptV2Bytes,
+  parseCanonicalReceiptBytes,
   receiptSourceSnapshotDigest
-} from "../src/lib/assessment-receipt-v2.js";
+} from "../src/lib/assessment-receipt.js";
 import { AssessmentReceiptUnavailableError, computeEvalRunSpend } from "../src/repository.js";
 import * as commands from "../src/repository.pg/assessment-receipt-commands.js";
 import {
@@ -327,17 +327,17 @@ describe("PostgreSQL assessment-receipt client commands", () => {
       "terminal_mint"
     );
     expect(first).toMatchObject({
-      id: "rart_eval-run-1_v2_r1",
-      contractVersion: 2,
+      id: "rart_eval-run-1_v1_r1",
+      contractVersion: 1,
       sourceKind: "terminal_mint",
       artifactRevision: 1
     });
-    const parsed = parseCanonicalReceiptV2Bytes(first!.canonicalBytes);
-    expect(AssessmentReceiptV2Schema.parse(parsed)).toEqual(parsed);
+    const parsed = parseCanonicalReceiptBytes(first!.canonicalBytes);
+    expect(AssessmentReceiptSchema.parse(parsed)).toEqual(parsed);
     expect(parsed).toMatchObject({
       projectId: "project-1",
       evalRunId: "eval-run-1",
-      schemaVersion: 2,
+      schemaVersion: 1,
       status: "complete",
       items: [{
         clientItemId: "item-a",

@@ -149,7 +149,7 @@ export function runnableInstead(availability: ReadonlyArray<JudgeProviderAvailab
 }
 
 /**
- * A provider backed by the v2 executor. A prompted version judges with its
+ * A provider backed by the executor. A prompted version judges with its
  * own rubric and prompt, which the pinned protocol renders; the JudgePrompt
  * the worker builds is that same rendering (an API test holds them equal),
  * kept for the recorded request. A typed-question version asks its question

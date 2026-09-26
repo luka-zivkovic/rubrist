@@ -4,9 +4,9 @@ import {
   EVALUATOR_EXECUTION_AUTHORIZATION_VERSION,
   EvaluatorFailureKindSchema,
   SkillVersionSchema,
-  type BinaryCalibrationV2CompletionEligibilityReason,
-  type BinaryCalibrationV2ErrorCode,
-  type BinaryCalibrationV2PrivateLedger,
+  type BinaryCalibrationCompletionEligibilityReason,
+  type BinaryCalibrationErrorCode,
+  type BinaryCalibrationPrivateLedger,
   type ExecutionBinding,
   type SkillVersion
 } from "@rubrist/shared";
@@ -90,10 +90,10 @@ export interface FrozenOriginRow extends Record<string, unknown> {
 export interface EligibilityResult {
   exposureState: "protected" | "exposed";
   eligible: boolean;
-  reasons: BinaryCalibrationV2CompletionEligibilityReason[];
+  reasons: BinaryCalibrationCompletionEligibilityReason[];
   snapshot: Record<string, unknown>;
 }
-export function aggregateTrial(records: BinaryCalibrationV2PrivateLedger["records"]) {
+export function aggregateTrial(records: BinaryCalibrationPrivateLedger["records"]) {
   const outcomes = {
     planned: records.length,
     classified: 0,
@@ -105,7 +105,7 @@ export function aggregateTrial(records: BinaryCalibrationV2PrivateLedger["record
       pass: { classified: 0, abstained: 0, errored: 0, notAttempted: 0 },
       fail: { classified: 0, abstained: 0, errored: 0, notAttempted: 0 }
     },
-    errors: [] as Array<{ code: BinaryCalibrationV2ErrorCode; count: number }>
+    errors: [] as Array<{ code: BinaryCalibrationErrorCode; count: number }>
   };
   const truthSupport = { total: records.length, pass: 0, fail: 0 };
   const confusionMatrix = {
@@ -114,7 +114,7 @@ export function aggregateTrial(records: BinaryCalibrationV2PrivateLedger["record
     truthFailEvaluatorPass: 0,
     truthFailEvaluatorFail: 0
   };
-  const errors = new Map<BinaryCalibrationV2ErrorCode, number>();
+  const errors = new Map<BinaryCalibrationErrorCode, number>();
   const groups = new Map<string, {
     provider: string;
     observedModel: string | null;
@@ -181,8 +181,8 @@ export function providerPolicyFor(binding: ExecutionBinding): {
 } {
   const executionEnvironment = "external_provider" as const;
   const policyContent = {
-    contract: "rubrist/provider-data-handling-policy/v2",
-    schemaVersion: 2,
+    contract: "rubrist/provider-data-handling-policy/v1",
+    schemaVersion: 1,
     provider: binding.provider,
     endpoint: binding.endpoint,
     executionEnvironment,
@@ -343,7 +343,7 @@ export function validateAttemptCompletion(input: CompleteBinaryCalibrationAttemp
 /** The stored accounting columns of a shared item result. */
 export function attemptColumnsFor(result: CompleteBinaryCalibrationAttemptInput["result"]): {
   terminalEvaluatorOutcome: "evaluator_pass" | "evaluator_fail" | "abstained" | "errored" | "not_attempted";
-  errorCode: BinaryCalibrationV2ErrorCode | null;
+  errorCode: BinaryCalibrationErrorCode | null;
 } {
   if (result.state === "not_attempted") return { terminalEvaluatorOutcome: "not_attempted", errorCode: null };
   if (result.state === "failure") return { terminalEvaluatorOutcome: "errored", errorCode: result.failureKind };

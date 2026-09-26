@@ -7,8 +7,8 @@ import {
 } from "@rubrist/audit/runtime";
 import {
   GovernedReviewPayloadSnapshotSchema,
-  type BinaryCalibrationV2ErrorCode,
-  type BinaryCalibrationV2PrivateProviderObservation,
+  type BinaryCalibrationErrorCode,
+  type BinaryCalibrationPrivateProviderObservation,
   type EvaluatorItemOutcome,
   type ExecutionBinding,
   type JudgeProviderId
@@ -27,7 +27,7 @@ export type BinaryCalibrationCredentialResolver = (
 
 export interface BinaryCalibrationProviderResult {
   outcome: EvaluatorItemOutcome;
-  providerObservation: BinaryCalibrationV2PrivateProviderObservation;
+  providerObservation: BinaryCalibrationPrivateProviderObservation;
 }
 
 export type BinaryCalibrationBeforePhysicalCall = () => Promise<void>;
@@ -156,7 +156,7 @@ export class BinaryCalibrationProviderError extends Error {
   readonly observed: CalibrationObservation | null;
 
   constructor(
-    public readonly code: BinaryCalibrationV2ErrorCode,
+    public readonly code: BinaryCalibrationErrorCode,
     message: string,
     options: { physicalCall: boolean; observed?: CalibrationObservation | null }
   ) {
@@ -171,7 +171,7 @@ export class BinaryCalibrationProviderError extends Error {
 export function providerObservationFor(
   binding: ExecutionBinding,
   observed: CalibrationObservation | null
-): BinaryCalibrationV2PrivateProviderObservation {
+): BinaryCalibrationPrivateProviderObservation {
   const observedModel = boundedOrNull(observed?.model);
   return {
     provider: binding.provider,
@@ -185,7 +185,7 @@ export function providerObservationFor(
 
 export function requestedOnlyProviderObservation(
   binding: ExecutionBinding
-): BinaryCalibrationV2PrivateProviderObservation {
+): BinaryCalibrationPrivateProviderObservation {
   return providerObservationFor(binding, null);
 }
 

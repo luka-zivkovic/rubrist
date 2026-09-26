@@ -109,7 +109,7 @@ generated structural exception rather than splitting an exact export surface.
 
 The API governed-review library is split into artifact, evidence, and state
 pipelines behind `lib/governed-review.ts`; its internal common module is not a
-public compatibility surface. `lib/binary-calibration-v2.ts` remains one
+public compatibility surface. `lib/binary-calibration.ts` remains one
 structural exception because canonical construction and verification share
 digest-sensitive operation order. Its section comments are the navigation map,
 and its boundary test pins that order and the exact public surface.
