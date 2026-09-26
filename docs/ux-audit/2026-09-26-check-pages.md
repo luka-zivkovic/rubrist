@@ -895,19 +895,22 @@ that three findings describe. The findings above keep their as-audited text.
 
 - **C1: fixed.** The regression chip is derived from the version's recorded
   run. A version with no run reads "regression · not recorded", and a run that
-  couldn't be read reads "regression · unavailable". Compare shows "—" for any
-  total that includes a save without a loaded run, and says why. The picker
-  bar counts saves and recorded runs separately. The chip keeps the existing
-  "regression · …" wording until C12 and ADR-0015 settle the labels.
+  couldn't be read reads "regression · unavailable". A governed candidate
+  reads from its run once one is recorded. Compare shows "—", and says why,
+  for any total that includes a save whose run is missing, unreadable, failed,
+  or compared no reference cases. The picker bar counts saves and recorded
+  runs separately. The chip keeps the existing "regression · …" wording until
+  C12 and ADR-0015 settle the labels.
 - **C6: in part.** "Cases in revision" says "Count unavailable" when there is
   no pinned revision or the read fails. Elapsed time and the long-wait message
   are still to do.
-- **C7: fixed, except skeletons.** The five routes show "Couldn't load …" with
-  Retry, built on `EmptyShell`. A failed section read on the version page says
-  so inside its section. "Version not found" appears only when the version is
-  missing from the history. Compare no longer shows "Nothing to compare yet"
-  while loading. A response the page can't parse no longer prints the
-  validation dump. Loading states are still a title, with no `Skeleton`.
+- **C7: fixed, except skeletons.** The five routes show "Couldn't load …",
+  built on `EmptyShell`, with Retry when retrying can work. A failed section
+  read on the version page says so inside its section, and its Retry reads
+  only that section again. "Version not found" appears only when the version
+  isn't among the versions the page reads. Compare no longer shows "Nothing to
+  compare yet" while loading. A response the page can't parse no longer prints
+  the validation dump. Loading states are still a title, with no `Skeleton`.
 
 ## Next rounds
 

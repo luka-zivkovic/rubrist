@@ -4,7 +4,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { GOLDEN_GATE_RECOMMENDED } from "@rubrist/shared";
-import { GATE_LABEL, type GateState } from "@/lib/regression-gate";
+import { GATE_LABEL, isGateState, type GateState } from "@/lib/regression-gate";
 
 export { gateStateForVersion, type GateState } from "@/lib/regression-gate";
 
@@ -22,7 +22,7 @@ const GATE_VARIANT: Record<GateState, BadgeProps["variant"]> = {
 
 export function GateChip({ state, title, className }: { state: GateState; title?: string; className?: string }) {
   // An unknown state reads as unavailable, never as clean.
-  const known = state in GATE_LABEL ? state : "unavailable";
+  const known = isGateState(state) ? state : "unavailable";
   return (
     <Badge variant={GATE_VARIANT[known]} className={cn("normal-case", className)} title={title}>
       {GATE_LABEL[known]}

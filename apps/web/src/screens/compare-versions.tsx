@@ -23,8 +23,16 @@ import {
 } from "@/lib/api";
 import type { SkillVersion } from "@rubrist/shared";
 import { useCriterion } from "@/lib/criterion-context";
-import { loadErrorMessage } from "@/lib/load-error";
-import { chainStepRun, chainTotals, chainTotalsGap, loadChainStep, type ChainStep } from "@/lib/compare-chain";
+import { loadFailure, type LoadFailure } from "@/lib/load-error";
+import {
+  chainRecordedNote,
+  chainStepRun,
+  chainTotals,
+  chainTotalsGap,
+  loadChainStep,
+  runCompared,
+  type ChainStep
+} from "@/lib/compare-chain";
 
 // P1-3 · run comparison. Compare any two versions over the known-failure set by
 // chaining the RECORDED per-save regression runs between them — every number
@@ -37,7 +45,7 @@ export function CompareVersionsScreen() {
   const [skillId, setSkillId] = useState<string | null>(null);
   const [versions, setVersions] = useState<SkillVersion[]>([]); // newest → oldest
   const [listLoading, setListLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const [listReloadKey, setListReloadKey] = useState(0);
   // null while the recorded runs load.
   const [steps, setSteps] = useState<ChainStep[] | null>(null);
@@ -77,7 +85,7 @@ export function CompareVersionsScreen() {
           );
         }
       } catch (err) {
-        if (!cancelled) setLoadError(loadErrorMessage(err));
+        if (!cancelled) setLoadError(loadFailure(err));
       } finally {
         if (!cancelled) setListLoading(false);
       }
@@ -144,7 +152,7 @@ export function CompareVersionsScreen() {
       <PageLoadError
         eyebrow="Run comparison"
         title="Couldn't load versions"
-        message={loadError}
+        failure={loadError}
         onRetry={() => setListReloadKey((key) => key + 1)}
       />
     );
@@ -213,7 +221,7 @@ export function CompareVersionsScreen() {
           {valid ? (
             <span className="font-mono text-[11px] text-ink-4">
               {chainVersions.length} {chainVersions.length === 1 ? "save" : "saves"} between them
-              {totals ? ` · ${totals.recorded} with a recorded run` : ""}
+              {totals ? ` · ${chainRecordedNote(totals)}` : ""}
             </span>
           ) : (
             <span className="font-mono text-[11px] text-signal">
@@ -235,9 +243,11 @@ export function CompareVersionsScreen() {
               delta={
                 fromPct == null || toPct == null
                   ? "not measured on both"
-                  : toPct >= fromPct
+                  : toPct > fromPct
                     ? "improved"
-                    : "declined"
+                    : toPct < fromPct
+                      ? "declined"
+                      : "unchanged"
               }
               deltaKind={
                 fromPct != null && toPct != null && toPct < fromPct ? "signal" : "up"
@@ -257,7 +267,7 @@ export function CompareVersionsScreen() {
             <KPI
               label="Saves between"
               num={chainVersions.length}
-              foot={totals ? `${totals.recorded} with a recorded run` : "loading recorded runs"}
+              foot={totals ? chainRecordedNote(totals) : "loading recorded runs"}
             />
           </KPIRow>
 
@@ -269,7 +279,7 @@ export function CompareVersionsScreen() {
                   Each row is one saved version and the regression check recorded when it was saved, if any.
                 </CardDescription>
               </div>
-              {totals && totals.failed > 0 ? (
+              {steps?.some((step) => step.status === "failed" && step.retryable) ? (
                 <>
                   <div className="flex-1" />
                   <Button variant="ghost" size="sm" onClick={() => setStepsReloadKey((key) => key + 1)}>
@@ -298,6 +308,8 @@ export function CompareVersionsScreen() {
                   steps.map((step) => {
                     const { version } = step;
                     const run = step.status === "recorded" ? step.run : null;
+                    // A failed or empty check recorded zeros it never measured.
+                    const measured = run !== null && runCompared(run);
                     return (
                       <tr
                         key={version.id}
@@ -324,15 +336,19 @@ export function CompareVersionsScreen() {
                         </td>
                         <td
                           className="text-right font-mono tabular-nums"
-                          style={run && run.regressed ? { color: "var(--signal)" } : undefined}
+                          style={measured && run.regressed ? { color: "var(--signal)" } : undefined}
                         >
-                          {run ? run.regressed : "—"}
+                          {measured ? run.regressed : "—"}
                         </td>
-                        <td className="text-right font-mono tabular-nums">{run ? run.improved : "—"}</td>
+                        <td className="text-right font-mono tabular-nums">{measured ? run.improved : "—"}</td>
                         <td className="text-[12.5px] text-ink-3">
                           {step.status === "failed" ? (
                             <span className="text-signal" title={step.error}>
                               Couldn't load this save's run
+                            </span>
+                          ) : run?.status === "error" ? (
+                            <span className="text-signal" title={run.error ?? undefined}>
+                              Regression check failed
                             </span>
                           ) : run
                             ? run.overrideReason

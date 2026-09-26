@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useCriterion } from "@/lib/criterion-context";
-import { loadErrorMessage } from "@/lib/load-error";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
 import { skillCriterionVersionId } from "@/lib/criterion-scope";
 import { executionBindingFields, executionBindingInputFromFields } from "@/lib/execution-binding-draft";
 import { promptedProviderOptions, resolveJudgeProviderSelection } from "@/lib/judge-provider-selection";
@@ -92,7 +92,7 @@ export function SkillEditScreen() {
   const [baseVersion, setBaseVersion] = useState<SkillVersion | null>(null);
   const [loadedCriterionId, setLoadedCriterionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const loadGeneration = useRef(0);
   const operationGeneration = useRef(0);
   const criterionScope = useRef(selectedCriterionId);
@@ -153,10 +153,10 @@ export function SkillEditScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pendingVersion, setPendingVersion] = useState<SkillVersion | null>(null);
-  const [pinnedReferenceCount, setPinnedReferenceCount] = useState<number | null>(null);
-  // True once the pinned revision's count cannot be read, so the running check
-  // says the count is unavailable instead of loading it forever.
-  const [pinnedReferenceCountUnavailable, setPinnedReferenceCountUnavailable] = useState(false);
+  // The pinned revision's case count, keyed by revision so a count read for
+  // one revision never shows for another. count is null when the read failed
+  // or returned no count.
+  const [pinnedCount, setPinnedCount] = useState<{ revisionId: string; count: number | null } | null>(null);
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -241,8 +241,6 @@ export function SkillEditScreen() {
     setBaseVersion(null);
     setPhase("edit");
     setPendingVersion(null);
-    setPinnedReferenceCount(null);
-    setPinnedReferenceCountUnavailable(false);
     setResult(null);
     setSubmitError(null);
     setPollError(null);
@@ -322,7 +320,10 @@ export function SkillEditScreen() {
       setLoadedCriterionId(selectedCriterionId);
     } catch (err) {
       if (generation === loadGeneration.current) {
-        setLoadError(loadErrorMessage(err));
+        setLoadError(loadFailure(err));
+        // The load for this criterion has settled, so the error replaces the
+        // loading state instead of waiting behind the criterion check.
+        setLoadedCriterionId(selectedCriterionId);
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -378,30 +379,26 @@ export function SkillEditScreen() {
   const pinnedRevisionId = pendingVersion?.regressionDatasetRevisionId ?? result?.version.regressionDatasetRevisionId ?? null;
   useEffect(() => {
     const revisionId = pinnedRevisionId;
-    if (!revisionId) {
-      setPinnedReferenceCount(null);
-      setPinnedReferenceCountUnavailable(true);
-      return;
-    }
+    if (!revisionId) return;
     let cancelled = false;
-    setPinnedReferenceCount(null);
-    setPinnedReferenceCountUnavailable(false);
     void fetchDatasetRevisionMetadata(revisionId)
       .then((metadata) => {
-        if (cancelled) return;
-        const count = metadata?.itemCount ?? null;
-        setPinnedReferenceCount(count);
-        setPinnedReferenceCountUnavailable(count === null);
+        if (!cancelled) setPinnedCount({ revisionId, count: metadata?.itemCount ?? null });
       })
       .catch(() => {
         // The durable version receipt still names the pinned revision. A read
         // failure only withholds the count; terminal evidence remains exact.
-        if (!cancelled) setPinnedReferenceCountUnavailable(true);
+        if (!cancelled) setPinnedCount({ revisionId, count: null });
       });
     return () => {
       cancelled = true;
     };
   }, [pinnedRevisionId]);
+  const pinnedCountRead = pinnedCount !== null && pinnedCount.revisionId === pinnedRevisionId ? pinnedCount : null;
+  const pinnedReferenceCount = pinnedCountRead?.count ?? null;
+  // Unavailable when there is no pinned revision, or when its read settled
+  // without a count. Until then the running check says the count is loading.
+  const pinnedReferenceCountUnavailable = !pinnedRevisionId || (pinnedCountRead !== null && pinnedCountRead.count === null);
 
   useEffect(() => {
     if (phase !== "running" || !pendingVersion || !skill) return;
@@ -648,8 +645,6 @@ export function SkillEditScreen() {
       if (res.state === "queued") {
         setResult(null);
         setPendingVersion(res.version);
-        setPinnedReferenceCount(null);
-        setPinnedReferenceCountUnavailable(false);
         setPollError(null);
         setPhase("running");
       } else {
@@ -684,7 +679,7 @@ export function SkillEditScreen() {
       <PageLoadError
         eyebrow="Edit skill"
         title="Couldn't load the skill"
-        message={loadError ?? "Rubrist returned no skill for this criterion."}
+        failure={loadError ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
         back={
           <Button variant="ghost" size="sm" onClick={() => navigate("/skill")}>

@@ -10,9 +10,10 @@ import { RowLink } from "@/components/row-action";
 import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError } from "@/components/rubrist";
 import { fetchCurrentSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
-import { loadErrorMessage } from "@/lib/load-error";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { useSectionRead } from "@/hooks/use-section-read";
 import { verdictKindDescription } from "@/lib/verdict-kind";
-import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type ConvergenceAudit, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
+import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
 
 // Explicit mapping for every SkillStatus value. Reviewer scanning a versions
 // ledger needs to distinguish approved (on-deck) from deprecated (end of life)
@@ -53,7 +54,7 @@ export function SkillVersionsScreen() {
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [regressionRuns, setRegressionRuns] = useState<Record<string, RegressionRunResult>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,7 +66,7 @@ export function SkillVersionsScreen() {
       setVersions(history.versions);
       setRegressionRuns(Object.fromEntries(history.regressionRuns.map((run) => [run.skillVersionId, run])));
     } catch (err) {
-      setError(loadErrorMessage(err));
+      setError(loadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -116,7 +117,7 @@ export function SkillVersionsScreen() {
       <PageLoadError
         eyebrow="Every version of the skill"
         title="Couldn't load versions"
-        message={error ?? "Rubrist returned no skill for this criterion."}
+        failure={error ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
       />
     );
@@ -259,68 +260,24 @@ export function SkillVersionDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
-  // The recorded regression run: undefined until it is read or when the read
-  // fails, null when this version has none.
-  const [regression, setRegression] = useState<RegressionRunResult | null | undefined>(undefined);
-  const [regressionError, setRegressionError] = useState<string | null>(null);
-  const [convergence, setConvergence] = useState<ConvergenceAudit | null>(null);
-  const [convergenceError, setConvergenceError] = useState<string | null>(null);
-  const [consistency, setConsistency] = useState<SelfConsistencyReport | null>(null);
-  const [consistencyError, setConsistencyError] = useState<string | null>(null);
-  // the AUTHORITATIVE Judge Card, fetched from /card (κ + basis + audit)
-  // — distinct from the client-side signal assembly on this screen.
-  const [judgeCard, setJudgeCard] = useState<JudgeCard | null>(null);
-  const [judgeCardError, setJudgeCardError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setRegression(undefined);
-    setRegressionError(null);
-    setConvergence(null);
-    setConvergenceError(null);
-    setConsistency(null);
-    setConsistencyError(null);
-    setJudgeCard(null);
-    setJudgeCardError(null);
     (async () => {
       try {
         const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
         if (cancelled) return;
-        setSkill(s);
         const vs = await fetchSkillVersions(s.id, 100);
         if (cancelled) return;
+        setSkill(s);
         setVersions(vs);
-        if (id) {
-          // Each evidence read fails on its own: the version stays readable, and
-          // a failed section says so instead of reading as empty or missing.
-          // fetchSkillVersionRegression maps a 404 (no recorded run) to null.
-          await Promise.all([
-            fetchSkillVersionRegression(s.id, id).then(
-              (run) => { if (!cancelled) setRegression(run); },
-              (err: unknown) => { if (!cancelled) setRegressionError(loadErrorMessage(err)); }
-            ),
-            fetchSkillVersionConvergence(s.id, id).then(
-              (page) => { if (!cancelled) setConvergence(page.audit); },
-              (err: unknown) => { if (!cancelled) setConvergenceError(loadErrorMessage(err)); }
-            ),
-            fetchSkillVersionSelfConsistency(s.id, id).then(
-              (report) => { if (!cancelled) setConsistency(report); },
-              (err: unknown) => { if (!cancelled) setConsistencyError(loadErrorMessage(err)); }
-            ),
-            fetchJudgeCard(s.id, id).then(
-              (cardData) => { if (!cancelled) setJudgeCard(cardData); },
-              (err: unknown) => { if (!cancelled) setJudgeCardError(loadErrorMessage(err)); }
-            )
-          ]);
-        }
       } catch (err) {
-        if (!cancelled) setError(loadErrorMessage(err));
+        if (!cancelled) setError(loadFailure(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -332,14 +289,44 @@ export function SkillVersionDetailScreen() {
 
   const v = versions.find((vv) => vv.id === id) ?? null;
   const isCurrent = v && skill ? v.id === skill.currentVersion.id : false;
+
+  // Each evidence read fails on its own: the version stays readable, a failed
+  // section says so where its data would be, and its Retry reads only that
+  // section again. fetchSkillVersionRegression maps "no recorded run" to null.
+  const evidence = !loading && !error && skill && v ? { skillId: skill.id, versionId: v.id } : null;
+  const evidenceKey = evidence ? `${evidence.skillId}:${evidence.versionId}` : null;
+  const regression = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchSkillVersionRegression(evidence.skillId, evidence.versionId))
+  );
+  const convergence = useSectionRead(
+    evidenceKey,
+    evidence && (async () => (await fetchSkillVersionConvergence(evidence.skillId, evidence.versionId)).audit)
+  );
+  const consistency = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchSkillVersionSelfConsistency(evidence.skillId, evidence.versionId))
+  );
+  // the AUTHORITATIVE Judge Card, fetched from /card (κ + basis + audit)
+  // — distinct from the client-side signal assembly on this screen.
+  const judgeCard = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchJudgeCard(evidence.skillId, evidence.versionId))
+  );
+  // The recorded run, null when this version has none, and undefined when the
+  // read failed.
+  const regressionRun = regression.status === "loaded" ? regression.data : undefined;
+  const convergenceAudit = convergence.status === "loaded" ? convergence.data : null;
+
   const backToVersions = (
     <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
       <ArrowLeft /> Back to versions
     </Button>
   );
 
-  // Wait for every read: a section still loading must not render as empty.
-  if (loading) {
+  // Wait for every first read: a section still loading must not render as
+  // empty. A section's retry keeps the page in place.
+  if (loading || [regression, convergence, consistency, judgeCard].some((read) => read.status === "loading")) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Judge card" title="Loading version" />
@@ -352,8 +339,8 @@ export function SkillVersionDetailScreen() {
       <PageLoadError
         eyebrow="Judge card"
         title="Couldn't load this version"
-        message={error}
-        onRetry={reload}
+        failure={error}
+        onRetry={() => setReloadKey((key) => key + 1)}
         back={backToVersions}
       />
     );
@@ -402,16 +389,22 @@ export function SkillVersionDetailScreen() {
           <div className="flex items-center gap-2">
             <StatusChip status={v.status} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-            <GateChip state={gateStateForVersion(v, regression)} title={v.knownLimitations.join(" · ")} />
+            <GateChip state={gateStateForVersion(v, regressionRun)} title={v.knownLimitations.join(" · ")} />
             {isCurrent ? <Chip>current</Chip> : null}
           </div>
         }
       />
 
-      {judgeCardError ? (
-        <SectionLoadError className="mb-6" title="Couldn't load the Judge Card." message={judgeCardError} onRetry={reload} />
-      ) : judgeCard && skill ? (
-        <JudgeCardPanel card={judgeCard} skillId={skill.id} versionId={v.id} />
+      {judgeCard.status === "failed" ? (
+        <SectionLoadError
+          className="mb-6"
+          title="Couldn't load the Judge Card."
+          failure={judgeCard.failure}
+          retrying={judgeCard.retrying}
+          onRetry={judgeCard.retry}
+        />
+      ) : judgeCard.status === "loaded" && skill ? (
+        <JudgeCardPanel card={judgeCard.data} skillId={skill.id} versionId={v.id} />
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_1fr]">
@@ -529,35 +522,45 @@ export function SkillVersionDetailScreen() {
       </div>
 
       <div className="mt-6">
-        {regressionError ? (
-          <SectionLoadError title="Couldn't load the regression run." message={regressionError} onRetry={reload} />
-        ) : regression && regression.cases.length > 0 ? (
-          <RegressionDiffTable
-            cases={regression.cases}
-            title="Regression at version creation"
-            description={`The immutable reference revision pinned when this version was created was re-judged${regression.datasetRevisionId ? ` (${regression.datasetRevisionId})` : ""}. Click a row to open the trace.`}
+        {regression.status === "failed" ? (
+          <SectionLoadError
+            title="Couldn't load the regression run."
+            failure={regression.failure}
+            retrying={regression.retrying}
+            onRetry={regression.retry}
           />
-        ) : regression && regression.compared > 0 ? (
+        ) : regressionRun && regressionRun.cases.length > 0 ? (
+          <RegressionDiffTable
+            cases={regressionRun.cases}
+            title="Regression at version creation"
+            description={`The immutable reference revision pinned when this version was created was re-judged${regressionRun.datasetRevisionId ? ` (${regressionRun.datasetRevisionId})` : ""}. Click a row to open the trace.`}
+          />
+        ) : regressionRun && regressionRun.compared > 0 ? (
           <MarginNote tone="neutral" who="Regression">
-            {regression.compared} case{regression.compared === 1 ? "" : "s"} were re-judged when this
+            {regressionRun.compared} case{regressionRun.compared === 1 ? "" : "s"} were re-judged when this
             version was created, but this run didn't capture a per-case breakdown (older run format).
           </MarginNote>
         ) : null}
       </div>
 
-      {convergenceError ? (
+      {convergence.status === "failed" ? (
         <div className="mt-6">
-          <SectionLoadError title="Couldn't load the convergence audit." message={convergenceError} onRetry={reload} />
+          <SectionLoadError
+            title="Couldn't load the convergence audit."
+            failure={convergence.failure}
+            retrying={convergence.retrying}
+            onRetry={convergence.retry}
+          />
         </div>
-      ) : convergence ? (
+      ) : convergenceAudit ? (
         <div className="mt-6">
           <ConvergenceCard
-            audit={convergence}
+            audit={convergenceAudit}
             versionLabel={`v${v.version}`}
             beforeVersionLabel={
-              convergence.beforeVersionId
+              convergenceAudit.beforeVersionId
                 ? (() => {
-                    const before = versions.find((vv) => vv.id === convergence.beforeVersionId);
+                    const before = versions.find((vv) => vv.id === convergenceAudit.beforeVersionId);
                     return before ? `v${before.version}` : null;
                   })()
                 : null
@@ -567,7 +570,16 @@ export function SkillVersionDetailScreen() {
       ) : null}
 
       <div className="mt-6">
-        <SelfConsistencyCard report={consistency} error={consistencyError} onRetry={reload} />
+        {consistency.status === "failed" ? (
+          <SelfConsistencyCard
+            report={null}
+            failure={consistency.failure}
+            retrying={consistency.retrying}
+            onRetry={consistency.retry}
+          />
+        ) : (
+          <SelfConsistencyCard report={consistency.status === "loaded" ? consistency.data : null} />
+        )}
       </div>
     </div>
   );
@@ -711,12 +723,14 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
 
 function SelfConsistencyCard({
   report,
-  error,
+  failure,
+  retrying = false,
   onRetry
 }: {
   report: SelfConsistencyReport | null;
-  error: string | null;
-  onRetry: () => void;
+  failure?: LoadFailure;
+  retrying?: boolean;
+  onRetry?: () => void;
 }) {
   return (
     <Card>
@@ -730,8 +744,14 @@ function SelfConsistencyCard({
             </span>
           ) : null}
         </div>
-        {error ? (
-          <SectionLoadError className="mt-2" title="Couldn't load self-consistency." message={error} onRetry={onRetry} />
+        {failure && onRetry ? (
+          <SectionLoadError
+            className="mt-2"
+            title="Couldn't load self-consistency."
+            failure={failure}
+            retrying={retrying}
+            onRetry={onRetry}
+          />
         ) : !report || report.comparedCases === 0 ? (
           <div className="text-[12.5px] leading-[1.55] text-ink-3">
             No repeat runs under this version yet. Re-judge a case with <code>force: true</code> on{" "}

@@ -1,21 +1,22 @@
 import * as React from "react";
 import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { LoadFailure } from "@/lib/load-error";
 import { cn } from "@/lib/utils";
 import { EmptyShell } from "./empty-shell";
 
-// A page whose data could not load. It says what failed and offers Retry; it
-// never reads as empty or not found.
+// A page whose data could not load. It says what failed and offers Retry when
+// retrying can work; it never reads as empty or not found.
 export function PageLoadError({
   eyebrow,
   title,
-  message,
+  failure,
   onRetry,
   back
 }: {
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
-  message: React.ReactNode;
+  failure: LoadFailure;
   onRetry: () => void;
   back?: React.ReactNode;
 }) {
@@ -23,11 +24,13 @@ export function PageLoadError({
     <EmptyShell
       eyebrow={eyebrow}
       title={title}
-      body={<span className="break-words">{message}</span>}
+      body={<span className="break-words">{failure.message}</span>}
       primary={
-        <Button variant="primary" onClick={onRetry}>
-          <RefreshCcw /> Retry
-        </Button>
+        failure.retryable ? (
+          <Button variant="primary" onClick={onRetry}>
+            <RefreshCcw /> Retry
+          </Button>
+        ) : null
       }
       secondary={back}
     />
@@ -35,16 +38,19 @@ export function PageLoadError({
 }
 
 // One section of a page whose data could not load. The rest of the page keeps
-// working, and the failure is shown where the data would have been.
+// working, the failure is shown where the data would have been, and it stays
+// in place while a retry is in flight.
 export function SectionLoadError({
   title,
-  message,
+  failure,
   onRetry,
+  retrying = false,
   className
 }: {
   title: React.ReactNode;
-  message: React.ReactNode;
+  failure: LoadFailure;
   onRetry: () => void;
+  retrying?: boolean;
   className?: string;
 }) {
   return (
@@ -56,11 +62,13 @@ export function SectionLoadError({
     >
       <div className="min-w-0 flex-1">
         <span className="font-medium text-signal">{title}</span>
-        <span className="ml-2 break-words text-ink-3">{message}</span>
+        <span className="ml-2 break-words text-ink-3">{failure.message}</span>
       </div>
-      <Button variant="ghost" size="sm" onClick={onRetry}>
-        <RefreshCcw /> Retry
-      </Button>
+      {failure.retryable ? (
+        <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
+          <RefreshCcw /> {retrying ? "Retrying…" : "Retry"}
+        </Button>
+      ) : null}
     </div>
   );
 }

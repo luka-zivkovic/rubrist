@@ -81,11 +81,21 @@ describe("evaluator-version regression state", () => {
     expect(GATE_LABEL.unavailable).not.toBe(GATE_LABEL.unrecorded);
   });
 
-  it("lets the version's own lifecycle status win over the run", () => {
+  it("lets a failed or regressing version's status win over the run", () => {
     expect(gateStateForVersion(version({ status: "failed" }), run())).toBe("error");
     expect(gateStateForVersion(version({ status: "regressing" }), run())).toBe("blocked");
-    expect(gateStateForVersion(version({ status: "calibrating" }), undefined)).toBe("running");
-    expect(gateStateForVersion(version({ status: "calibrating" }), null)).toBe("running");
+  });
+
+  it("reads a calibrating version as running only until its run is recorded", () => {
+    // A governed candidate reads as calibrating for its whole candidate life,
+    // including after its regression run is recorded.
+    const candidate = version({ status: "calibrating", approvedAt: null });
+
+    expect(gateStateForVersion(candidate, null)).toBe("running");
+    expect(gateStateForVersion(candidate, run())).toBe("clean");
+    expect(gateStateForVersion(candidate, run({ status: "blocked", regressed: 1 }))).toBe("blocked");
+    expect(gateStateForVersion(candidate, run({ status: "error", error: "judge timed out" }))).toBe("error");
+    expect(gateStateForVersion(candidate, undefined)).toBe("unavailable");
   });
 
   it("reports what the recorded run says", () => {
@@ -128,10 +138,12 @@ describe("GateChip", () => {
   });
 
   it("falls back to unavailable, never clean, for an unknown state", () => {
-    const html = renderToStaticMarkup(createElement(GateChip, { state: "retired" as GateState }));
+    for (const state of ["retired", "constructor", "toString"]) {
+      const html = renderToStaticMarkup(createElement(GateChip, { state: state as GateState }));
 
-    expect(html).toContain("regression · unavailable");
-    expect(html).not.toContain("clean");
-    expect(html).not.toContain('data-variant="pass"');
+      expect(html).toContain("regression · unavailable");
+      expect(html).not.toContain("clean");
+      expect(html).not.toContain('data-variant="pass"');
+    }
   });
 });

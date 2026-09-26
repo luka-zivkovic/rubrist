@@ -1,17 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { RegressionRunResult, SkillVersion } from "@rubrist/shared";
+import { ApiError } from "../src/lib/api/transport.js";
 import {
+  chainRecordedNote,
   chainStepRun,
   chainTotals,
   chainTotalsGap,
   loadChainStep,
+  runCompared,
   type ChainStep
 } from "../src/lib/compare-chain.js";
 
 // Only the id matters to the chain; the rest of the version is carried through.
 const version = (id: string) => ({ id, version: id.replace("skillv_", "") }) as SkillVersion;
 
-function run(skillVersionId: string, regressed: number, improved: number): RegressionRunResult {
+function run(
+  skillVersionId: string,
+  regressed: number,
+  improved: number,
+  overrides: Partial<RegressionRunResult> = {}
+): RegressionRunResult {
   return {
     id: `run_${skillVersionId}`,
     skillVersionId,
@@ -23,17 +31,26 @@ function run(skillVersionId: string, regressed: number, improved: number): Regre
     flipped: regressed + improved,
     goldenSetMissing: false,
     cases: [],
-    createdAt: "2026-09-01T00:00:00.000Z"
+    createdAt: "2026-09-01T00:00:00.000Z",
+    ...overrides
   };
 }
 
-const recorded = (id: string, regressed: number, improved: number): ChainStep => ({
+const recorded = (id: string, regressed: number, improved: number, overrides: Partial<RegressionRunResult> = {}): ChainStep => ({
   version: version(id),
   status: "recorded",
-  run: run(id, regressed, improved)
+  run: run(id, regressed, improved, overrides)
 });
+// How the API stores a check that failed, and one with no reference cases.
+const checkFailed = (id: string) => recorded(id, 0, 0, { status: "error", compared: 0, flipped: 0, error: "judge timed out" });
+const noBaseline = (id: string) => recorded(id, 0, 0, { goldenSetMissing: true, compared: 0 });
 const unrecorded = (id: string): ChainStep => ({ version: version(id), status: "unrecorded" });
-const failed = (id: string): ChainStep => ({ version: version(id), status: "failed", error: "Regression run request failed" });
+const failed = (id: string): ChainStep => ({
+  version: version(id),
+  status: "failed",
+  error: "Regression run request failed",
+  retryable: true
+});
 
 describe("run comparison chain", () => {
   it("keeps a failed read distinct from a save with no recorded run", async () => {
@@ -42,8 +59,11 @@ describe("run comparison chain", () => {
     await expect(loadChainStep(v, async () => run("skillv_3", 1, 0))).resolves.toMatchObject({ status: "recorded" });
     await expect(loadChainStep(v, async () => null)).resolves.toEqual({ version: v, status: "unrecorded" });
     await expect(loadChainStep(v, async () => {
-      throw new Error("Regression run request failed (503)");
-    })).resolves.toEqual({ version: v, status: "failed", error: "Regression run request failed (503)" });
+      throw new ApiError("Regression run request failed: 503", 503);
+    })).resolves.toEqual({ version: v, status: "failed", error: "Regression run request failed: 503", retryable: true });
+    await expect(loadChainStep(v, async () => {
+      throw new ApiError("Skill version not found", 404);
+    })).resolves.toEqual({ version: v, status: "failed", error: "Skill version not found", retryable: false });
   });
 
   it("hands the regression state the run, null for none, and undefined for unreadable", () => {
@@ -57,8 +77,33 @@ describe("run comparison chain", () => {
   it("sums the path only when every save on it has a recorded run", () => {
     const totals = chainTotals([recorded("skillv_3", 1, 0), recorded("skillv_2", 2, 3)]);
 
-    expect(totals).toEqual({ saves: 2, recorded: 2, unrecorded: 0, failed: 0, regressed: 3, improved: 3 });
+    expect(totals).toEqual({
+      saves: 2,
+      recorded: 2,
+      unrecorded: 0,
+      failed: 0,
+      checkFailed: 0,
+      notCompared: 0,
+      regressed: 3,
+      improved: 3
+    });
     expect(chainTotalsGap(totals)).toBeNull();
+    expect(chainRecordedNote(totals)).toBe("2 with a recorded run");
+  });
+
+  it("never sums the zeros a failed or empty check recorded", () => {
+    expect(runCompared(run("skillv_3", 0, 0, { status: "error", compared: 0 }))).toBe(false);
+    expect(runCompared(run("skillv_3", 0, 0, { goldenSetMissing: true, compared: 0 }))).toBe(false);
+    expect(runCompared(run("skillv_3", 0, 0, { compared: 0 }))).toBe(false);
+    expect(runCompared(run("skillv_3", 0, 0))).toBe(true);
+
+    const failedCheck = chainTotals([recorded("skillv_3", 1, 0), checkFailed("skillv_2")]);
+    expect(failedCheck).toMatchObject({ recorded: 2, checkFailed: 1, notCompared: 0, regressed: null, improved: null });
+    expect(chainTotalsGap(failedCheck)).toBe("1 save's regression check failed");
+
+    const empty = chainTotals([noBaseline("skillv_3"), noBaseline("skillv_2")]);
+    expect(empty).toMatchObject({ recorded: 2, checkFailed: 0, notCompared: 2, regressed: null, improved: null });
+    expect(chainTotalsGap(empty)).toBe("2 saves had no reference cases to compare");
   });
 
   it("reports an unknown total, never zero, when a save has no recorded run", () => {
@@ -76,10 +121,12 @@ describe("run comparison chain", () => {
 
     expect(totals).toMatchObject({ saves: 3, recorded: 1, unrecorded: 1, failed: 1, regressed: null, improved: null });
     expect(chainTotalsGap(totals)).toBe("1 save's run couldn't be loaded");
+    // The unreadable save is not counted as one without a run.
+    expect(chainRecordedNote(totals)).toBe("1 with a recorded run · 1 couldn't be loaded");
     expect(chainTotalsGap(chainTotals([failed("skillv_3"), failed("skillv_2")]))).toBe("2 saves' runs couldn't be loaded");
   });
 
   it("has no total for an empty path", () => {
-    expect(chainTotals([])).toEqual({ saves: 0, recorded: 0, unrecorded: 0, failed: 0, regressed: null, improved: null });
+    expect(chainTotals([])).toMatchObject({ saves: 0, recorded: 0, regressed: null, improved: null });
   });
 });

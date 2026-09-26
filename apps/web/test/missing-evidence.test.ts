@@ -1,104 +1,137 @@
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { RegressionRunResultSchema } from "@rubrist/shared";
+import { RegressionRunResultSchema, type Skill, type SkillVersion } from "@rubrist/shared";
+import { ApiError } from "../src/lib/api/transport.js";
+import { loadFailure } from "../src/lib/load-error.js";
 import { PageLoadError, SectionLoadError } from "../src/components/rubrist/load-error.js";
-import { loadErrorMessage } from "../src/lib/load-error.js";
-import { readFeatureSource, readWebSource } from "./support/web-extraction-contracts.js";
+import { readWebSource } from "./support/web-extraction-contracts.js";
+
+type Props = Record<string, unknown> & { children?: ReactNode };
+const box = (tag: string) => ({ children }: Props) => createElement(tag, null, children);
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, variant, size: _size, ...props }: { children?: unknown; variant?: string; size?: string }) =>
-    createElement("button", { ...props, "data-variant": variant }, children as never)
+  Button: ({ children, variant, size: _size, ...props }: Props) =>
+    createElement("button", { ...props, "data-variant": variant }, children)
 }));
+vi.mock("@/components/ui/card", () => ({
+  Card: box("div"),
+  CardContent: box("div"),
+  CardHeader: box("div"),
+  CardTitle: box("h2"),
+  CardDescription: box("p")
+}));
+vi.mock("@/components/rubrist", () => ({
+  Chip: box("span"),
+  Eyebrow: box("div"),
+  KPI: box("div"),
+  KPIRow: box("div"),
+  MarginNote: box("aside"),
+  RegressionDiffTable: box("section"),
+  SectionHead: ({ title }: Props) => createElement("h1", null, title as ReactNode)
+}));
+vi.mock("@/components/skill-edit-flow", () => ({ SkillEditFlow: () => createElement("section") }));
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ")
 }));
 
+// Imported after the mocks above: they use `box`, which static imports would
+// run ahead of.
+const { RegressionRunning } = await import("../src/screens/skill-edit/regression.js");
+
 // PRODUCT.md principle 2: missing or failed evaluation is never converted into
 // a favorable result. On these pages that also means a failed read never
-// reads as empty, zero, not found, or clean.
+// reads as empty, zero, not found, or clean. missing-evidence-screens.test.ts
+// covers the same rule on the rendered screens.
 describe("missing evidence never reads as a result", () => {
-  it("names a response the page couldn't parse instead of printing the validation dump", () => {
+  it("names a failed read, and offers Retry only when retrying can work", () => {
     const parsed = RegressionRunResultSchema.safeParse({ status: "passed" });
     expect(parsed.success).toBe(false);
 
-    expect(loadErrorMessage(parsed.error)).toBe("Rubrist returned a response this page couldn't read.");
-    expect(loadErrorMessage(new Error("Skill request failed: 503"))).toBe("Skill request failed: 503");
-    expect(loadErrorMessage("offline")).toBe("offline");
+    expect(loadFailure(parsed.error)).toEqual({
+      message: "Rubrist returned a response this page couldn't read.",
+      retryable: false
+    });
+    expect(loadFailure(new ApiError("Skill request failed: 503", 503))).toEqual({ message: "Skill request failed: 503", retryable: true });
+    expect(loadFailure(new ApiError("Request timed out", 408)).retryable).toBe(true);
+    expect(loadFailure(new ApiError("Too many requests", 429)).retryable).toBe(true);
+    expect(loadFailure(new ApiError("No evaluator exists for this criterion", 404)).retryable).toBe(false);
+    expect(loadFailure(new ApiError("Forbidden", 403)).retryable).toBe(false);
+    expect(loadFailure(new TypeError("Failed to fetch"))).toEqual({ message: "Failed to fetch", retryable: true });
+    expect(loadFailure("offline")).toEqual({ message: "offline", retryable: true });
   });
 
-  it("offers Retry on a failed page and a failed section", () => {
-    const page = renderToStaticMarkup(createElement(PageLoadError, {
+  it("offers Retry on a failed page only when retrying can work", () => {
+    const back = createElement("button", null, "Back to versions");
+    const retryable = renderToStaticMarkup(createElement(PageLoadError, {
       eyebrow: "Judge card",
       title: "Couldn't load this version",
-      message: "Skill versions request failed: 500",
+      failure: { message: "Skill versions request failed: 500", retryable: true },
       onRetry: () => undefined,
-      back: createElement("button", null, "Back to versions")
+      back
     }));
-    const section = renderToStaticMarkup(createElement(SectionLoadError, {
+    const refused = renderToStaticMarkup(createElement(PageLoadError, {
+      title: "Couldn't load the skill",
+      failure: { message: "No evaluator exists for this criterion", retryable: false },
+      onRetry: () => undefined,
+      back
+    }));
+
+    expect(retryable).toContain("Couldn&#x27;t load this version");
+    expect(retryable).toContain("Skill versions request failed: 500");
+    expect(retryable).toContain("Retry");
+    expect(retryable).toContain("Back to versions");
+    expect(refused).toContain("No evaluator exists for this criterion");
+    expect(refused).not.toContain("Retry");
+    expect(refused).toContain("Back to versions");
+  });
+
+  it("keeps a failed section's error in place while its retry is in flight", () => {
+    const failure = { message: "Judge card request failed: 500", retryable: true };
+    const idle = renderToStaticMarkup(createElement(SectionLoadError, {
       title: "Couldn't load the Judge Card.",
-      message: "Judge card request failed: 500",
+      failure,
       onRetry: () => undefined
     }));
+    const retrying = renderToStaticMarkup(createElement(SectionLoadError, {
+      title: "Couldn't load the Judge Card.",
+      failure,
+      onRetry: () => undefined,
+      retrying: true
+    }));
 
-    expect(page).toContain("Couldn&#x27;t load this version");
-    expect(page).toContain("Skill versions request failed: 500");
-    expect(page).toContain("Retry");
-    expect(page).toContain("Back to versions");
-    expect(section).toContain("Couldn&#x27;t load the Judge Card.");
-    expect(section).toContain("Judge card request failed: 500");
-    expect(section).toContain("Retry");
+    expect(idle).toContain("Couldn&#x27;t load the Judge Card.");
+    expect(idle).toContain("Judge card request failed: 500");
+    expect(idle).toContain("Retry");
+    expect(retrying).toContain("Judge card request failed: 500");
+    expect(retrying).toContain("Retrying…");
+    expect(retrying).toMatch(/<button[^>]*disabled/);
   });
 
-  it("gives every evaluator page a retryable load error instead of a developer instruction", async () => {
-    const [skill, editor, versions, compare] = await Promise.all([
-      readWebSource("screens/skill.tsx"),
-      readFeatureSource("skill-edit"),
-      readWebSource("screens/skill-versions.tsx"),
-      readWebSource("screens/compare-versions.tsx")
-    ]);
+  it("says when the pinned revision's case count can't be read, instead of loading it forever", () => {
+    const version = { id: "skillv_2", version: "1.0.2", regressionDatasetRevisionId: "revision_1" } as SkillVersion;
+    const skill = { name: "Support answer quality" } as Skill;
+    const running = (referenceCount: number | null, referenceCountUnavailable: boolean) =>
+      renderToStaticMarkup(createElement(RegressionRunning, {
+        skill,
+        baseVersion: "1.0.1",
+        version,
+        firstRun: false,
+        criterionVersion: null,
+        referenceCount,
+        referenceCountUnavailable,
+        pollError: null,
+        onOpenHistory: () => undefined
+      }));
 
-    for (const source of [skill, editor, versions, compare]) {
-      expect(source).toContain("<PageLoadError");
-      expect(source).toContain("loadErrorMessage(err)");
-      expect(source).not.toContain("pnpm dev:api");
-    }
+    expect(running(null, false)).toContain("Loading exact count…");
+    expect(running(null, true)).toContain("Count unavailable");
+    expect(running(null, true)).not.toContain("Loading exact count…");
+    expect(running(7, false)).toContain("<dd>7</dd>");
   });
 
-  it("derives version regression state from the recorded run, not the version alone", async () => {
-    const versions = await readWebSource("screens/skill-versions.tsx");
-
-    expect(versions).toContain("gateStateForVersion(v, regressionRun ?? null)");
-    expect(versions).toContain("gateStateForVersion(v, regression)");
-    expect(versions).not.toMatch(/gateStateForVersion\(v\)/);
-  });
-
-  it("keeps a failed evidence read on the version page visible in its own section", async () => {
-    const versions = await readWebSource("screens/skill-versions.tsx");
-    const detail = versions.slice(versions.indexOf("export function SkillVersionDetailScreen"));
-
-    expect(detail).toContain('title="Couldn\'t load the Judge Card."');
-    expect(detail).toContain('title="Couldn\'t load the regression run."');
-    expect(detail).toContain('title="Couldn\'t load the convergence audit."');
-    expect(detail).toContain('title="Couldn\'t load self-consistency."');
-    expect(detail).not.toMatch(/catch \{\s*if \(!cancelled\) set(?:Convergence|Consistency|JudgeCard)\(null\)/);
-    // "Version not found" is for a version that isn't there, never for a failed read.
-    expect(detail).not.toContain("{error ?? \"This version may have been archived or removed.\"}");
-  });
-
-  it("keeps compare totals unknown until every recorded run on the path has loaded", async () => {
-    const compare = await readWebSource("screens/compare-versions.tsx");
-
-    expect(compare).toContain("loadChainStep(version, () => fetchSkillVersionRegression(skillId, version.id))");
-    expect(compare).not.toContain(".catch(() => null)");
-    expect(compare).toContain('num={totals?.regressed ?? "—"}');
-    expect(compare).toContain('num={totals?.improved ?? "—"}');
-    expect(compare).toContain("Couldn't load this save's run");
-    // The empty list while versions load is not "nothing to compare".
-    expect(compare.indexOf("if (listLoading)")).toBeGreaterThan(-1);
-    expect(compare.indexOf("if (listLoading)")).toBeLessThan(compare.indexOf('title="Nothing to compare yet"'));
-  });
-
+  // The root layout needs the whole app's providers to render, so the top bar
+  // is checked in source.
   it("shows unknown top-bar counts as unknown, never zero", async () => {
     const layout = await readWebSource("components/layout/root-layout.tsx");
 
@@ -107,12 +140,5 @@ describe("missing evidence never reads as a result", () => {
     expect(layout).toContain('importedTotal === null ? "—"');
     expect(layout).toContain('exceptionsCount ?? "—"');
     expect(layout).not.toContain("traces this week");
-  });
-
-  it("says when the pinned revision's case count can't be read", async () => {
-    const editor = await readFeatureSource("skill-edit");
-
-    expect(editor).toContain('"Count unavailable"');
-    expect(editor).toContain("referenceCountUnavailable={pinnedReferenceCountUnavailable}");
   });
 });

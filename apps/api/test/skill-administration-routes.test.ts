@@ -273,6 +273,20 @@ describe("skill administration routes", () => {
     await expect(exact.json()).resolves.toMatchObject({ regressionRun: { skillVersionId: versionId } });
   });
 
+  it("tells a version without a recorded run apart from a version it can't find", async () => {
+    // The web client reads only the first 404 as "no run recorded"; any other
+    // 404 stays a failed read.
+    const localApp = createApp(new DemoRepository());
+
+    const unrecorded = await localApp.request("/api/skills/skill_support_quality/versions/skillv_1_2_0/regression");
+    expect(unrecorded.status).toBe(404);
+    await expect(unrecorded.json()).resolves.toEqual({ error: "No regression run recorded for this version" });
+
+    const missing = await localApp.request("/api/skills/skill_support_quality/versions/skillv_missing/regression");
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toEqual({ error: "Skill version not found" });
+  });
+
   it("PR #60: rejects invalid limit (over max)", async () => {
     const repository = new DemoRepository();
     const localApp = createApp(repository);

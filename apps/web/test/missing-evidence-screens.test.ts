@@ -1,0 +1,413 @@
+import { JSDOM } from "jsdom";
+import { act, createElement, type ReactNode } from "react";
+import type { Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RegressionRunResult, SelfConsistencyReport, Skill, SkillVersion } from "@rubrist/shared";
+
+// PRODUCT.md principle 2 on the evaluator pages: a failed read never reads as
+// empty, zero, not found, or clean. The screens import app aliases (`@/...`)
+// that only the node transform lets these mocks replace, so this test runs in
+// node with a jsdom window installed as globals before React DOM loads.
+const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Event", "Node", "localStorage"] as const) {
+  vi.stubGlobal(name, (dom.window as unknown as Record<string, unknown>)[name]);
+}
+const { createRoot } = await import("react-dom/client");
+const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+
+const api = vi.hoisted(() => ({
+  fetchCurrentSkill: vi.fn(),
+  fetchLatestSkill: vi.fn(),
+  fetchSkillVersions: vi.fn(),
+  fetchSkillVersionHistory: vi.fn(),
+  fetchSkillVersionRegression: vi.fn(),
+  fetchSkillVersionConvergence: vi.fn(),
+  fetchSkillVersionSelfConsistency: vi.fn(),
+  fetchJudgeCard: vi.fn(),
+  fetchJudgeCardMarkdown: vi.fn(),
+  fetchSkillFormat: vi.fn(),
+  fetchJudgeProviders: vi.fn(),
+  fetchJudgeModels: vi.fn(),
+  fetchDatasetRevisionMetadata: vi.fn(),
+  fetchOnboardingEvidenceInventory: vi.fn(),
+  fetchSkillVersionCriterion: vi.fn(),
+  createSkillVersion: vi.fn(),
+  createOnboardingCheck: vi.fn()
+}));
+const criterion = vi.hoisted(() => ({
+  selectedCriterionId: "criterion_1" as string | null,
+  selectedChoice: null,
+  loading: false,
+  href: (pathname: string) => pathname
+}));
+
+type Props = Record<string, unknown> & { children?: ReactNode };
+const box = (tag: string) => ({ children }: Props) => createElement(tag, null, children);
+
+vi.mock("@/lib/api", () => api);
+vi.mock("@/lib/criterion-context", () => ({ useCriterion: () => criterion }));
+vi.mock("@/lib/dashboard-context", () => ({ useDashboard: () => ({ dashboard: null, refresh: () => undefined }) }));
+vi.mock("@/lib/utils", () => ({
+  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ")
+}));
+vi.mock("@/components/ui/button", () => ({
+  Button: ({ children, variant: _variant, size: _size, ...props }: Props) =>
+    createElement("button", { type: "button", ...props }, children)
+}));
+vi.mock("@/components/ui/badge", () => ({
+  Badge: ({ children, variant }: Props) => createElement("span", { "data-variant": variant }, children)
+}));
+vi.mock("@/components/ui/card", () => ({
+  Card: box("div"),
+  CardContent: box("div"),
+  CardHeader: box("div"),
+  CardTitle: box("h2"),
+  CardDescription: box("p")
+}));
+vi.mock("@/components/ui/table", () => ({ Table: box("table") }));
+vi.mock("@/components/row-action", () => ({
+  RowLink: ({ children, to }: Props) => createElement("a", { href: to }, children)
+}));
+vi.mock("@/components/markdown-preview", () => ({
+  MarkdownPreview: ({ markdown }: Props) => createElement("div", null, markdown as string)
+}));
+vi.mock("@/components/rubrist", async () => {
+  const loadError = await import("../src/components/rubrist/load-error.js");
+  const gate = await import("../src/components/rubrist/gate.js");
+  return {
+    Chip: box("span"),
+    Eyebrow: box("div"),
+    KPIRow: box("div"),
+    MarginNote: box("aside"),
+    LabelChip: ({ label }: Props) => createElement("span", null, label as string),
+    Ref: ({ label }: Props) => createElement("span", null, label as string),
+    RegressionDiffTable: ({ title }: Props) => createElement("section", null, title as string),
+    ConvergenceCard: () => createElement("section", null, "Convergence audit"),
+    KPI: ({ label, num, unit, delta, foot }: Props) =>
+      createElement("div", { "data-kpi": label }, `${label}: ${num}${unit ?? ""} | ${delta ?? ""} | ${foot ?? ""}`),
+    SectionHead: ({ eyebrow, title, sub, right }: Props) =>
+      createElement("header", null, createElement("div", null, eyebrow as ReactNode), createElement("h1", null, title as ReactNode), sub as ReactNode, right as ReactNode),
+    GateChip: gate.GateChip,
+    gateStateForVersion: gate.gateStateForVersion,
+    PageLoadError: loadError.PageLoadError,
+    SectionLoadError: loadError.SectionLoadError
+  };
+});
+vi.mock("@/lib/load-error", async () => import("../src/lib/load-error.js"));
+vi.mock("@/lib/regression-gate", async () => import("../src/lib/regression-gate.js"));
+vi.mock("@/lib/compare-chain", async () => import("../src/lib/compare-chain.js"));
+vi.mock("@/hooks/use-section-read", async () => import("../src/hooks/use-section-read.js"));
+vi.mock("@/lib/skill-edit-flow", async () => import("../src/lib/skill-edit-flow.js"));
+vi.mock("@/lib/verdict-kind", async () => import("../src/lib/verdict-kind.js"));
+vi.mock("@/lib/criterion-scope", async () => import("../src/lib/criterion-scope.js"));
+vi.mock("@/lib/execution-binding-draft", async () => import("../src/lib/execution-binding-draft.js"));
+vi.mock("@/lib/judge-provider-selection", async () => import("../src/lib/judge-provider-selection.js"));
+vi.mock("@/lib/journey", async () => import("../src/lib/journey.js"));
+vi.mock("@/lib/onboarding-check", async () => import("../src/lib/onboarding-check.js"));
+vi.mock("@/lib/starter-skills", async () => import("../src/lib/starter-skills.js"));
+vi.mock("@/components/first-run-check-setup", () => ({ FirstRunCheckSetup: () => createElement("section") }));
+vi.mock("@/components/skill-edit-flow", () => ({ SkillEditFlow: () => createElement("section") }));
+vi.mock("../src/screens/skill-edit/editor.js", () => ({
+  SkillVersionEditor: () => createElement("section", null, "Evaluator editor")
+}));
+vi.mock("../src/screens/skill-edit/regression.js", () => ({
+  GovernedEvaluatorEditBoundary: () => createElement("section"),
+  RegressionResult: () => createElement("section"),
+  RegressionRunning: () => createElement("section")
+}));
+
+const { ApiError } = await import("../src/lib/api/transport.js");
+const { SkillVersionDetailScreen, SkillVersionsScreen } = await import("../src/screens/skill-versions.js");
+const { CompareVersionsScreen } = await import("../src/screens/compare-versions.js");
+const { SkillEditScreen } = await import("../src/screens/skill-edit.js");
+
+function version(id: string, number: string, overrides: Partial<SkillVersion> = {}): SkillVersion {
+  return {
+    id,
+    skillId: "skill_1",
+    criterionVersionId: "criterionv_1",
+    version: number,
+    status: "approved",
+    rubricMarkdown: `# Guide ${number}\n\nPass when grounded.`,
+    prompt: "Judge against {{rubric_markdown}}.",
+    typedQuestion: null,
+    decisionThreshold: null,
+    executionBinding: { provider: "mock", endpoint: { kind: "managed" }, modelId: "mock", modelVersion: "mock", sampling: { temperature: null, topP: null }, reasoning: null, outputTokenLimit: null, verdictProtocol: "mock/v1", routing: null },
+    customEndpointUrl: null,
+    outputSchema: { type: "object" },
+    goldenSetAgreement: 1,
+    tooStrictCount: 0,
+    tooLenientCount: 0,
+    ambiguousCount: 0,
+    knownLimitations: [],
+    verdictKind: "binary",
+    scalarRange: null,
+    categoricalChoiceScores: null,
+    rubricProvenance: "human-authored",
+    regressionDatasetRevisionId: "revision_1",
+    createdAt: `2026-09-0${number.split(".")[2] ?? "1"}T00:00:00.000Z`,
+    approvedAt: `2026-09-0${number.split(".")[2] ?? "1"}T00:01:00.000Z`,
+    ...overrides
+  };
+}
+
+function skillWith(current: SkillVersion): Skill {
+  return {
+    id: "skill_1",
+    projectId: "proj_1",
+    criterionId: "criterion_1",
+    name: "Support answer quality",
+    description: "Judges support answers.",
+    ownerName: "Owner",
+    status: "production",
+    isStarter: false,
+    currentVersion: current
+  };
+}
+
+function run(skillVersionId: string, overrides: Partial<RegressionRunResult> = {}): RegressionRunResult {
+  return {
+    id: `run_${skillVersionId}`,
+    skillVersionId,
+    datasetRevisionId: "revision_1",
+    status: "passed",
+    compared: 5,
+    regressed: 0,
+    improved: 0,
+    flipped: 0,
+    goldenSetMissing: false,
+    cases: [],
+    createdAt: "2026-09-01T00:00:30.000Z",
+    ...overrides
+  };
+}
+
+const emptyConsistency = (skillVersionId: string): SelfConsistencyReport => ({
+  skillVersionId,
+  comparedCases: 0,
+  consistentCases: 0,
+  meanAgreement: null,
+  cases: []
+});
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  for (const mock of Object.values(api)) mock.mockReset();
+  criterion.selectedCriterionId = "criterion_1";
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+async function render(path: string, routePath: string, screen: () => ReactNode) {
+  await act(async () => {
+    root.render(createElement(MemoryRouter, { initialEntries: [path] },
+      createElement(Routes, null, createElement(Route, { path: routePath, element: screen() }))));
+  });
+  await settle();
+}
+
+async function settle() {
+  for (let tick = 0; tick < 8; tick += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+}
+
+const text = () => container.textContent ?? "";
+const buttons = (label: string) => [...container.querySelectorAll("button")].filter((button) => button.textContent?.includes(label));
+
+describe("version page", () => {
+  const current = version("skillv_2", "1.0.2");
+
+  function readsSucceed() {
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(current));
+    api.fetchSkillVersions.mockResolvedValue([current, version("skillv_1", "1.0.1")]);
+    api.fetchSkillVersionRegression.mockResolvedValue(null);
+    api.fetchSkillVersionConvergence.mockResolvedValue({ audit: null });
+    api.fetchSkillVersionSelfConsistency.mockResolvedValue(emptyConsistency(current.id));
+    api.fetchJudgeCard.mockRejectedValue(new ApiError("Judge Card not available", 404));
+  }
+
+  it("keeps the version readable when one evidence read fails, and retries only that section", async () => {
+    readsSucceed();
+    api.fetchSkillVersionSelfConsistency
+      .mockRejectedValueOnce(new ApiError("Self-consistency request failed: 503", 503))
+      .mockResolvedValue(emptyConsistency(current.id));
+
+    await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
+
+    expect(text()).toContain("Guide 1.0.2");
+    expect(text()).toContain("regression · not recorded");
+    expect(text()).toContain("Couldn't load self-consistency.");
+    expect(text()).toContain("Self-consistency request failed: 503");
+    // A refused read offers no Retry: retrying fails the same way.
+    expect(text()).toContain("Couldn't load the Judge Card.");
+    expect(buttons("Retry")).toHaveLength(1);
+    expect(text()).not.toContain("Version not found");
+
+    await act(async () => buttons("Retry")[0]!.click());
+    expect(text()).not.toContain("Loading version");
+    await settle();
+
+    expect(text()).toContain("No repeat runs under this version yet.");
+    expect(text()).not.toContain("Couldn't load self-consistency.");
+    expect(text()).toContain("Guide 1.0.2");
+    expect(api.fetchCurrentSkill).toHaveBeenCalledTimes(1);
+    expect(api.fetchSkillVersionSelfConsistency).toHaveBeenCalledTimes(2);
+    expect(api.fetchSkillVersionRegression).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a run that couldn't be loaded as unavailable, never as not recorded or clean", async () => {
+    readsSucceed();
+    api.fetchSkillVersionRegression.mockRejectedValue(new ApiError("Regression run request failed: 500", 500));
+
+    await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
+
+    expect(text()).toContain("regression · unavailable");
+    expect(text()).toContain("Couldn't load the regression run.");
+    expect(text()).not.toContain("regression · not recorded");
+    expect(text()).not.toContain("regression · clean");
+  });
+
+  it("shows a failed page read as an error with Retry, and a missing version as not found", async () => {
+    readsSucceed();
+    api.fetchSkillVersions.mockRejectedValueOnce(new ApiError("Skill versions request failed: 500", 500));
+
+    await render("/skill/versions/skillv_9", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
+
+    expect(text()).toContain("Couldn't load this version");
+    expect(text()).toContain("Skill versions request failed: 500");
+    expect(text()).not.toContain("Version not found");
+
+    await act(async () => buttons("Retry")[0]!.click());
+    await settle();
+
+    expect(text()).toContain("Version not found");
+    expect(text()).not.toContain("Couldn't load this version");
+  });
+});
+
+describe("version history", () => {
+  it("reads a version without a recorded run as not recorded, and one with a passed run as clean", async () => {
+    const newest = version("skillv_2", "1.0.2");
+    const oldest = version("skillv_1", "1.0.1");
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(newest));
+    api.fetchSkillVersionHistory.mockResolvedValue({ versions: [newest, oldest], regressionRuns: [run(newest.id)] });
+
+    await render("/skill/versions", "/skill/versions", () => createElement(SkillVersionsScreen));
+
+    const rows = [...container.querySelectorAll("tbody tr")].map((row) => row.textContent ?? "");
+    expect(rows.find((row) => row.includes("v1.0.2"))).toContain("regression · clean");
+    expect(rows.find((row) => row.includes("v1.0.1"))).toContain("regression · not recorded");
+  });
+});
+
+describe("run comparison", () => {
+  const v1 = version("skillv_1", "1.0.1");
+  const v2 = version("skillv_2", "1.0.2");
+  const v3 = version("skillv_3", "1.0.3");
+  const v4 = version("skillv_4", "1.0.4");
+
+  function kpi(label: string) {
+    return container.querySelector(`[data-kpi="${label}"]`)?.textContent ?? "";
+  }
+
+  it("keeps totals unknown and says why when a check failed or a run couldn't be loaded", async () => {
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(v4));
+    api.fetchSkillVersions.mockResolvedValue([v4, v3, v2, v1]);
+    let v2Reads = 0;
+    api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) => {
+      if (versionId === v4.id) return run(v4.id, { status: "overridden", regressed: 1, improved: 2, overrideReason: "known flake" });
+      if (versionId === v3.id) return run(v3.id, { status: "error", compared: 0, error: "judge timed out" });
+      v2Reads += 1;
+      if (v2Reads === 1) throw new ApiError("Regression run request failed: 503", 503);
+      return run(v2.id);
+    });
+
+    await render("/skill/compare?from=skillv_1&to=skillv_4", "/skill/compare", () => createElement(CompareVersionsScreen));
+
+    expect(text()).toContain("3 saves between them · 2 with a recorded run · 1 couldn't be loaded");
+    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's run couldn't be loaded");
+    expect(kpi("Improvements")).toContain("Improvements: — |");
+    expect(text()).toContain("Regression check failed");
+    expect(text()).toContain("Couldn't load this save's run");
+    expect(text()).toContain("regression · unavailable");
+    expect(text()).not.toContain("0 reference cases compared");
+    // The failed check's stored zeros are not shown as counts.
+    const failedCheckRow = [...container.querySelectorAll("tbody tr")].find((row) => row.textContent?.includes("v1.0.3"));
+    const cells = [...(failedCheckRow?.querySelectorAll("td") ?? [])].map((cell) => cell.textContent);
+    expect(cells.slice(3, 5)).toEqual(["—", "—"]);
+
+    await act(async () => buttons("Retry")[0]!.click());
+    await settle();
+
+    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's regression check failed");
+    expect(text()).not.toContain("Couldn't load this save's run");
+    expect(buttons("Retry")).toHaveLength(0);
+  });
+
+  it("sums the path when every save's check compared reference cases", async () => {
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(v3));
+    api.fetchSkillVersions.mockResolvedValue([v3, v2, v1]);
+    api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) =>
+      versionId === v3.id ? run(v3.id, { status: "overridden", regressed: 1, overrideReason: "accepted" }) : run(v2.id, { improved: 2 }));
+
+    await render("/skill/compare?from=skillv_1&to=skillv_3", "/skill/compare", () => createElement(CompareVersionsScreen));
+
+    expect(kpi("Regressions across versions")).toContain("Regressions across versions: 1 | changes against recorded labels");
+    expect(kpi("Improvements")).toContain("Improvements: 2 | flips toward the label");
+    // Equal agreement is unchanged, not improved.
+    expect(kpi("Known-failure agreement")).toContain("100 → 100% | unchanged");
+  });
+
+  it("doesn't read the loading version list as nothing to compare", async () => {
+    let resolveVersions: (value: SkillVersion[]) => void = () => undefined;
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(v1));
+    api.fetchSkillVersions.mockReturnValue(new Promise<SkillVersion[]>((resolve) => {
+      resolveVersions = resolve;
+    }));
+
+    await render("/skill/compare", "/skill/compare", () => createElement(CompareVersionsScreen));
+
+    expect(text()).toContain("Loading versions");
+    expect(text()).not.toContain("Nothing to compare yet");
+
+    await act(async () => resolveVersions([v1]));
+    await settle();
+
+    expect(text()).toContain("Nothing to compare yet");
+  });
+});
+
+describe("evaluator editor", () => {
+  it("replaces the loading state with a load error when a criterion is selected", async () => {
+    api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("Skill request failed: 503", 503));
+    api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("No evaluator exists for this criterion", 404));
+    api.fetchJudgeProviders.mockResolvedValue({ providers: [] });
+
+    await render("/skill/edit?criterion=criterion_1", "/skill/edit", () => createElement(SkillEditScreen));
+
+    expect(text()).not.toContain("Loading skill");
+    expect(text()).toContain("Couldn't load the skill");
+    expect(text()).toContain("Skill request failed: 503");
+
+    await act(async () => buttons("Retry")[0]!.click());
+    await settle();
+
+    expect(api.fetchLatestSkill).toHaveBeenCalledTimes(2);
+    expect(text()).toContain("No evaluator exists for this criterion");
+    // Retrying a refused read fails the same way, so it isn't offered.
+    expect(buttons("Retry")).toHaveLength(0);
+    expect(text()).toContain("Back to skill");
+  });
+});

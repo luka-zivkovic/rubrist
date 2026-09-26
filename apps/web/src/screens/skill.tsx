@@ -7,7 +7,7 @@ import { Eyebrow, MarginNote, PageLoadError, SectionHead, Chip } from "@/compone
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { fetchCurrentSkill } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
-import { loadErrorMessage } from "@/lib/load-error";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
 import { useDashboard } from "@/lib/dashboard-context";
 import { skillEditConsequence, skillVersionStateLabel } from "../lib/skill-presentation.js";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ export function SkillScreen() {
   const { dashboard, refresh: refreshDashboard } = useDashboard();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
   const [tab, setTab] = useState<Tab>("rubric");
 
   const load = useCallback(async () => {
@@ -38,7 +38,7 @@ export function SkillScreen() {
     try {
       setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
     } catch (err) {
-      setError(loadErrorMessage(err));
+      setError(loadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ export function SkillScreen() {
       <PageLoadError
         eyebrow="The artifact"
         title="Couldn't load the skill"
-        message={error ?? "Rubrist returned no skill for this criterion."}
+        failure={error ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
       />
     );
