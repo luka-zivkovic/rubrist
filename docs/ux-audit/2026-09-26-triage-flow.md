@@ -1,18 +1,23 @@
 # UX audit 2: the triage flow (Exceptions queue, case page, review player)
 
 Status: **audit record, not product authority.** It records CURRENT
-observations and proposals for founder review. Its open questions were
-settled on 2026-09-26 by taking the recommended options; see
-[Decisions](#decisions). No item proposes an ADR.
+observations and proposals for founder review. Its open questions were settled
+on 2026-09-26 by taking the recommended options; see [Decisions](#decisions).
+Its vocabulary decisions led to
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md), which is
+Proposed.
 
-Last reviewed: 2026-09-26 · code at `2c82321`
+Last reviewed: 2026-09-26 · code and docs at `2c82321`. Every file:line
+citation, into code or docs, refers to that commit.
 
 Vocabulary: findings describe today's UI in the onboarding contract's words
-(Run, Check, Result), which were TARGET when this round was written.
-Proposals, the flow spec, blueprints, and decisions use the single vocabulary
-of [ADR-0015](../decisions/0015-one-vocabulary-one-display.md)
-(Proposed): case, evaluator, assessment, rubric, golden set, and review queue.
-That ADR also replaces the display modes with one display and a help layer.
+(Run, Check, Result), which remain TARGET until
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md) is accepted.
+Proposals, the flow spec, blueprints, and decisions are written in that
+Proposed ADR's single vocabulary: case, evaluator, assessment, rubric, golden
+set, and review queue. The ADR would also replace the display modes with one
+display and a help layer. Nothing that depends on it is implemented before it
+is accepted; [Decisions](#decisions) lists which items wait.
 
 This round covers the attention flow that the Overview hands off to:
 
@@ -103,7 +108,7 @@ Pause guard), and `Skeleton` (loading rows).
 | 6 | On phones the queue shows two columns. The Result and every row action sit behind a sideways scroll that nothing on a touch screen signals. (T5) | 2 | fix |
 | 7 | Several links break the scent: "Open rubric alongside" leaves the queue; "Draft rubric edit from these cases" passes no cases; "Compare and resolve" opens a page Guided display hides; the default Back goes to Traces. (T6) | 2 | fix |
 | 8 | In the queue's structure, active filter chips look like primaries, a pointer card sits above the list, and each row offers four interactions. (T7) | 2 | fix |
-| 9 | Buttons change pages without being links, so none of them opens in a new tab. There are 58 across the app, a dozen of them on this flow. (T10) | 2 | fix |
+| 9 | Controls change pages without being links, so none of them opens in a new tab. The app has 58 such click handlers, at least 41 of them on a Button, and a dozen on this flow. (T10) | 2 | fix |
 
 ---
 
@@ -463,8 +468,10 @@ Sev 2 · CURRENT · *fix* (extends S1–S3)
   the walk. The crumbs should read "Review queue / Review" and "Review queue /
   ‹case title›".
 - The case page shows raw ids in its top bar, beside Back, in Guided display
-  (`screens/trace.tsx:132-134`). ADR-0015 shows them to everyone: move them
-  into the case's metadata line, with a copy button.
+  (`screens/trace.tsx:132-134`), which Guided display promises to hide
+  (CURRENT). Move them into the case's metadata line, with a copy button, and
+  keep them out of Guided display until ADR-0015 (Proposed) is accepted; it
+  would show them to everyone.
 - The document title stays "Rubrist". Set it to "Case 3 of 7 · Review queue ·
   Rubrist".
 
@@ -642,18 +649,27 @@ opens the Decide page at that row; the filters open in a `Sheet` (*add*).
 | Filters | No matches: "No cases match these filters" with Clear filters | — | — | — |
 | Ruled this week | "No rulings in the last 7 days" | `Skeleton` line (*add*) | — | Inline retry |
 
-Today the queue's error state is titled "API unavailable". It shows the raw
-error, or the developer instruction "Start the API with `pnpm dev:api` and
-refresh.", and it has no Retry (`screens/exceptions.tsx:271-282`).
+The queue has its own error branch, titled "API unavailable", which shows the
+raw error or the developer instruction "Start the API with `pnpm dev:api` and
+refresh." with no Retry (`screens/exceptions.tsx:271-282`). It is unreachable
+today (CURRENT): a failed dashboard read clears the dashboard
+(`lib/dashboard-context.tsx:70-73`), and the shell handles it before the
+queue renders (`components/layout/root-layout.tsx:127-136,216-219`). A server
+or network failure shows the shell's "Connection lost" screen; any other
+failure, such as a 401 before the session refreshes, leaves the "Loading the
+selected criterion's evaluator and evidence…" box up. The List row's Error
+cell above therefore depends on S6's shell fix, which hands a failed read to
+the page.
 
 ## Decisions
 
 Decided 2026-09-26: the founder asked to take the recommended options. Later
 the same day, the founder chose one vocabulary and one display with a help
-layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed), so D2–D6 use
-that ADR's terms. These are design decisions for
-implementing this audit, not product authority. `PRODUCT.md`, the accepted
-ADRs, and the onboarding contract are unchanged.
+layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed),
+so D2–D6 use that ADR's terms. **Their wording and display changes wait for
+ADR-0015's acceptance**; the flow changes they describe do not depend on it.
+These are design decisions for implementing this audit, not product authority.
+`PRODUCT.md`, the accepted ADRs, and the onboarding contract are unchanged.
 
 1. **One decision surface (T3).** Every entry opens the player at the chosen
    row, within the current filtered list, with Prev and Next. `/cases/:id`

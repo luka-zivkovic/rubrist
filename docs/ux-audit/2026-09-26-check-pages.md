@@ -1,18 +1,23 @@
 # UX audit 3: the evaluator pages (evaluator, editor, versions, compare)
 
 Status: **audit record, not product authority.** It records CURRENT
-observations and proposals for founder review. Its open questions were
-settled on 2026-09-26 by taking the recommended options; see
-[Decisions](#decisions). No item proposes an ADR.
+observations and proposals for founder review. Its open questions were settled
+on 2026-09-26 by taking the recommended options; see [Decisions](#decisions).
+Its vocabulary decisions led to
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md), which is
+Proposed.
 
-Last reviewed: 2026-09-26 · code at `2c82321`
+Last reviewed: 2026-09-26 · code and docs at `2c82321`. Every file:line
+citation, into code or docs, refers to that commit.
 
-Vocabulary: findings quote today's UI words. Proposals, blueprints, and
-decisions use the single vocabulary of
-[ADR-0015](../decisions/0015-one-vocabulary-one-display.md)
-(Proposed): evaluator, rubric, case, assessment, golden set, review queue,
-and regression check. That ADR also replaces the display modes with one
-display and a help layer.
+Vocabulary: findings quote today's UI words, and the onboarding contract's
+words remain TARGET until
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md) is accepted.
+Proposals, blueprints, and decisions are written in that Proposed ADR's single
+vocabulary: evaluator, rubric, case, assessment, golden set, review queue, and
+regression check. The ADR would also replace the display modes with one
+display and a help layer. Nothing that depends on it is implemented before it
+is accepted; [Decisions](#decisions) lists which items wait.
 
 This round covers the pages behind the Review guide nav item:
 
@@ -77,9 +82,10 @@ marked *installed*, *add*, or *Rubrist*.
 
   Paths are relative to `apps/web/src` unless they start with `apps/`.
 - **TARGET intent.** Read in `PRODUCT.md`, `docs/beginner-onboarding-journey.md`
-  (BOJ), `docs/glossary.md`, and ADR-0010 and ADR-0014 (both Accepted). No
-  ADR is Proposed. BOJ is the first-run contract (BOJ:7-8), so applying it to
-  these pages is marked ASSUMPTION.
+  (BOJ), `docs/glossary.md`, and ADR-0010 and ADR-0014 (both Accepted). When
+  this round was written no ADR was Proposed; ADR-0015 came out of its
+  decisions. BOJ is the first-run contract (BOJ:7-8), so applying it to these
+  pages is marked ASSUMPTION.
 - **CURRENT intent.** `docs/architecture.md` (ARCH) for the regression gate.
 - **Rendering.** Demo stack at 1440×900 and 390×844 in Guided display, plus
   Technical display for the version page. The demo evaluator is "Support Answer
@@ -112,7 +118,7 @@ marked *installed*, *add*, or *Rubrist*.
 | 5 | On phones, the override button runs off the screen, and the version tables hide their evidence columns behind a sideways scroll. (C4) | 3 | medium | fix |
 | 6 | The version page is titled with the model name, opens with the Judge Card before what changed, says "current" twice, and offers no next step. (C5) | 3 | medium | fix (D1, D5) |
 | 7 | The editor is reached through seven different labels, and status words come from legacy version status. (C12) | 3 | large | fix (D6) |
-| 8 | Load failures read as "Version not found" or "Nothing to compare yet". Failed evidence reads vanish or show as empty, and error states tell users to start the API. (C7) | 2 | large | fix |
+| 8 | Load failures read as "Version not found", and Compare reads "Nothing to compare yet" while it loads. Failed evidence reads vanish or show as empty, and error states tell users to start the API. (C7) | 2 | large | fix |
 | 9 | Waits never end. The running check polls forever with no elapsed time, and a count can say "Loading…" indefinitely. (C6) | 2 | medium | fix |
 | 10 | The check's outcomes point away from the fix. A blocked result makes the override the filled button, and a failed check offers no Retry. (C8) | 2 | quick | fix (D2, D3) |
 | 11 | The editor buries the Review guide below four blocks. A chosen template looks like a primary, and save is enabled with nothing changed. (C9) | 2 | medium | fix (D4) |
@@ -376,21 +382,23 @@ Sev 3 · CURRENT · *fix* · medium · decided in D1 and D5 · extends round 1's
     row and in the card's "Binding" row (`:460-461`).
   - Known-failure agreement appears twice in two formats: "recorded ratio 0.86"
     (`:643-648`) and "86%" (`:432-435`).
-- **An empty state is a bare API instruction.** On v1.1.0, which has no
-  repeat runs, the self-consistency section tells users to call
-  `POST /api/v1/judge` with `force: true` (`:700-705`). It never says what
-  self-consistency measures. Guided and Technical display render the same
-  page (2,612 px tall at 1440 in both).
+- **An empty state leads with an API instruction.** On v1.1.0, which has no
+  repeat runs, the self-consistency section tells users to re-judge a case
+  with `force: true` on `POST /api/v1/judge` (`:700-705`). What it measures
+  comes last: "to probe whether the requested model repeats its own
+  verdicts". Guided and Technical display render the same page (2,612 px tall
+  at 1440 in both).
 - **No next step.** The page offers no "Compare with current" and no "Start a
   new version from this one". Its actions are "Back to versions", three
   exports ("Export as Markdown", "Copy", and "SkillFormat"), and the case
   links in the convergence card.
 
 CURRENT promise: Guided display "hides secondary diagnostics and technical
-details" (`lib/display-mode.ts:15`). This page hides none of them. ADR-0015
-(Proposed) drops that promise: everyone sees the same page, and its help
-layer explains the technical detail. The page's problems are its order, its
-title, and its missing next step, not the detail it shows.
+details" (`lib/display-mode.ts:15`). This page hides none of them, which
+breaks that promise for as long as it stands. If ADR-0015 (Proposed) is
+accepted, the promise goes: everyone sees the same page, and its help layer
+explains the technical detail. Either way, the page's order, its title, and
+its missing next step need fixing.
 
 Rule: `archetypes.md` › Detail (the primary action is the object's most
 common next step); `review.md` › Repeated facts; `labels.md` › Page titles
@@ -405,10 +413,10 @@ Proposal:
 - Add "Compare with current" as a link to `/skill/compare?from=…&to=…`.
 - For owners, add "Start a new version from v1.2.0", linking to
   `/skill/edit?from=<id>` (D5).
-- Keep the API instruction, which technical users can act on, and say what
-  it measures: "No case has been assessed twice under this version. To
-  measure self-consistency, re-assess a case with `force: true` on
-  `POST /api/v1/judge`."
+- Keep the API instruction, which technical users can act on, and say first
+  what it measures: "No case has been assessed twice under this version.
+  Self-consistency shows whether the model repeats its own assessments. To
+  measure it, re-assess a case with `force: true` on `POST /api/v1/judge`."
 
 ### C6. Waits never end
 
@@ -429,7 +437,10 @@ Sev 2 · CURRENT · *fix* · medium
   "Loading exact count…" after 10 s.
 - **Version history polls too.** It polls every 3 s while any version is
   "regression running" (`screens/skill-versions.tsx:81-103`). The chip shows
-  no elapsed time either.
+  no elapsed time either. A governed candidate reads as `calibrating` for its
+  whole candidate life
+  (`apps/api/src/repository.pg/skill-lifecycle-repository.ts:118-123`), so
+  one candidate keeps the poll running for as long as the page is open.
 
 Rule: `states.md` › Rules ("Every wait ends"); `decisions.md` › Errors and
 recovery ("A long wait says what it is waiting on").
@@ -479,7 +490,10 @@ Sev 2 · CURRENT · *fix* · large
 - **Loading states are a title alone**, with no skeleton: "Loading skill",
   "Loading versions", "Loading version".
 
-The queue's error state in round 2 has the same shape.
+Round 2's queue has an error branch of the same shape, but it is unreachable:
+the shell handles a failed dashboard read before the queue renders
+([round 2](2026-09-26-triage-flow.md), and S6 in
+[round 1](2026-09-26-shell-and-overview.md)).
 
 Rule: `states.md` › Three kinds of empty ("A failed load is none of these");
 `states.md` › Rules ("A value that has not loaded is not zero"; "Offer Retry
@@ -825,10 +839,12 @@ Evidence: Judge Card, κ, self-consistency, execution binding, output contract
 
 Decided 2026-09-26: the founder asked to take the recommended options. Later
 the same day, the founder chose one vocabulary and one display with a help
-layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed), so D1 and D6
-follow that ADR instead of the earlier Guided and Technical split. These are design decisions for implementing this audit, not
-product authority. `PRODUCT.md`, the accepted ADRs, and the onboarding
-contract are unchanged.
+layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed),
+so D1 and D6 follow that ADR instead of the earlier Guided and Technical
+split. **D1's single page and D6's labels wait for ADR-0015's acceptance**;
+until then Guided and Technical display stay as they are. These are design
+decisions for implementing this audit, not product authority. `PRODUCT.md`,
+the accepted ADRs, and the onboarding contract are unchanged.
 
 1. **Content of the version page (C5).** Everyone sees the same page: the
    header, what changed, the rubric, and the regression check, with "No
@@ -875,12 +891,19 @@ contract are unchanged.
    | `approved` by a starter sign-off, recorded as `skill_version.signoff` (`:253-275`) | Signed off |
    | `approved` with no recorded check, such as a version saved before the gate | No recorded regression check |
    | `validated`: no code path sets it | Legacy status (validated) |
-   | `calibrating` | Regression check running |
+   | `calibrating` with no recorded run: a check in flight | Regression check running |
+   | `calibrating` with a recorded run: a governed candidate, which the API reports as `calibrating` for its whole candidate life (`apps/api/src/repository.pg/skill-lifecycle-repository.ts:118-123`) | Candidate |
    | `regressing` | Blocked by a regression |
    | `failed` | Regression check incomplete |
    | `needs_review` | Needs review |
    | `draft` | Draft |
-   | `deprecated` | Superseded |
+   | `deprecated` for a legacy version a later one replaced | Superseded |
+   | `deprecated` for a retired governed evaluator (lifecycle `retired`, same mapping) | Retired |
+
+   The API reports a superseded version and a retired governed evaluator the
+   same way, as `deprecated`, so the last two labels need the lifecycle state
+   in the version response (CURRENT gap). A retired candidate was never
+   active, so it is not "superseded".
 
    "Incomplete" follows the glossary: missing or failed evidence is not a
    failed candidate (`docs/glossary.md:77-78`). The "Approved <date>" line
@@ -890,29 +913,69 @@ contract are unchanged.
 
 ## Implementation status
 
-Slice 1, "missing evidence never looks good", changes the CURRENT behavior
-that three findings describe. The findings above keep their as-audited text.
+As of PR #159 (slice 1, "missing evidence never reads as a result"). The findings
+above keep their as-audited text; this section records what changed in
+CURRENT behavior since `2c82321`.
 
-- **C1: fixed.** The regression chip is derived from the version's recorded
-  run. A version with no run reads "regression · not recorded", and a run that
-  couldn't be read reads "regression · unavailable". A governed candidate
-  reads from its run once one is recorded. Compare shows "—", and says why,
-  for any total that includes a save whose run is missing, unreadable, failed,
-  or compared no reference cases. Improvements also need the previous save's
-  measured verdicts, including the run of the version the path starts from.
-  The picker bar counts saves and recorded runs separately. The chip keeps the existing "regression · …" wording until
-  C12 and ADR-0015 settle the labels.
-- **C6: in part.** "Cases in revision" says "Count unavailable" when there is
-  no pinned revision or the read fails. Elapsed time and the long-wait message
-  are still to do.
-- **C7: fixed, except skeletons.** The five routes show "Couldn't load …",
-  built on `EmptyShell`, with Retry when retrying can work. A failed section
-  read on the version page says so inside its section, and its Retry reads
-  only that section again. "Version not found" appears only when the version
-  isn't among the versions the page reads. Compare no longer shows "Nothing to
-  compare yet" while loading. A response the page can't parse no longer prints
-  the validation dump. Loading states are still a title, with no `Skeleton`.
+- **C1: fixed.**
+  - The regression chip is derived from the version's recorded run. A version
+    with no run reads "regression · not recorded", a run that couldn't be read
+    reads "regression · unavailable", and the chip reads "regression ·
+    loading" until the run is read. A governed candidate reads from its run
+    once one is recorded, and its status chip reads "candidate".
+  - Compare shows "—", and says why, for any total that includes a save whose
+    run is missing, unreadable, failed, or compared no reference cases.
+    Improvements also need, for each save, measured per-case verdicts on the
+    previous save on the same criterion revision, including the run of the
+    version the path starts from. The picker bar counts saves and recorded
+    runs separately, and a new pair never shows the previous pair's rows.
+  - Stored zero disagreement counts show "—" while a version has no agreement
+    value, in version history, on the version page, and on the evaluator page.
+  - The chip keeps the existing "regression · …" wording until C12 and
+    ADR-0015 settle the labels.
+- **C6: in part.**
+  - "Cases in revision" says "Count unavailable" when there is no pinned
+    revision or the read fails.
+  - The running check stops polling, and says so, when its status refresh
+    fails in a way retrying can't fix.
+  - Version history polls every 3 s only while a check has no recorded run,
+    and every 30 s while only governed candidates remain.
+  - Elapsed time and the long-wait message are still to do.
+- **C7: fixed, except skeletons.**
+  - The five routes show "Couldn't load …", built on `EmptyShell`, with Retry
+    when retrying can work and a next step when it can't.
+  - The version page renders once its version is read; each evidence section
+    shows its own loading line, says so inside itself when its read fails,
+    and retries only itself.
+  - "Version not found" appears only when the version isn't among the
+    versions the page reads. Compare no longer shows "Nothing to compare yet"
+    while loading. A response the page can't parse no longer prints the
+    validation dump.
+  - Page-level loading states are still a title, with no `Skeleton`.
+- **D6: corrected.** The status table now has "Candidate" and "Retired" rows
+  for governed evaluators, which the API reports as `calibrating` and
+  `deprecated`.
 
+Known limitations, CURRENT as of PR #159:
+
+- "Regressions across versions" sums each save's `regressed`, which counts
+  that save's disagreements with the golden labels. A case wrong in three
+  saves counts three times; fixing it needs a decision on what the total
+  means.
+- Compare's agreement tile still derives from version fields, not recorded
+  runs.
+- A version whose unqueued check throws stays `calibrating` with no run, so it
+  reads "running" until C6's long-wait message lands.
+- The version page reads the 100 newest versions, so an older version reached
+  from Compare, which reads 200, shows "Version not found".
+- "No run recorded" relies on the API's no-run 404. The client matches its
+  `code`, `regression_run_not_recorded`, and falls back to its message for an
+  older API.
+- The page blueprints above predate typed-question evaluators, which shipped
+  after `2c82321` (Batches 8E and 8F). The editor and version pages now also
+  serve evaluators with a typed question, polarity, and decision threshold in
+  place of a rubric and prompt; the next pass on these pages covers both
+  types.
 ## Next rounds
 
 1. First run, end to end (`/skill/edit?first=1` → `/first-result`).

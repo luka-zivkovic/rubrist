@@ -1,18 +1,23 @@
 # UX audit 1: app shell and Overview
 
 Status: **audit record, not product authority.** It records CURRENT
-observations and proposals for founder review. Its open questions were
-settled on 2026-09-26 by taking the recommended options; see
-[Decisions](#decisions). No item proposes an ADR.
+observations and proposals for founder review. Its open questions were settled
+on 2026-09-26 by taking the recommended options; see [Decisions](#decisions).
+Its vocabulary decisions led to
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md), which is
+Proposed.
 
-Last reviewed: 2026-09-26 · code at `2c82321`
+Last reviewed: 2026-09-26 · code and docs at `2c82321`. Every file:line
+citation, into code or docs, refers to that commit.
 
 Vocabulary: findings describe today's UI in the onboarding contract's words
-(Run, Check, Result), which were TARGET when this round was written.
-Proposals, blueprints, the naming table, and decisions use the single
-vocabulary of [ADR-0015](../decisions/0015-one-vocabulary-one-display.md)
-(Proposed): evaluator, rubric, case, assessment, golden set, and review queue.
-That ADR also replaces the display modes with one display and a help layer.
+(Run, Check, Result), which remain TARGET until
+[ADR-0015](../decisions/0015-one-vocabulary-one-display.md) is accepted.
+Proposals, blueprints, the naming table, and decisions are written in that
+Proposed ADR's single vocabulary: evaluator, rubric, case, assessment, golden
+set, and review queue. The ADR would also replace the display modes with one
+display and a help layer. Nothing that depends on it is implemented before it
+is accepted; [Decisions](#decisions) lists which items wait.
 
 This is round 1 of a page-by-page UX audit of the web app (`apps/web`). It
 covers:
@@ -49,8 +54,13 @@ Later rounds add files to this folder; see [Next rounds](#next-rounds).
   Each file lists its primary sources (NN/g, GOV.UK, Apple HIG, Material 3,
   WCAG).
 - **Status** is one of *fix* (no product decision needed), *decide* (needs a
-  founder decision), or *keep*. Every *decide* item is now settled, and each
-  names its decision, for example "decided in D2".
+  founder decision), *verify* (an ASSUMPTION to check before fixing), or
+  *keep*. Every *decide* item is now settled, and each names its decision,
+  for example "decided in D2".
+- **Components** in proposals are marked *add* (a shadcn component: run
+  `npx shadcn add <name>` in `apps/web`, then restyle it), *installed*
+  (already in `components/ui`), or *Rubrist* (an existing
+  `components/rubrist/` component).
 
 ## Method
 
@@ -94,14 +104,15 @@ Later rounds add files to this folder; see [Next rounds](#next-rounds).
 
 | # | Finding | Sev | Status |
 |---|---|---|---|
-| 1 | At phone width the Overview's primary actions break. The next-action button is clipped. The day-0 first step collapses to one word per line under an overlapping button. The provisional banner makes the page 43 px wider than the screen. (O10) | 3 | fix |
-| 2 | The topbar shows numbers that are not what they say. An all-time count is labelled "this week". "0 traces · 0 exceptions" shows while data loads and after a 401. (S4) | 3 | fix |
-| 3 | Location cues are unreliable. Nav label, breadcrumb, and page title disagree on most routes. No route sets its own document title. Most page titles are not headings. (S1–S3) | 3 | fix |
-| 4 | One journey is told three ways, with different names and numbers: sidebar acts, Overview pipeline, and setup ledger. (O2) | 3 | fix (D1) |
-| 5 | Guided surfaces name the evaluator four ways and the human queue five ways on the production Overview (six counting provisional), against the product-language contract. (O4, O8) | 3 | fix (D2, D11) |
-| 6 | The production Overview has no dominant element. The only filled button and the attention list are in the last card, below the fold. (O3) | 3 | fix |
-| 7 | Shell error states mislead. A 401 leaves the page loading with no way back to sign-in. A 500 reads as a lost internet connection. (S6) | 2 | fix |
-| 8 | The Overview's Check card shows the model twice, and bench projects are labelled "production". (O7, O9) | 2 | fix |
+| 1 | Provisional assessments may be written back to the tracing platform before anyone signs off: no sign-off gate is visible in the sync path. Verify in Postgres mode first. (O14) | 3 if confirmed | verify |
+| 2 | At phone width the Overview's primary actions break. The next-action button is clipped. The day-0 first step collapses to one word per line under an overlapping button. The provisional banner makes the page 43 px wider than the screen. (O10) | 3 | fix |
+| 3 | The topbar shows numbers that are not what they say. An all-time count is labelled "this week". "0 traces · 0 exceptions" shows while data loads and after a 401. (S4) | 3 | fix |
+| 4 | Location cues are unreliable. Nav label, breadcrumb, and page title disagree on most routes. No route sets its own document title. Most page titles are not headings. (S1–S3) | 3 | fix |
+| 5 | One journey is told three ways, with different names and numbers: sidebar acts, Overview pipeline, and setup ledger. (O2) | 3 | fix (D1) |
+| 6 | Guided surfaces name the evaluator four ways and the human queue five ways on the production Overview (six counting provisional), against the product-language contract. (O4, O8) | 3 | fix (D2, D11) |
+| 7 | The production Overview has no dominant element. The only filled button and the attention list are in the last card, below the fold. (O3) | 3 | fix |
+| 8 | Shell error states mislead. A 401 leaves the page loading with no way back to sign-in. A 500 reads as a lost internet connection. (S6) | 2 | fix |
+| 9 | The Overview's Check card shows the model twice, and bench projects are labelled "production". (O7, O9) | 2 | fix |
 
 ---
 
@@ -653,7 +664,7 @@ Proposal:
 
 ### O7. Guided display shows the model binding
 
-Sev 1 · CURRENT · *fix* · narrowed by ADR-0015
+Sev 2 · CURRENT · *fix* · Sev 1 if ADR-0015 is accepted
 
 The Check card prints two technical lines in every display
 (`screens/dashboard.tsx:412-422`):
@@ -666,13 +677,14 @@ The Check card prints two technical lines in every display
 Only "Too strict / lenient" is marked `dev-only`. Guided promises to hide
 "secondary diagnostics and technical details" (`lib/display-mode.ts:15`).
 
-This was Sev 2 against Guided display's promise. ADR-0015 (Proposed) shows
-technical detail to everyone, so the binding stays on the card. What remains
-is repetition: the model appears on its own line and again inside the
-binding.
+This is Sev 2 against Guided display's CURRENT promise. If ADR-0015
+(Proposed) is accepted, technical detail shows to everyone and the binding
+stays on the card. Only the repetition remains, at Sev 1: the model appears
+on its own line and again inside the binding.
 
-Proposal: show the execution binding once, model first. The help layer
-explains what a binding is.
+Proposal: show the execution binding once, model first. Until ADR-0015 is
+accepted, keep it out of Guided display; once it is, the help layer explains
+what a binding is.
 
 ### O8. Terminology on Guided surfaces
 
@@ -737,7 +749,8 @@ production language". Three things break it:
 - the bench card, titled "Skill on the bench", therefore wears a "v1.2.0 ·
   production" chip.
 
-Proposal: map statuses to copy per mode in one helper.
+Proposal: map statuses to copy per project mode (bench or tracing) in one
+helper.
 
 ### O10. Phone width breaks the primary actions
 
@@ -802,18 +815,12 @@ Sev 2 · CURRENT · *fix* · decided in D4
 banner (`screens/dashboard-provisional.tsx:77-86`) and signs off at once. A
 code comment says nothing syncs back until sign-off
 (`components/rubrist/provisional.tsx:7`), so this click may start writing
-Results to the tracing platform.
+Results to the tracing platform. O14 records that the sync code shows no
+such gate.
 
-- ASSUMPTION, now in doubt: the sync code shows no sign-off gate. Both judge
-  paths queue a write-back for every judged Run with a tracing source
-  (`apps/api/src/workers/judge.ts:53-67`,
-  `apps/api/src/workers/eval-run.ts:346-365`), and the job insert has no
-  sign-off condition (`apps/api/src/repository.pg/judge-feedback-repository.ts:195-214`).
-  If provisional Results already sync, they reach the tracing platform before
-  an owner has reviewed the starter guide, which the comment says should not
-  happen. Verify this in Postgres mode before writing the confirmation.
-- TARGET: the click is deliberate, so explicit authority is present. The
-  contract does not require a confirmation.
+- TARGET: sign-off needs explicit authority (BOJ:278). A deliberate click can
+  supply it only when the click states its effect; today it doesn't. The
+  contract does not otherwise require a confirmation.
 - Rule: `placement.md` › Universal rules (keep consequential options apart from
   benign ones); `decisions.md` › Confirmation, undo, or nothing.
 - Proposal (decided in D4): add a confirmation that names the effect, such as
@@ -851,6 +858,29 @@ zone to the Overview, with:
 This keeps the separation `PRODUCT.md` requires while making the charter's
 main loop visible from the home page.
 
+### O14. Provisional assessments may reach the tracing platform before sign-off
+
+Sev 3 if confirmed · ASSUMPTION · *verify*, then *fix*
+
+Split from O12, where it first appeared as a doubt.
+
+- CURRENT code: both judge paths queue a write-back for every judged Run with
+  a tracing source (`apps/api/src/workers/judge.ts:53-67`,
+  `apps/api/src/workers/eval-run.ts:346-365`). The job insert has no sign-off
+  condition (`apps/api/src/repository.pg/judge-feedback-repository.ts:195-214`),
+  and the sync worker (`apps/api/src/workers/feedback-sync.ts`) checks no
+  provisional or starter state. A code comment says nothing syncs back until
+  sign-off (`components/rubrist/provisional.tsx:7`).
+- ASSUMPTION to verify in Postgres mode, with a tracing source connected: a
+  provisional starter evaluator's Results are written back to the tracing
+  platform before an owner signs off. Demo mode can't show it.
+- TARGET: "Human-only, shared, and irreversible actions require explicit
+  authority" (BOJ:278). A write to another system before sign-off would have
+  none.
+- Proposal: verify first. If confirmed, hold write-back for a provisional
+  evaluator version until sign-off, and have the sign-off confirmation (D4)
+  name the write-back.
+
 ### Proposed blueprint (production)
 
 *Proposal; not built.* The shell is unchanged apart from S1–S5.
@@ -861,7 +891,7 @@ Desktop, tracing, 7 cases waiting for review:
 Project / Overview                                       [+ Import trace]     ← topbar
 ───────────────────────────────────────────────────────────────────────────
 Overview                                             Data as of Apr 30, 20:00
-Support Answer Quality · evaluator v1.2.0 · active
+Support Answer Quality · evaluator v1.2.0 · current
 ┌─ Next ──────────────────────────────────────────────────────────────────┐
 │ 7 cases are waiting for review.                    [ Review 7 cases → ] │ dominant
 │ ✓ Define the evaluator  ✓ Review assessments  ● Grow the golden set 2/5 │
@@ -876,7 +906,7 @@ Review queue · showing 5 of 7                                   Open queue →
 └─────────────────┘└───────────────────────┘└──────────────────┘└───────────┘
 Failure categories                          │ Evaluator
   Unsupported promise   41   high volume    │ Support Answer Quality
-  Policy misquote       22   moderate       │ v1.2.0 · active · Owner: Product Lead
+  Policy misquote       22   moderate       │ v1.2.0 · current · Owner: Product Lead
   Missing escalation     9   low            │ [Open evaluator] · claude-sonnet-4-6
 ───────────────────────────────────────────────────────────────────────────
 Governed evidence · status only                                    (O13, D3)
@@ -1011,12 +1041,13 @@ language section is rewritten to match.
 
 Decided 2026-09-26: the founder asked to take the recommended options. Later
 the same day, the founder chose one vocabulary and one display with a help
-layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed), so D1, D2, D5,
-D7, D10, and D11 use that ADR's terms. These are
-design decisions for implementing this audit, not product authority.
-`PRODUCT.md`, the accepted ADRs, and the onboarding contract are unchanged.
-Items 9–11 were marked *decide* in their findings but were not in the open
-questions.
+layer ([ADR-0015](../decisions/0015-one-vocabulary-one-display.md), Proposed),
+so D1, D2, D5, D7, D10, and D11 use that ADR's terms. **Those six wait for
+ADR-0015's acceptance**; until then the onboarding contract's words and the
+display modes stay as they are. These are design decisions for implementing
+this audit, not product authority. `PRODUCT.md`, the accepted ADRs, and the
+onboarding contract are unchanged. Items 9–11 were marked *decide* in their
+findings but were not in the open questions.
 
 1. **Loop and setup naming (O2).** Setup is the ledger's three numbered
    steps: "Add one trace" ("Add one example" in bench projects), "Define the
@@ -1037,8 +1068,8 @@ questions.
    the Analyze and Human truth round should confirm where they come from.
 4. **Sign-off (O12).** Keep sign-off on the Overview as a separate secondary
    action, behind an `AlertDialog` (*add*) that names its effect. Write that
-   copy from verified behavior: O12 now records a doubt about when
-   assessments sync back.
+   copy from verified behavior: O14 records a doubt about when assessments
+   sync back.
 5. **Sidebar grouping (S7).** Group by evidence class: the ungoverned loop,
    governed evidence, and system. Order the loop's items by stage, without
    numbers, and drop the per-item governance suffixes. Nav labels use
@@ -1059,22 +1090,29 @@ questions.
 10. **Ways to start on day 0 (O11).** One primary, "Import a trace", and one
     "Other ways to add traces" disclosure for the tracer, API, and agent
     paths. Each explanation is cut to one line.
-11. **The naming table (O8).** Adopt it as written. It follows ADR-0015: one
-    term per concept everywhere. A case's source is a trace, or an
-    example in bench projects, and labels a reviewer records while seeing the
-    assessment are "ungoverned human labels".
+11. **The naming table (O8).** Adopt it as written once ADR-0015 is accepted.
+    It follows that ADR: one term per concept everywhere. A case's source is a
+    trace, or an example in bench projects, and labels a reviewer records
+    while seeing the assessment are "ungoverned human labels".
 
 ## Implementation status
 
-Slice 1, "missing evidence never looks good", changes the CURRENT behavior
-that S4 describes. The finding above keeps its as-audited text.
+As of PR #159 (slice 1, "missing evidence never reads as a result"). The finding
+above keeps its as-audited text; this section records what changed in CURRENT
+behavior since `2c82321`.
 
 - **S4: fixed, except the breadcrumb.** The top bar shows "—" instead of 0
-  until the dashboard loads, and labels the count "traces imported". A failed
-  dashboard read already replaces the page with the connection screen, which
-  hides the stats. While the dashboard loads, the breadcrumb still reads
-  "Rubrist".
+  until the dashboard loads, and labels the count "traces imported". When the
+  dashboard read fails as unavailable, the shell replaces the page with the
+  connection screen, which hides the stats. After a 401 (S6), the top bar
+  shows "—".
 
+Known limitations, CURRENT as of PR #159:
+
+- While the dashboard loads, the breadcrumb still reads "Rubrist".
+- Bench projects still read "examples", not D7's "N examples added".
+- The exceptions count is the length of a list the API caps at 50.
+- The sidebar shows "0/N" golden progress while the dashboard loads.
 ## Next rounds
 
 Each round is one page or flow, in this order:
