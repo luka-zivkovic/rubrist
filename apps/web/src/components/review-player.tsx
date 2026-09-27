@@ -6,7 +6,7 @@ import { Eyebrow, MarginNote } from "@/components/rubrist";
 import { TraceDetail, type TraceDecisionKind } from "@/components/trace-detail";
 import { fetchCaseDetail } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
-import { dashboardSkillVersionId } from "@/lib/criterion-scope";
+import { dashboardCriterionVersionId } from "@/lib/criterion-scope";
 import { cn } from "@/lib/utils";
 import type { ExceptionDetail } from "@rubrist/shared";
 
@@ -15,6 +15,8 @@ export interface ReviewPlayerItem {
   // in ad-hoc mode).
   key: string;
   caseId: string;
+  // Persisted queues freeze a criterion definition, not the current evaluator.
+  criterionVersionId?: string;
   completed: boolean;
 }
 
@@ -49,7 +51,6 @@ export function ReviewPlayer({
   renderDone
 }: ReviewPlayerProps) {
   const { dashboard, refresh } = useDashboard();
-  const skillVersionId = dashboardSkillVersionId(dashboard);
   const completedCount = items.filter((i) => i.completed).length;
   const total = items.length;
   const allComplete = total > 0 && completedCount === total;
@@ -84,21 +85,23 @@ export function ReviewPlayer({
   }, [items, total]);
 
   const current = items[cursor];
+  const criterionVersionId = current?.criterionVersionId ?? dashboardCriterionVersionId(dashboard);
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   // Bumping retryTick refetches the current case after a failed load.
   const [retryTick, setRetryTick] = useState(0);
 
-  // Fetch the trace detail for the current case. Race-guard: depend on the
-  // case id only, cancel stale fetches, so the items array reference churning
-  // (host reloads) doesn't flash a refetch.
+  // Read the latest recorded judgment for the task's exact criterion. A new
+  // evaluator need not have re-judged this older case. Cancel stale reads on
+  // case/criterion changes; host item-array churn alone does not refetch.
   useEffect(() => {
     if (!current) return;
     setDetail(null);
     setDetailError(null);
     const targetCaseId = current.caseId;
     let cancelled = false;
-    fetchCaseDetail(targetCaseId, skillVersionId ?? undefined)
+    if (!criterionVersionId) return;
+    fetchCaseDetail(targetCaseId, undefined, criterionVersionId)
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
@@ -108,7 +111,7 @@ export function ReviewPlayer({
     return () => {
       cancelled = true;
     };
-  }, [current?.caseId, retryTick, skillVersionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.caseId, criterionVersionId, retryTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prev = useCallback(() => setCursor((c) => Math.max(0, c - 1)), []);
   const next = useCallback(() => setCursor((c) => Math.min(total - 1, c + 1)), [total]);
@@ -168,6 +171,7 @@ export function ReviewPlayer({
             </MarginNote>
           ) : null}
           <TraceDetail
+            key={`${current.key}:${detail.judgeRun.id}`}
             detail={detail}
             shortcuts={shortcuts}
             onChanged={(kind) => {

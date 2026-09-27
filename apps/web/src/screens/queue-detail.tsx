@@ -126,6 +126,7 @@ function QueueDetailBody({ detail, reload }: { detail: ReviewQueueDetail; reload
       ordered.map((item) => ({
         key: item.id,
         caseId: item.caseId,
+        criterionVersionId: item.criterionVersionId,
         completed: item.status === "completed"
       })),
     [ordered]

@@ -337,9 +337,10 @@ export class DemoRepository implements RubristRepository {
   async getCaseDetail(
     projectId: string,
     caseId: string,
-    skillVersionId?: string | undefined
+    skillVersionId?: string | undefined,
+    criterionVersionId?: string | undefined
   ): Promise<ExceptionDetail | null> {
-    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId);
+    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId, criterionVersionId);
   }
 
   async promoteExceptionToGoldenSet(input: PromoteExceptionToGoldenSetInput): Promise<GoldenSetEntry> {

@@ -133,15 +133,19 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
   async getCaseDetail(
     projectId: string,
     caseId: string,
-    skillVersionId?: string | undefined
+    skillVersionId?: string | undefined,
+    criterionVersionId?: string | undefined
   ): Promise<ExceptionDetail | null> {
+    if (skillVersionId && criterionVersionId && this.store.skillVersionCriteria.get(skillVersionId) !== criterionVersionId) return null;
     const criterionCount = this.store.criteria.filter((criterion) => criterion.projectId === projectId).length;
-    if (!skillVersionId && criterionCount > 1) {
+    if (!skillVersionId && !criterionVersionId && criterionCount > 1) {
       throw new AmbiguousProjectSkillError(projectId, criterionCount);
     }
     const judged = [...this.store.judgeRuns]
-      .filter((run) => run.caseId === caseId && (!skillVersionId || run.skillVersionId === skillVersionId))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      .filter((run) => run.projectId === projectId && run.caseId === caseId
+        && (!skillVersionId || run.skillVersionId === skillVersionId)
+        && (!criterionVersionId || this.store.skillVersionCriteria.get(run.skillVersionId) === criterionVersionId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
     if (judged) {
       const trace = this.store.traces.get(caseId);
       return this.buildDemoCaseDetail(
@@ -154,14 +158,18 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
         judged
       );
     }
+    // Demo scaffolding belongs only to the built-in criterion. A scoped
+    // miss must never synthesize a result from another criterion.
+    if (criterionVersionId && this.store.skillVersionCriteria.get(demoSkill.currentVersion.id) !== criterionVersionId) return null;
+    if (projectId !== demoProject.id) return null;
     const summary = getDemoDashboardSummary();
     const exception = summary.exceptions.find((candidate) => candidate.id === caseId);
     if (exception && (!skillVersionId || skillVersionId === demoSkill.currentVersion.id)) {
       return this.buildDemoCaseDetail(exception.id, exception.traceId, exception.verdict, exception.reason, exception.capabilityGap);
     }
-    const goldenCriterionVersionId = skillVersionId
+    const goldenCriterionVersionId = criterionVersionId ?? (skillVersionId
       ? this.store.skillVersionCriteria.get(skillVersionId)
-      : undefined;
+      : undefined);
     const golden = (await this.dependencies.listGoldenSet(projectId, goldenCriterionVersionId)).find((entry) =>
       entry.caseId === caseId && (!skillVersionId || entry.sourceSkillVersionId === skillVersionId)
     );
