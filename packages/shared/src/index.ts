@@ -723,6 +723,9 @@ export const DashboardSummarySchema = z.object({
   currentVersionResultCount: z.number().int().nonnegative(),
   verdictDistribution: VerdictDistributionSchema,
   exceptions: z.array(ExceptionCaseSchema),
+  // Full eligible queue size, before the bounded exception payload is capped.
+  // Optional for clients reading older dashboard responses.
+  exceptionsTotal: z.number().int().nonnegative().optional(),
   topCapabilityGaps: z.array(CapabilityGapSchema),
   goldenSetSize: z.number().int().nonnegative(),
   // Lets owner-only affordances (agent pairing) hide from members instead of

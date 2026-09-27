@@ -232,8 +232,8 @@ export class PgRepository implements RubristRepository {
         this.getCurrentSkillForCriterion(projectId, criterionId),
       listGoldenSet: (projectId, criterionVersionId) =>
         this.listGoldenSet(projectId, criterionVersionId),
-      listExceptionCases: (projectId, criterionVersionId) =>
-        this.listExceptionCases(projectId, criterionVersionId)
+      getExceptionSummary: (projectId, criterionVersionId) =>
+        this.caseEvidenceRepository.getExceptionSummary(projectId, criterionVersionId)
     });
     this.reviewQueueRepository = new PgReviewQueueRepository(
       pool,

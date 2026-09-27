@@ -83,7 +83,7 @@ function RootLayoutInner() {
     : "—";
   // null until the dashboard loads, and after it fails: an unknown count is
   // shown as unknown, never as zero.
-  const exceptionsCount = dashboard?.exceptions.length ?? null;
+  const exceptionsCount = dashboard?.exceptionsTotal ?? null;
   const importedTotal = dashboard?.project.importedTraceCount ?? null;
   const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname);
   const showCriterionPicker = selectionRequired && criterionSelectionRequiredForRoute;

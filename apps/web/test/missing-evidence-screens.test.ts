@@ -697,3 +697,16 @@ describe("evaluator editor", () => {
     expect(text()).toContain("Back to skill");
   });
 });
+
+it("leaves each row improvement unknown when its baseline is unmeasured", async () => {
+  const first = version("skillv_1", "1.0.1");
+  const second = version("skillv_2", "1.0.2");
+  api.fetchCurrentSkill.mockResolvedValue(skillWith(second));
+  api.fetchSkillVersions.mockResolvedValue([second, first]);
+  api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) =>
+    versionId === first.id ? null : run(second.id, { improved: 0 }));
+  await render("/skill/compare?from=skillv_1&to=skillv_2", "/skill/compare", () => createElement(CompareVersionsScreen));
+  expect(container.querySelector('[data-kpi="Improvements"]')?.textContent).toContain("Improvements: —");
+  const row = [...container.querySelectorAll("tbody tr")].find((entry) => entry.textContent?.includes("v1.0.2"));
+  expect(row?.querySelectorAll("td")[4]?.textContent).toBe("—");
+});

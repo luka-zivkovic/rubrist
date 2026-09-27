@@ -103,7 +103,7 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
         }
         sub={
           exceptions.length > 0
-            ? `${exceptions.length} Result${exceptions.length === 1 ? " needs" : "s need"} a closer look. Open one to compare the recorded evidence with the starter guide.`
+            ? `${dashboard.exceptionsTotal ?? "Some"} Result${dashboard.exceptionsTotal === 1 ? " needs" : "s need"} a closer look. Open one to compare the recorded evidence with the starter guide.`
             : bench
               ? judged === 0
                 ? "Nothing has been evaluated yet. Start one run from Examples. A supplied expected label is optional and is not governed human truth."
@@ -137,7 +137,7 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
         />
         <KPI
           label="Need a closer look"
-          num={exceptions.length}
+          num={dashboard.exceptionsTotal ?? "—"}
           delta={exceptions.length > 0 ? "open the queue →" : "queue clear"}
           deltaKind={exceptions.length > 0 ? "signal" : "default"}
           to="/exceptions"

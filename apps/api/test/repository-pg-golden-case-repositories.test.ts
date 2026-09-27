@@ -50,7 +50,8 @@ const CASE_CLASS_METHODS = [
   ...CASE_PORT_METHODS.slice(0, 9),
   "attachActorNames",
   ...CASE_PORT_METHODS.slice(9),
-  "listExceptionCases"
+  "listExceptionCases",
+  "getExceptionSummary"
 ] as const;
 
 const CASE_FACADE_METHODS = [
