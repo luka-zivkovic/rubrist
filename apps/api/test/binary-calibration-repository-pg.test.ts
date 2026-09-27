@@ -293,6 +293,30 @@ run("PgBinaryCalibrationRepository", () => {
       await expect(repository.createRun(OWNER, input)).rejects.toMatchObject({ code: "ineligible", message: expect.stringContaining("unresolved") });
       expect(await saveResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING, await resolvedRecordFor(SEEDED_BINDING)))
         .toMatchObject({ status: "resolved" });
+      // Two resolutions replacing the same old record at once: the first
+      // stores a current failed record, and the second, which waited for the
+      // row, finds it current and keeps it.
+      await pool.query(`update evaluator_resolution_records set status='failed', record=$2::jsonb where skill_version_id=$1`,
+        [skillVersionId, JSON.stringify({ ...old, temperatureSupport: "parameter_rejected" })]);
+      const currentFailed = await temperatureRejectingRecordFor(SEEDED_BINDING);
+      expect(currentFailed.status).toBe("failed");
+      const first = await pool.connect();
+      const second = await pool.connect();
+      try {
+        await first.query("begin");
+        await second.query("begin");
+        await saveResolutionRecord(first, PROJECT_ID, skillVersionId, SEEDED_BINDING, currentFailed);
+        const waiting = saveResolutionRecord(second, PROJECT_ID, skillVersionId, SEEDED_BINDING, await resolvedRecordFor(SEEDED_BINDING));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await first.query("commit");
+        expect(await waiting).toMatchObject({ status: "failed" });
+        await second.query("commit");
+      } finally {
+        first.release();
+        second.release();
+      }
+      await pool.query(`delete from evaluator_resolution_records where skill_version_id=$1`, [skillVersionId]);
+      await saveResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING, await resolvedRecordFor(SEEDED_BINDING));
       // A version whose text the definition's limits refuse has no identity.
       await pool.query(`update skill_versions set execution_binding = $2::jsonb, rubric_markdown = repeat('x', 100001) where id=$1`, [skillVersionId, JSON.stringify(storedBinding)]);
       await expect(repository.createRun(OWNER, input)).rejects.toMatchObject({
@@ -486,7 +510,8 @@ run("PgBinaryCalibrationRepository", () => {
     expect(await repository.getRecheckTarget(recheckClaim!)).toMatchObject({
       authorized: false,
       msSinceUnknownRecheck: null,
-      binding: { executionBinding: SEEDED_BINDING, customEndpointUrl: null }
+      // The re-check reads the record resolved for the run's binding (ADR-0014 decision 12).
+      binding: { executionBinding: SEEDED_BINDING, customEndpointUrl: null, record: { status: "resolved", ignoredTemperatureEntry: null } }
     });
     await repository.recordRecheck(recheckClaim!, { outcome: "unknown", probes: [] });
     expect((await repository.getRecheckTarget(recheckClaim!)).msSinceUnknownRecheck).toBeGreaterThanOrEqual(0);
