@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, Fragment, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RegressionRunResult, SelfConsistencyReport, Skill, SkillVersion } from "@rubrist/shared";
@@ -13,7 +13,7 @@ for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInput
   vi.stubGlobal(name, (dom.window as unknown as Record<string, unknown>)[name]);
 }
 const { createRoot } = await import("react-dom/client");
-const { MemoryRouter, Route, Routes, useNavigate } = await import("react-router-dom");
+const { createMemoryRouter, RouterProvider, useNavigate } = await import("react-router-dom");
 
 const api = vi.hoisted(() => ({
   fetchCurrentSkill: vi.fn(),
@@ -240,9 +240,8 @@ function Navigator() {
 
 async function render(path: string, routePath: string, screen: () => ReactNode) {
   await act(async () => {
-    root.render(createElement(MemoryRouter, { initialEntries: [path] },
-      createElement(Navigator),
-      createElement(Routes, null, createElement(Route, { path: routePath, element: screen() }))));
+    const router = createMemoryRouter([{ path: routePath, element: createElement(Fragment, null, createElement(Navigator), screen()) }], { initialEntries: [path] });
+    root.render(createElement(RouterProvider, { router }));
   });
   await settle();
 }
