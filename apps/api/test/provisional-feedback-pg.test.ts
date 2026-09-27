@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { runMigrations } from "@rubrist/db";
+import { encryptJson } from "../src/lib/encryption.js";
 import { PgRepository } from "../src/repository.pg.js";
 import { processJudgeRunJob } from "../src/workers/judge.js";
 import { processFeedbackSyncJob, resumeSignedOffFeedback } from "../src/workers/feedback-sync.js";
@@ -44,6 +45,14 @@ runPgSmoke("provisional feedback delivery", () => {
       expect(writer).not.toHaveBeenCalled();
       expect(await resumeSignedOffFeedback(repo, new CapturingQueue())).toBe(0);
 
+      // A lifecycle label cannot stand in for approval of this exact version.
+      const revision = await repo.getOrCreateRegressionDatasetRevision("proj_test", undefined, "criterionv_test");
+      await pool.query("update skill_versions set status='deprecated', regression_dataset_revision_id=$1 where id='skillv_test'", [revision.id]);
+      await processFeedbackSyncJob(repo, job, writer);
+      expect(writer).not.toHaveBeenCalled();
+      expect(await repo.listSignedOffFeedbackSyncJobs(100)).toEqual([]);
+      await pool.query("update skill_versions set status='draft' where id='skillv_test'");
+
       // Sign-off can race a worker that already read the draft. The recovery
       // query sees the approval even when parking happened after sign-off.
       const unsigned = await repo.getSkillVersion("proj_test", "skillv_test");
@@ -81,4 +90,42 @@ runPgSmoke("provisional feedback delivery", () => {
       expect((await repo.getDashboardSummary("proj_test")).project.syncBackCoverage).toBe(1);
     } finally { await cleanup(); }
   }, 30_000);
+
+  it.each(["missing credentials", "deleted integration"] as const)("terminalizes resumed jobs with %s without poisoning the recovery batch", async (failure) => {
+    const { pool, cleanup } = await openPostgresTestDatabase("provisional_failure");
+    try {
+      await runMigrations(pool);
+      const repo = new PgRepository(pool);
+      const queue = new CapturingQueue();
+      await pool.query("insert into organizations (id,name) values ('org_test','Test')");
+      await pool.query("insert into projects (id,organization_id,name,trace_provider) values ('proj_test','org_test','Test','langsmith')");
+      await seedSkill(pool);
+      const integration = await repo.createLangSmithIntegration("proj_test", { apiKey: "ls_test", projectName: "Support" });
+      const imported = await repo.importTrace("proj_test", "langsmith", {
+        sourceTraceId: "credential-failure", input: { question: "Refund?" }, output: { answer: "Refunds available." }, metadata: {}
+      }, { ingestionPurpose: "analysis_eligible_langsmith", sourceIntegrationId: integration.id });
+      await processJudgeRunJob(repo, { projectId: "proj_test", caseId: imported.caseId, skillVersionId: "skillv_test" }, undefined, queue);
+      const job = queue.jobs[0]!.data as { projectId: string; feedbackSyncJobId: string };
+      const writer = vi.fn(() => ({ createFeedback: vi.fn(async () => {}) }));
+      await processFeedbackSyncJob(repo, job, writer);
+      await repo.signOffSkillVersion("proj_test", "skill_test", "skillv_test", {});
+      expect(await repo.listSignedOffFeedbackSyncJobs(100)).toEqual([job]);
+      if (failure === "missing credentials") {
+        await pool.query("update integrations set encrypted_credentials=$1 where id=$2", [encryptJson({}), integration.id]);
+      } else {
+        await repo.deleteLangSmithIntegration("proj_test", integration.id, {});
+      }
+      await expect(processFeedbackSyncJob(repo, job, writer)).rejects.toThrow();
+      expect(writer).not.toHaveBeenCalled();
+      expect(await repo.listFeedbackSyncJobs({ projectId: "proj_test", limit: 10 })).toMatchObject([{ status: "failed", attempts: 1 }]);
+      expect(await repo.listSignedOffFeedbackSyncJobs(100)).toEqual([]);
+      expect(await resumeSignedOffFeedback(repo, new CapturingQueue())).toBe(0);
+
+      // A late duplicate whose source disappeared cannot erase prior success.
+      await repo.markFeedbackSyncSucceeded(job);
+      await expect(processFeedbackSyncJob(repo, job, writer)).rejects.toThrow();
+      expect(await repo.listFeedbackSyncJobs({ projectId: "proj_test", limit: 10 })).toMatchObject([{ status: "synced", attempts: 1 }]);
+    } finally { await cleanup(); }
+  }, 30_000);
+
 });

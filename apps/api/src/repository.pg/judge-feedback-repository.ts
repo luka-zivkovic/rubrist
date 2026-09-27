@@ -379,7 +379,7 @@ export class PgJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort {
 
   async markFeedbackSyncFailed(job: FeedbackSyncJob, error: unknown): Promise<void> {
     await this.pool.query(
-      `update feedback_sync_jobs set status = 'failed', attempts = attempts + 1, last_error = $3 where id = $1 and project_id = $2`,
+      `update feedback_sync_jobs set status = 'failed', attempts = attempts + 1, last_error = $3 where id = $1 and project_id = $2 and status <> 'synced'`,
       [job.feedbackSyncJobId, job.projectId, error instanceof Error ? error.message : String(error)]
     );
     await this.refreshSyncBackCoverage(job.projectId);

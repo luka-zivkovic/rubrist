@@ -74,12 +74,12 @@ export async function processFeedbackSyncJob(
   createWriter: FeedbackWriterFactory = defaultFeedbackWriterFactory
 ): Promise<void> {
   const parsed = FeedbackSyncJobSchema.parse(job);
-  const context = await repository.loadFeedbackSyncContext(parsed);
-  if (context.status === "synced") return;
   try {
+    const context = await repository.loadFeedbackSyncContext(parsed);
+    if (context.status === "synced") return;
     const version = await repository.getSkillVersion(context.projectId, context.judgeRun.skillVersionId);
     if (!version) throw new Error("Evaluator version unavailable for feedback delivery");
-    if (version.status === "draft" && version.approvedAt === null) {
+    if (version.approvedAt === null) {
       await repository.markFeedbackSyncBlocked(parsed, new Error(PROVISIONAL_FEEDBACK_HOLD));
       return;
     }

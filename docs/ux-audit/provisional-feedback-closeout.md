@@ -4,7 +4,7 @@ Status: **CURRENT implementation**, 2026-09-28. Bounded correction for G1 and
 its sign-off consequence; no vocabulary/display decision or schema change.
 
 Feedback delivery now reads the exact evaluator version recorded on the judge
-run. A draft with no approval timestamp is parked in the existing durable
+run. Any version with no approval timestamp is parked in the existing durable
 `blocked` state before constructing an upstream writer. Local results remain
 available. The pause records a specific sign-off reason and consumes no
 provider-call or queue-retry budget. Global starter state and approval of a
@@ -38,6 +38,12 @@ ID, no additional judge runs, successful coverage, and already-synced no-op.
 Separate tests cover startup/timer recovery and continuing after one dispatch
 failure. Existing successful delivery fixtures now explicitly sign off their
 versions instead of accidentally relying on unsigned-draft delivery.
+
+Recovery also terminalizes credential/context load failures in the durable
+ledger, removing those rows from sign-off recovery so a missing integration
+cannot monopolize a batch. Already-recorded delivery success cannot be changed
+to failure by a late duplicate with a missing source. A deprecated version with
+no approval timestamp remains held; lifecycle status alone never releases it.
 
 The recovery batch is bounded; full application-scale recovery query load has
 not been benchmarked. No hosted judgments or WiCE artifacts are changed.
