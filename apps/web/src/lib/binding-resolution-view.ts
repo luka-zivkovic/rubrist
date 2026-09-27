@@ -3,7 +3,9 @@ import {
   type BindingResolutionStatus,
   type CapabilityProbe,
   type JudgeProviderCredentialSource,
-  type SettingSupport
+  type ResolutionRecord,
+  type SettingSupport,
+  type TemperatureSupport
 } from "@rubrist/shared";
 
 // How a version's resolution reads to its author (ADR-0014 section 4, Batch
@@ -44,6 +46,19 @@ const SUPPORT: Record<SettingSupport, string> = {
   value_rejected: "the probed value was rejected",
   parameter_rejected: "rejected as a parameter, so it stays unset"
 };
+
+// Temperature is classified by outcome, with the saved reasoning and topP (ADR-0014 decision 12).
+const TEMPERATURE: Record<TemperatureSupport, string> = {
+  adjustable: "adjustable: the model accepted 0 or 0.5, so a governed evaluator states it",
+  not_adjustable: "not adjustable: the model rejected 0 and 0.5, so it is set by the model"
+};
+
+function temperatureSupport(record: ResolutionRecord): string {
+  if (record.ignoredTemperatureEntry !== null) {
+    return `ignored by this model, as its provider documents (${record.ignoredTemperatureVersion}), so none is sent`;
+  }
+  return record.temperatureSupport === null ? "not probed yet" : TEMPERATURE[record.temperatureSupport];
+}
 
 const PURPOSE: Record<CapabilityProbe["purpose"], string> = {
   protocol: "Protocol probe",
@@ -98,11 +113,11 @@ export function resolutionView(status: BindingResolutionStatus): ResolutionView 
     summary,
     // A stated setting is sent as saved, and one the provider doesn't take has nothing to show.
     settings: record === null ? [] : ([
-      ["Temperature", status.settings.temperature, record.temperatureSupport],
-      ["Reasoning", status.settings.reasoning, record.reasoningSupport]
+      ["Temperature", status.settings.temperature, temperatureSupport(record)],
+      ["Reasoning", status.settings.reasoning, record.reasoningSupport === null ? "not probed yet" : SUPPORT[record.reasoningSupport]]
     ] as const).filter(([, state]) => state === "unset").map(([setting, , support]) => ({
       setting,
-      support: support === null ? "left unset; not probed yet" : `left unset; ${SUPPORT[support]}`
+      support: `left unset; ${support}`
     })),
     probes: (record?.probes ?? []).map((probe) => ({
       purpose: `${PURPOSE[probe.purpose]}${probe.stage === "capability_check" ? " (check)" : ""} · ${probe.verdictProtocol}`,

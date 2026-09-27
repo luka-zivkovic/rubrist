@@ -567,9 +567,10 @@ implicit judging require an active evaluator with currently admissible sealed
 calibration. Activation is an owner action over exact complete calibration and
 full passed regression evidence; revocation appends `needs_review`. Candidate
 creation, activation, and sealed calibration are governed gates: each requires
-a resolved execution binding that states its temperature and reasoning unless
-the model rejects the parameter itself, and sealed calibration re-checks the
-binding before any sealed exposure (ADR-0014 section 4).
+a resolved execution binding that states its reasoning unless the model
+rejects the parameter itself, and states its temperature wherever the model
+lets the author choose it (ADR-0014 decision 12), and sealed calibration
+re-checks the binding before any sealed exposure (ADR-0014 section 4).
 
 The integrated Analyze view now emits one digest-bound
 `rubrist/analysis-workflow-measurement/v1` report. Coding completion, named

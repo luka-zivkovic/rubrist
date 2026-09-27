@@ -144,23 +144,25 @@ describe("probe attribution", () => {
       .toMatchObject({ rejection: "value", rejectedParameter: "temperature" });
     expect(probe("reasoning", { reasoning: anthropicDisabled }, rejection("thinking.type: 'disabled' is not supported for this model")))
       .toMatchObject({ rejection: "value", rejectedParameter: "reasoning" });
-    expect(probe("temperature", { temperature: 1.5 }, rejection("temperature: range: 0 <= temperature <= 1")))
+    expect(probe("temperature", { temperature: 0.5 }, rejection("temperature: range: 1 <= temperature <= 2")))
       .toMatchObject({ rejection: "value", rejectedParameter: "temperature" });
   });
 
+  // The record keeps what a rejection's wording names for its reader; temperature
+  // itself is classified by outcome, whatever the wording (ADR-0014 decision 12).
   it("reads default-only and non-default wording as a value rejection", () => {
     for (const message of [
       "`temperature` may only be set to 1 when thinking is enabled",
       "temperature: non-default values are not supported",
       "Only the default value of temperature is supported"
     ]) {
-      expect(probe("temperature", { temperature: 1 }, rejection(message)), message).toMatchObject({ rejection: "value", rejectedParameter: "temperature" });
+      expect(probe("temperature", { temperature: 0 }, rejection(message)), message).toMatchObject({ rejection: "value", rejectedParameter: "temperature" });
     }
     const coded = new EvaluatorCallError("provider_rejected_request", "x", {
       physicalCall: true, status: 400,
       providerError: { type: "invalid_request_error", code: "unsupported_value", param: "temperature", message: "temperature does not support this", raw: null, upstreamProvider: null }
     });
-    expect(probe("temperature", { temperature: 1 }, coded)).toMatchObject({ rejection: "value" });
+    expect(probe("temperature", { temperature: 0.5 }, coded)).toMatchObject({ rejection: "value" });
   });
 
   it("marks a mechanism rejection when only the output mechanism is named", () => {

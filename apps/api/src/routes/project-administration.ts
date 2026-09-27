@@ -241,8 +241,11 @@ export function registerProjectAdministrationRoutes(
   });
 
   // The capability check before save (ADR-0014 section 4): it probes a model
-  // so the author can choose only settings the model takes. Owner-only,
-  // since each check spends up to 6 provider calls; it records nothing.
+  // so the author can choose only settings the model takes. With
+  // `classifyTemperature` it classifies temperature for reasoning the author
+  // selected after the check (decision 12), under the same limits. Owner-only,
+  // since a check spends up to 7 provider calls and a classification up to 3;
+  // it records nothing.
   app.post("/api/judge/capability-check", async (c) => {
     const denied = await requestServices.requireOwner(c, "check a model's capabilities");
     if (denied) return denied;

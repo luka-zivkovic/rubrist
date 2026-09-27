@@ -11,18 +11,26 @@ import { CAPABILITY_CHECKS_IN_FLIGHT, registerProjectAdministrationRoutes } from
 
 const OPUS_CHECK = { provider: "anthropic", endpoint: { kind: "managed" }, modelId: "claude-opus-5-5", modelVersion: "claude-opus-5-5", outputTokenLimit: 1_200, routing: null };
 
+const OPUS_CLASSIFICATION = {
+  ...OPUS_CHECK,
+  classifyTemperature: { reasoning: { family: "anthropic", thinking: { type: "disabled" }, effort: "high" }, verdictProtocol: "anthropic.structured-output/v1", baselineAccepted: false }
+};
+
 /** The route family alone, in a project, with provider calls answered by `fetch`. */
-function checkApp(fetch: ExecutionFetch, options: { pool?: Pool } = {}) {
+function checkApp(fetch: ExecutionFetch, options: { pool?: Pool; owner?: boolean } = {}) {
   const repository = new DemoRepository();
   const app = new Hono<{ Variables: AppVariables }>();
   app.use(async (c, next) => {
     c.set("projectId", "project");
     await next();
   });
+  const requestServices = createRequestServices({ repository, ownerAuthorizationEnabled: false, rateLimitPerMinute: 60, batchMaxItems: 100 });
   registerProjectAdministrationRoutes(app, {
     repository,
-    ...options,
-    requestServices: createRequestServices({ repository, ownerAuthorizationEnabled: false, rateLimitPerMinute: 60, batchMaxItems: 100 }),
+    ...(options.pool ? { pool: options.pool } : {}),
+    requestServices: options.owner === false
+      ? { ...requestServices, requireOwner: async (c, action) => c.json({ error: `Only owners can ${action}` }, 403) }
+      : requestServices,
     publicApiBaseUrl: () => "https://rubrist.example",
     bindingResolution: bindingResolutionServices(async () => "sk-project", {
       fetch,
@@ -131,6 +139,53 @@ describe("project administration routes", () => {
     release();
     expect((await Promise.all(running)).map((response) => response.status)).toEqual([200, 200]);
     expect((await slow(OPUS_CHECK)).status).toBe(200);
+  });
+
+  it("classifies temperature for newly selected reasoning through the same route and limits, in at most 3 calls", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const classify = checkApp(async (_url, init) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      bodies.push(body);
+      return body.temperature === 0 ? new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "Invalid request." } }), { status: 400 }) : acceptedVerdict();
+    });
+    const response = await classify(OPUS_CLASSIFICATION);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ report: { temperatureSupport: "adjustable", probedReasoning: OPUS_CLASSIFICATION.classifyTemperature.reasoning } });
+    expect(bodies.map((body) => body.temperature)).toEqual([undefined, 0, 0.5]);
+    expect((await classify({ ...OPUS_CLASSIFICATION, classifyTemperature: { ...OPUS_CLASSIFICATION.classifyTemperature, verdictProtocol: "openai.structured-output/v1" } })).status).toBe(400);
+
+    // It spends from the check's own bucket.
+    const limited = checkApp(async () => acceptedVerdict());
+    for (let started = 0; started < CAPABILITY_CHECKS_PER_MINUTE; started += 1) {
+      expect((await limited(started % 2 === 0 ? OPUS_CHECK : OPUS_CLASSIFICATION)).status).toBe(200);
+    }
+    expect((await limited(OPUS_CLASSIFICATION)).status).toBe(429);
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const slow = checkApp(async () => {
+      await held;
+      return acceptedVerdict();
+    });
+    const running = Array.from({ length: CAPABILITY_CHECKS_IN_FLIGHT }, () => slow(OPUS_CHECK));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect((await slow(OPUS_CLASSIFICATION)).status).toBe(429);
+    release();
+    await Promise.all(running);
+  });
+
+  it("lets only an owner check a model or classify its temperature", async () => {
+    const urls: string[] = [];
+    const member = checkApp(async (url) => {
+      urls.push(url);
+      return acceptedVerdict();
+    }, { owner: false });
+    for (const body of [OPUS_CHECK, OPUS_CLASSIFICATION]) {
+      const denied = await member(body);
+      expect(denied.status).toBe(403);
+      await expect(denied.json()).resolves.toEqual({ error: "Only owners can check a model's capabilities" });
+    }
+    expect(urls).toEqual([]);
   });
 
   it("reports the exact saved Run fields available to beginner setup", async () => {

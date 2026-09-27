@@ -239,6 +239,16 @@ describe("guided evaluator editing", () => {
     expect(source).toContain('htmlFor="skill-regression-override-reason"');
   });
 
+  it("starts temperature empty, leaves filling it to the picker, and saves only after the picker classifies it (ADR-0014 decision 12)", async () => {
+    const source = await readFeatureSource("skill-edit");
+
+    expect(source).toContain('const [temperature, setTemperature] = useState("");');
+    expect(source).toContain('setTemperature(keeps ? fields.temperature : "");');
+    expect(source).not.toContain('useState("0")');
+    expect(source).toContain("temperature,\n    setTemperature\n  });");
+    expect(source).toContain("!picker.checkPending && !picker.temperaturePending");
+  });
+
   it("ignores a deferred create response after its criterion scope changes", async () => {
     let resolve!: () => void;
     const response = new Promise<void>((done) => { resolve = done; });

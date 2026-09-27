@@ -1,5 +1,5 @@
 import type { Queue } from "@rubrist/queue";
-import type { GovernedBinding, RecheckOutcome } from "../lib/binding-resolution.js";
+import type { RecheckedBinding, RecheckOutcome } from "../lib/binding-resolution.js";
 import type { BinaryCalibrationMintResult } from "./repository.js";
 import type {
   BinaryCalibrationExecutionClaim,
@@ -25,8 +25,8 @@ export interface BinaryCalibrationWorkerOptions {
   recheckBackoffMs?: number;
 }
 
-/** Re-checks a binding with the probe input, never sealed data. */
-export type BinaryCalibrationRecheck = (binding: GovernedBinding) => Promise<RecheckOutcome>;
+/** Re-checks a binding, with the resolution record it guards, using the probe input, never sealed data. */
+export type BinaryCalibrationRecheck = (binding: RecheckedBinding) => Promise<RecheckOutcome>;
 
 export interface BinaryCalibrationOrchestrator {
   stop(): void;

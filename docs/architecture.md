@@ -110,44 +110,99 @@ every check that can refuse the call and immediately before dispatch, so a
 refusal counts no call. The mock makes no call, so it can't be calibrated.
 
 Creating a run is a governed gate (ADR-0014 sections 2 and 4). It needs a
-resolved execution binding that states its temperature and reasoning, unless
-the resolution shows the model rejecting that parameter itself. An unresolved
-binding resolves at the gate with up to three probes over a fixed,
+resolved execution binding that states its reasoning, unless the resolution
+shows the model rejecting that parameter itself, and states its temperature
+wherever the model lets the author choose it (decision 12). An unresolved
+binding resolves at the gate with up to four probes over a fixed,
 non-sensitive input. A failed binding is fixed only by a new evaluator
 version. Before a run's first authorization, and so before any sealed
-exposure, the worker re-checks the binding: the confirming probe again, and a
-probe of each setting the binding leaves unset. A resolution that no longer
-holds rejects the run. A transient error leaves the run waiting and retries
-after a back-off; it never fails the binding. Every resolution attempt and
-re-check is appended against the gate, request, or run that triggered it. The
-latest resolution is the version's record, which is not identity.
+exposure, the worker re-checks the binding with one to four probes: the
+confirming probe again, the temperature probes where temperature is unset and
+the record doesn't list the combination as ignoring it, and a reasoning probe
+where reasoning is unset. A resolution that no longer holds, including
+temperature 0 or 0.5 now accepted, rejects the run. A transient error leaves
+the run waiting and retries after a back-off; it never fails the binding.
+Every resolution attempt and re-check is appended against the gate, request,
+or run that triggered it. The latest resolution is the version's record,
+which is not identity. A stored record that doesn't parse under the current
+rules, such as one from before decision 12 that probed temperature at 1,
+reads as no record, so the binding resolves again.
+
+Temperature is classified by outcome, never by a rejection's wording (ADR-0014
+decision 12). A temperature probe sends 0, and 0.5 only where 0 was rejected,
+with the reasoning being classified and the saved `topP` (none in the check),
+and counts only where the same request without temperature was accepted: the
+check's reasoning probe with that reasoning, or its protocol probe where no
+reasoning fields are sent, and at resolution and the re-check the confirming
+probe. 0 or 0.5 accepted is `adjustable`, and the gates then require an
+explicit temperature; 0 and 0.5 both rejected is `not_adjustable`, and
+temperature may stay unset, since the model sets it. An error leaves it
+unknown, and no further temperature probe is sent. The dated
+`rubrist-ignored-temperature/v1` table lists combinations that accept
+temperature without applying it, each backed by the provider's own
+documentation: DeepSeek's `deepseek-flash` and `deepseek-v4-pro` at
+`https://api.deepseek.com` in thinking mode, reviewed on 2026-09-27. The
+server matches an entry through the binding's endpoint digest, so a base URL
+spelled differently doesn't match. For a listed combination the check,
+resolution, and re-check send no temperature probe, the picker hides the
+field, and the gates refuse a stated temperature. The record keeps the table
+version and the entry that matched, and the gates and re-check read those,
+never a newer table. `tools/temperature-study.mjs` reproduces the probes
+behind the table; it makes live calls and is not run in CI. A failed binding
+that stated a temperature carries a suggestion from the record's temperature
+outcomes with the saved reasoning: leave temperature unset where 0 and 0.5
+were both rejected, choose another value where one was accepted, and nothing
+about temperature where it is unknown. That suggestion is not yet reachable
+(CURRENT): the check's outcomes don't yet become the record, and resolution
+sends nothing after a rejected confirming probe, so a failed record holds
+only that probe.
 
 Resolution also runs after save: the gate worker confirms a newly saved
 version's binding before its regression gate, with the confirming probe and,
-where temperature is unset, a temperature probe (ADR-0014 section 4). It runs
+where temperature is unset and the record doesn't yet classify it, up to two
+temperature probes, so at most three calls (ADR-0014 section 4). It runs
 only while the version has no record or an unresolved one, and never blocks
 the gate; an attempt that can't finish leaves the binding unresolved until a
 governed gate needs it. The in-memory demo runs its gate inline, without the
 worker, so it skips resolution after save. Before save, an owner can run the
-capability check (`POST /api/judge/capability-check`): up to 6 probes over
+capability check (`POST /api/judge/capability-check`): up to 7 probes over
 the same fixed input, with the credential and endpoint the saved binding
 would use, derived as saving derives them, so a check never sends a key
 anywhere a saved binding couldn't. It reports which protocol, temperature,
-and reasoning the model takes, the documented default reasoning, and what the
-provider publishes, within a 60-second budget, and says when it ended early.
-Each owner may start 10 checks a minute per project, and a project runs at
-most 2 at once. The check records nothing: ADR-0014 carries its outcomes into
-the resolution record (TARGET), but the record is built from resolution's own
-probes after save (CURRENT). A check against a custom endpoint reaches the
-URL the owner names, as the saved binding's calls would; restricting which
-hosts a custom endpoint may name is not yet enforced (CURRENT).
+and reasoning the model takes, the documented default reasoning, the
+reasoning with which the ignored-temperature table lists the model, and what
+the provider publishes, within a 60-second budget, and says when it ended
+early. The same route classifies temperature for reasoning the author selects
+after the check (`classifyTemperature`): that reasoning without temperature,
+unless the check already saw that request accepted, then the temperature
+probes, so at most 3 calls. Its report classifies temperature only from
+requests it sent itself; the picker reads its probes together with the
+check's. Each owner may start 10 checks or
+classifications a minute per project, and a project runs at most 2 at once.
+The check records nothing: ADR-0014 carries its outcomes into the resolution
+record (TARGET), but the record is built from resolution's own probes after
+save (CURRENT). A check against a custom endpoint reaches the URL the owner
+names, as the saved binding's calls would; restricting which hosts a custom
+endpoint may name is not yet enforced (CURRENT).
 
-ADR-0014 decision 12 (2026-09-27) is TARGET, not yet implemented: temperature
-may stay unset wherever the model doesn't let the author choose it, classified
-by probing 0 and then 0.5; a stated temperature is refused where the
-ignored-temperature table lists the combination; the check sends up to 7
-probes, resolution after save up to 3, gate resolution up to 4, and the
-re-check one to four. The counts and rules above are CURRENT.
+In the model picker, temperature starts empty. The picker fills in 0 only
+where the check saw 0 accepted with the selected reasoning, and empties a 0
+it filled once that stops being so, for other reasoning or another model; a
+value the author typed stays. Where it saw 0 rejected and 0.5 accepted, the
+field stays empty, 0 is marked rejected, and the author states a value; a
+value the check saw rejected is marked so even where its probes classify
+nothing. Where 0 and 0.5 were both rejected, or the table lists the
+combination, the field is hidden with the reason and nothing is sent. Where
+no check could run, or its temperature probes ended in errors, the field is
+shown empty and resolution decides the gate. A check sends no `topP`, so
+where the draft carries over the base version's `topP`, the picker reads
+temperature as unknown and resolution classifies it with that `topP`. When
+the author selects reasoning the check didn't probe temperature with, the
+picker classifies it; saving waits for that, and for a newly picked model's
+check. A new check replaces the probes, so the picker drops a classification
+still answering for the old one and asks again. First-project setup shows no
+picker: it keeps the seeded binding's temperature 0, and a provider it falls
+back to starts with temperature unset (CURRENT).
 
 The author sees a version's resolution on its version page and in the
 evaluator lifecycle panel (`GET /api/evaluator-lifecycles/:id/resolution`):
@@ -242,7 +297,8 @@ copied known-failure regression revision, a durable developer exposure, and
 the append-only `candidate` seed event. No legacy writer may mint a version on this
 lineage without the complete bundle. Candidate creation and activation are
 governed gates: they require a resolved execution binding with explicit
-temperature and reasoning where the model takes them (ADR-0014 section 2),
+reasoning where the model takes it, and an explicit temperature where the
+model lets the author choose it (ADR-0014 section 2 and decision 12),
 resolved beforehand outside the transaction, and the candidate's resolution
 becomes its version's record.
 

@@ -130,7 +130,9 @@ export function SkillEditScreen() {
   const [models, setModels] = useState<JudgeModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  const [temperature, setTemperature] = useState("0");
+  // Temperature starts empty, and the model picker fills in 0 only where a
+  // check shows the model accepts it (ADR-0014 decision 12).
+  const [temperature, setTemperature] = useState("");
   const baseUrlValid = provider !== "custom" || /^https?:\/\/\S+$/i.test(baseUrl.trim());
   const providerAvailable = providerOptions.some((option) => option.provider === provider && option.available);
   // The model picker's settings, guided by a capability check (Batch 8F). First-project
@@ -139,7 +141,8 @@ export function SkillEditScreen() {
   const canCheckModel = !firstRun && providerAvailable && baseUrlValid && modelId.trim() !== "" && modelVersion.trim() !== "";
   const picker = useBindingPicker(pickerModel, (baseVersion ?? skill?.currentVersion)?.executionBinding ?? null, {
     canCheck: canCheckModel,
-    temperature
+    temperature,
+    setTemperature
   });
   const loadPickerSettings = picker.load;
   const pickerSavedFields = picker.savedFields;
@@ -197,7 +200,7 @@ export function SkillEditScreen() {
     setModelId(keeps ? fields.modelId : "");
     setModelVersion(keeps ? fields.modelVersion : "");
     setBaseUrl(keeps && selectedProvider === "custom" ? fields.baseUrl : "");
-    setTemperature(keeps ? fields.temperature : selectedProvider === "mock" ? "" : "0");
+    setTemperature(keeps ? fields.temperature : "");
     loadPickerSettings(keeps ? version : null);
   }, [loadPickerSettings]);
 
@@ -561,12 +564,14 @@ export function SkillEditScreen() {
     [skill, baseVersion, rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
   );
 
-  // A setting the check saw rejected would fail resolution after save, so it blocks saving.
+  // A setting the check saw rejected would fail resolution after save, so it
+  // blocks saving, and saving waits while a newly picked model is checked or
+  // temperature is classified for the selected reasoning.
   const draftInput = buildInput();
   const canSave =
     skill != null &&
     draftInput !== null &&
-    (firstRun || picker.blockingProblems.length === 0) &&
+    (firstRun || (picker.blockingProblems.length === 0 && !picker.checkPending && !picker.temperaturePending)) &&
     (typed
       ? typedQuestionFromDraft(typedDraft) !== null
       : rubric.trim().length > 0 && prompt.trim().length > 0) &&
@@ -902,7 +907,6 @@ export function SkillEditScreen() {
       modelsError={modelsError}
       pinnedModelMissing={pinnedModelMissing}
       temperature={temperature}
-      setTemperature={setTemperature}
       temperatureValid={temperatureValid}
       picker={picker}
       verdictKind={verdictKind}

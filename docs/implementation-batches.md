@@ -646,6 +646,12 @@ exact diff, and each review's correctness findings are resolved before merge.
   - Not yet run live: every OpenRouter check (no key). Tests stub
     OpenRouter and cover its paths in parts; no test runs a successful
     OpenRouter resolution or sealed calibration end to end.
+- ADR-0014 decision 12 (2026-09-27) later replaced the temperature rule in
+  8C, 8D, and Q1 below, which stay as the batch's record: temperature is
+  classified by probing 0 and then 0.5, stated only where the model lets the
+  author choose it, and never stated for a combination the
+  ignored-temperature table lists. `docs/architecture.md` describes the rule
+  as built.
 
 This batch changes Rubrist and Dailies. Both switch to the v2 contracts in
 one window and drop v1 support. Casefile changes only in the launch baseline

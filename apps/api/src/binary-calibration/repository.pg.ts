@@ -187,9 +187,15 @@ export class PgBinaryCalibrationRepository implements
     const run = await requireClaim(this.pool, claim, false);
     const binding = await loadGovernedBinding(this.pool, String(run.project_id), String(run.skill_version_id));
     if (!binding) throw repoError("state_conflict", "binary calibration evaluator version is unavailable");
+    // The run pins its binding; the re-check probes exactly it, and reads the
+    // record resolved for it (ADR-0014 decision 12).
+    const executionBinding = ExecutionBindingSchema.parse(parseJson(run.execution_binding));
     return {
-      // The run pins its binding; the re-check probes exactly it.
-      binding: { ...binding, executionBinding: ExecutionBindingSchema.parse(parseJson(run.execution_binding)) },
+      binding: {
+        ...binding,
+        executionBinding,
+        record: await loadResolutionRecord(this.pool, String(run.project_id), String(run.skill_version_id), executionBinding)
+      },
       authorized: run.authorization_check_id !== null && run.authorization_check_id !== undefined,
       msSinceUnknownRecheck: await msSinceUnknownRecheck(this.pool, String(run.project_id), String(run.id))
     };

@@ -9,16 +9,23 @@ import {
 } from "@rubrist/audit/runtime";
 import {
   CapabilityProbeSchema,
+  IGNORED_TEMPERATURE_VERSION,
   REASONING_DEFAULTS_VERSION,
   ResolutionRecordSchema,
+  TEMPERATURE_PROBE_VALUES,
+  probeRequestAccepted,
   reasoningFamilyFor,
   takesSamplingSettings,
+  temperatureOutcome,
+  temperatureSupportWith,
   type CapabilityProbe,
   type ExecutionBinding,
+  type IgnoredTemperatureEntry,
   type JudgeProviderCredentialSource,
   type ReasoningSettings,
   type ResolutionRecord,
   type SettingSupport,
+  type TemperatureSupport,
   type VerdictProtocolId
 } from "@rubrist/shared";
 import { canonicalJson } from "./canonical-json.js";
@@ -42,14 +49,6 @@ export const CAPABILITY_PROBE_INPUT = {
   prompt: "Judge the trace against the review guide below.\n\n<review_guide>\n{{rubric_markdown}}\n</review_guide>",
   trace: { id: "rubrist-capability-probe", input: { question: "What is 2 + 3?" }, output: { answer: "5" } }
 } as const;
-
-/**
- * The temperature a temperature probe sends: 1, the providers' default. A
- * model that takes temperature only at its default accepts it, so its
- * evaluators must state it; only a model refusing the default too is shown
- * rejecting the parameter itself (ADR-0014 section 2).
- */
-export const PROBE_TEMPERATURE = 1;
 
 /** Probes run in sequence while an author waits, so each is short. */
 export const PROBE_TIMEOUT_MS = 30_000;
@@ -174,28 +173,48 @@ async function sendProbe(
   return CapabilityProbeSchema.parse({ stage, purpose, verdictProtocol: binding.verdictProtocol, sent, ...attribution, usage, costMicroUsd: null });
 }
 
-/** A setting's support as a probe recorded it; `null` when the probe errored or says nothing about it. */
-function supportFrom(probe: CapabilityProbe, setting: "temperature" | "reasoning"): SettingSupport | null {
+/** Reasoning's support as a probe recorded it; `null` when the probe errored or says nothing about it. */
+function reasoningSupportFrom(probe: CapabilityProbe): SettingSupport | null {
   if (probe.outcome === "accepted") return "accepted";
   if (probe.outcome === "error") return null;
-  if (probe.rejection === "parameter" && probe.rejectedParameter === setting) return "parameter_rejected";
-  if (probe.rejection === "unattributed" || (probe.rejection === "value" && probe.rejectedParameter === setting)) return "value_rejected";
+  if (probe.rejection === "parameter" && probe.rejectedParameter === "reasoning") return "parameter_rejected";
+  if (probe.rejection === "unattributed" || (probe.rejection === "value" && probe.rejectedParameter === "reasoning")) return "value_rejected";
   return null;
 }
 
 /**
- * Summaries the governed gates read: temperature as probed with `reasoning`
- * (the saved reasoning once one exists), reasoning from any reasoning probe.
+ * The reasoning summary the governed gates read, from any reasoning probe.
  * The conservative answer wins: an acceptance, then a rejected value (the
  * parameter exists), and only then a rejected parameter.
  */
-function summarize(probes: readonly CapabilityProbe[], setting: "temperature" | "reasoning", reasoning?: ReasoningSettings | null): SettingSupport | null {
-  const relevant = probes.filter((probe) => probe.purpose === setting &&
-    (setting !== "temperature" || reasoning === undefined || sameSettings(probe.sent.reasoning, reasoning)));
-  const outcomes = relevant.map((probe) => supportFrom(probe, setting)).filter((support): support is SettingSupport => support !== null);
+function summarizeReasoning(probes: readonly CapabilityProbe[]): SettingSupport | null {
+  const outcomes = probes.filter((probe) => probe.purpose === "reasoning")
+    .map(reasoningSupportFrom).filter((support): support is SettingSupport => support !== null);
   if (outcomes.includes("accepted")) return "accepted";
   if (outcomes.includes("value_rejected")) return "value_rejected";
   return outcomes.includes("parameter_rejected") ? "parameter_rejected" : null;
+}
+
+/**
+ * The temperature probes on a request otherwise identical to `baseline`,
+ * which was accepted without temperature (ADR-0014 decision 12): temperature
+ * 0, and 0.5 only where 0 was rejected. A probe that ends in an error, or
+ * can't be sent, stops them, and temperature stays unknown. `send` records
+ * each probe; the ones sent are returned.
+ */
+async function sendTemperatureProbes(
+  send: (binding: ExecutionBinding) => Promise<CapabilityProbe | null>,
+  baseline: ExecutionBinding
+): Promise<CapabilityProbe[]> {
+  const sent: CapabilityProbe[] = [];
+  for (const temperature of TEMPERATURE_PROBE_VALUES) {
+    const probe = await send({ ...baseline, sampling: { ...baseline.sampling, temperature } });
+    if (probe === null) break;
+    sent.push(probe);
+    // Only a rejected request moves on; an answer that breaks the protocol still accepted the temperature.
+    if (probe.outcome !== "rejected" || probe.failureKind !== "provider_rejected_request") break;
+  }
+  return sent;
 }
 
 /** The parts of a binding a capability check probes; its probes describe only these. */
@@ -207,25 +226,30 @@ export interface CapabilityCheckResult {
   /** The first protocol a probe accepted, which the picker pre-selects; `null` when none did. */
   protocol: VerdictProtocolId | null;
   probes: CapabilityProbe[];
-  temperatureSupport: SettingSupport | null;
+  temperatureSupport: TemperatureSupport | null;
   reasoningSupport: SettingSupport | null;
-  /** The reasoning the temperature probe was sent with. */
+  /** The reasoning the temperature probes were sent with. */
   probedReasoning: ReasoningSettings | null;
 }
 
 /**
- * The capability check before save, at most 6 probes: protocols in section 3
- * order until one is accepted, sent with no optional settings; then one
- * temperature probe with the documented default reasoning; then up to two
+ * The capability check before save, at most 7 probes: protocols in section 3
+ * order until one is accepted, sent with no optional settings; then up to two
  * reasoning probes, the documented default (or a middle value) and the
- * family's no-reasoning setting. A transient error, or a call that can't be
- * sent, ends the check with what it learned.
+ * family's no-reasoning setting; then, once the request with the documented
+ * default reasoning (no reasoning fields where the table has no entry) was
+ * accepted without temperature, the temperature probes with that reasoning
+ * and no topP, unless the ignored-temperature table lists the model with it
+ * (ADR-0014 decision 12). A transient error, or a call that can't be sent,
+ * ends the check with what it learned.
  */
 export async function runCapabilityCheck(input: {
   base: CapabilityCheckBase;
   credentialSource: JudgeProviderCredentialSource | null;
   published: PublishedCapabilities | null;
   documentedDefault: ReasoningSettings | null;
+  /** Whether the ignored-temperature table lists the model with the documented default reasoning. */
+  temperatureIgnored: boolean;
   execute: ProbeExecutor;
 }): Promise<CapabilityCheckResult> {
   const { base, published, execute } = input;
@@ -243,8 +267,8 @@ export async function runCapabilityCheck(input: {
     credentialSource: input.credentialSource,
     protocol,
     probes,
-    temperatureSupport: summarize(probes, "temperature"),
-    reasoningSupport: summarize(probes, "reasoning"),
+    temperatureSupport: temperatureSupportWith(probes, { reasoning: probedReasoning, topP: null }),
+    reasoningSupport: summarizeReasoning(probes),
     probedReasoning
   });
   const send = async (purpose: CapabilityProbe["purpose"], binding: ExecutionBinding): Promise<CapabilityProbe | null> => {
@@ -266,20 +290,72 @@ export async function runCapabilityCheck(input: {
     if (probe!.rejection !== "mechanism" && probe!.rejection !== "unattributed") return result(null);
   }
   if (protocol === null) return result(null);
-  if (takesSamplingSettings(base.provider)) {
-    const temperature = await send("temperature", {
-      ...bare(protocol),
-      sampling: { temperature: PROBE_TEMPERATURE, topP: null },
-      reasoning: probedReasoning
-    });
-    if (ended(temperature)) return result(protocol);
-  }
   if (family !== null) {
     for (const reasoning of [input.documentedDefault ?? middleReasoning(family, published), noReasoning(family)]) {
-      if (ended(await send("reasoning", { ...bare(protocol), reasoning }))) break;
+      if (ended(await send("reasoning", { ...bare(protocol), reasoning }))) return result(protocol);
     }
   }
+  const baseline: ExecutionBinding = { ...bare(protocol), reasoning: probedReasoning };
+  // The protocol probe, or the reasoning probe with the documented default, is the request the temperature probes add to.
+  const baselineAccepted = probes.some((probe) => probe.sent.temperature === null && probe.verdictProtocol === protocol &&
+    sameSettings(probe.sent.reasoning, probedReasoning) && probeRequestAccepted(probe));
+  if (takesSamplingSettings(base.provider) && !input.temperatureIgnored && baselineAccepted) {
+    await sendTemperatureProbes((binding) => send("temperature", binding), baseline);
+  }
   return result(protocol);
+}
+
+/**
+ * Classifies temperature for reasoning the author selected after the check
+ * (ADR-0014 decision 12), on the author's protocol with no topP, at most 3
+ * calls: that reasoning without temperature, unless the check already saw
+ * that request accepted (`baselineAccepted`), then the temperature probes
+ * once it is accepted. A combination the ignored-temperature table lists is
+ * sent nothing. It is reported as a check of that reasoning, classified only
+ * from what this call saw: where the caller vouched for the baseline, the
+ * report says nothing about temperature, and the picker reads these probes
+ * together with the check's.
+ */
+export async function classifyTemperatureFor(input: {
+  base: CapabilityCheckBase;
+  credentialSource: JudgeProviderCredentialSource | null;
+  published: PublishedCapabilities | null;
+  verdictProtocol: VerdictProtocolId;
+  reasoning: ReasoningSettings | null;
+  baselineAccepted: boolean;
+  /** Whether the ignored-temperature table lists the model with this reasoning. */
+  temperatureIgnored: boolean;
+  execute: ProbeExecutor;
+}): Promise<CapabilityCheckResult> {
+  const baseline: ExecutionBinding = {
+    ...input.base,
+    sampling: { temperature: null, topP: null },
+    reasoning: input.reasoning,
+    verdictProtocol: input.verdictProtocol
+  };
+  const probes: CapabilityProbe[] = [];
+  const send = async (purpose: CapabilityProbe["purpose"], binding: ExecutionBinding): Promise<CapabilityProbe | null> => {
+    const probe = await sendProbe(input.execute, input.published, "capability_check", purpose, binding);
+    if (probe !== null) probes.push(probe);
+    return probe;
+  };
+  const result = (): CapabilityCheckResult => ({
+    base: input.base,
+    credentialSource: input.credentialSource,
+    protocol: input.verdictProtocol,
+    probes,
+    temperatureSupport: temperatureSupportWith(probes, { reasoning: input.reasoning, topP: null }),
+    reasoningSupport: summarizeReasoning(probes),
+    probedReasoning: input.reasoning
+  });
+  if (!takesSamplingSettings(input.base.provider) || input.temperatureIgnored) return result();
+  if (!input.baselineAccepted) {
+    // With no reasoning fields, the baseline is the protocol probe's request.
+    const probe = await send(input.reasoning === null ? "protocol" : "reasoning", baseline);
+    if (probe === null || !probeRequestAccepted(probe)) return result();
+  }
+  await sendTemperatureProbes((binding) => send("temperature", binding), baseline);
+  return result();
 }
 
 function checkDescribes(check: CapabilityCheckResult, binding: ExecutionBinding, credentialSource: JudgeProviderCredentialSource | null): boolean {
@@ -302,11 +378,14 @@ function checkDescribes(check: CapabilityCheckResult, binding: ExecutionBinding,
  * `unresolved`. The binding is never changed.
  *
  * Once the saved request is accepted, a setting the family has and the
- * binding leaves unset is probed, unless a probe of it already has a
- * recorded outcome (temperature with the saved reasoning): temperature at
- * save and at a gate, reasoning only at a gate, so at most 2 calls at save
- * and 3 at a gate. Check probes count only when the check describes this
- * binding and used the same credential source.
+ * binding leaves unset is probed, unless the recorded probes already answer
+ * for it: temperature, at save and at a gate, with the saved reasoning and
+ * topP and the confirming probe as the request it adds to (0, then 0.5 where
+ * 0 is rejected), and never where the ignored-temperature table lists the
+ * combination (decision 12); reasoning only at a gate. So at most 3 calls at
+ * save and 4 at a gate. Check probes count only when the check describes
+ * this binding and used the same credential source. The record keeps the
+ * table version and the entry that matched.
  */
 export async function resolveExecutionBinding(input: {
   binding: ExecutionBinding;
@@ -315,6 +394,8 @@ export async function resolveExecutionBinding(input: {
   published: PublishedCapabilities | null;
   documentedDefault: ReasoningSettings | null;
   credentialSource: JudgeProviderCredentialSource | null;
+  /** The ignored-temperature entry listing the saved combination, matched on the server; `null` when unlisted. */
+  ignoredTemperature: IgnoredTemperatureEntry | null;
   execute: ProbeExecutor;
   now: Date;
 }): Promise<ResolutionRecord> {
@@ -323,27 +404,23 @@ export async function resolveExecutionBinding(input: {
     ? input.check.probes.filter((probe) => probe.stage === "capability_check")
     : [];
   const probes: CapabilityProbe[] = [...checkProbes];
-  const confirm = await sendProbe(execute, published, "resolution", "confirm", binding);
-  if (confirm !== null) probes.push(confirm);
+  const send = async (purpose: CapabilityProbe["purpose"], probed: ExecutionBinding): Promise<CapabilityProbe | null> => {
+    const probe = await sendProbe(execute, published, "resolution", purpose, probed);
+    if (probe !== null) probes.push(probe);
+    return probe;
+  };
+  const confirm = await send("confirm", binding);
   const family = reasoningFamilyFor(binding.provider);
-  const recorded = (probe: CapabilityProbe) => probe.outcome !== "error";
+  const saved = { reasoning: binding.reasoning, topP: binding.sampling.topP };
 
   if (confirm?.outcome === "accepted") {
-    if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null &&
-        !probes.some((probe) => probe.purpose === "temperature" && recorded(probe) && sameSettings(probe.sent.reasoning, binding.reasoning))) {
-      const probe = await sendProbe(execute, published, "resolution", "temperature", {
-        ...binding,
-        sampling: { ...binding.sampling, temperature: PROBE_TEMPERATURE }
-      });
-      if (probe !== null) probes.push(probe);
+    if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null && input.ignoredTemperature === null &&
+        temperatureSupportWith(probes, saved) === null) {
+      await sendTemperatureProbes((probed) => send("temperature", probed), binding);
     }
     if (input.trigger === "gate" && family !== null && binding.reasoning === null &&
-        !probes.some((probe) => probe.purpose === "reasoning" && recorded(probe))) {
-      const probe = await sendProbe(execute, published, "resolution", "reasoning", {
-        ...binding,
-        reasoning: input.documentedDefault ?? middleReasoning(family, published)
-      });
-      if (probe !== null) probes.push(probe);
+        !probes.some((probe) => probe.purpose === "reasoning" && probe.outcome !== "error")) {
+      await send("reasoning", { ...binding, reasoning: input.documentedDefault ?? middleReasoning(family, published) });
     }
   }
 
@@ -351,9 +428,11 @@ export async function resolveExecutionBinding(input: {
     status: confirm?.outcome === "accepted" ? "resolved" : confirm?.outcome === "rejected" ? "failed" : "unresolved",
     capabilitySnapshotDigest: published?.snapshotDigest ?? null,
     reasoningDefaultsVersion: REASONING_DEFAULTS_VERSION,
+    ignoredTemperatureVersion: IGNORED_TEMPERATURE_VERSION,
+    ignoredTemperatureEntry: input.ignoredTemperature,
     credentialSource: input.credentialSource,
-    temperatureSupport: summarize(probes, "temperature", binding.reasoning),
-    reasoningSupport: summarize(probes, "reasoning"),
+    temperatureSupport: temperatureSupportWith(probes, saved),
+    reasoningSupport: summarizeReasoning(probes),
     probes,
     checkedAt: input.now.toISOString()
   });
@@ -361,58 +440,76 @@ export async function resolveExecutionBinding(input: {
 
 /**
  * The re-check before a sealed calibration is authorized or a governed run
- * starts: the confirming probe again, then a probe of each setting the family
- * has and the binding leaves unset, so one to three calls (only the first
- * when the saved request isn't accepted). The resolution holds only if the
- * saved request is still accepted and every unset setting is still rejected
- * as a parameter: a provider that starts accepting it, or any of its values,
- * would otherwise apply its own default unseen. A transient error means it
- * can't be shown to hold, so the run waits. The probes belong to the run they
- * guard; the resolution record never changes.
+ * starts: the confirming probe again; where temperature is unset and the
+ * resolution record doesn't list the combination as ignoring it, the
+ * temperature probes with the saved reasoning and topP; and where reasoning
+ * is unset, a reasoning probe; so one to four calls (only the first when the
+ * saved request isn't accepted). The resolution holds only if the saved
+ * request is still accepted, temperature 0 and 0.5 are still both rejected,
+ * and reasoning is still rejected as a parameter: a provider that starts
+ * letting the author choose an unset setting would otherwise apply its own
+ * default unseen. A transient error means it can't be shown to hold, so the
+ * run waits. The probes belong to the run they guard; the resolution record
+ * never changes.
  */
 export async function recheckExecutionBinding(input: {
   binding: ExecutionBinding;
   published: PublishedCapabilities | null;
   documentedDefault: ReasoningSettings | null;
+  /** Whether the resolution record lists the combination as ignoring temperature, in the table version it names. */
+  temperatureIgnored: boolean;
   execute: ProbeExecutor;
 }): Promise<{ holds: boolean; probes: CapabilityProbe[] }> {
   const { binding, execute, published } = input;
-  const confirm = await sendProbe(execute, published, "recheck", "confirm", binding);
-  if (confirm === null) return { holds: false, probes: [] };
-  const probes = [confirm];
-  if (confirm.outcome !== "accepted") return { holds: false, probes };
+  const probes: CapabilityProbe[] = [];
+  let unsent = false;
+  const send = async (purpose: CapabilityProbe["purpose"], probed: ExecutionBinding): Promise<CapabilityProbe | null> => {
+    const probe = await sendProbe(execute, published, "recheck", purpose, probed);
+    if (probe === null) unsent = true;
+    else probes.push(probe);
+    return probe;
+  };
+  const confirm = await send("confirm", binding);
+  if (confirm?.outcome !== "accepted") return { holds: false, probes };
   const family = reasoningFamilyFor(binding.provider);
-  const unset: Array<{ setting: "temperature" | "reasoning"; binding: ExecutionBinding }> = [];
-  if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null) {
-    unset.push({ setting: "temperature", binding: { ...binding, sampling: { ...binding.sampling, temperature: PROBE_TEMPERATURE } } });
+  let holds = true;
+  if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null && !input.temperatureIgnored) {
+    const temperature = await sendTemperatureProbes((probed) => send("temperature", probed), binding);
+    if (unsent) return { holds: false, probes };
+    if (temperatureOutcome(temperature) !== "not_adjustable") holds = false;
   }
   if (family !== null && binding.reasoning === null) {
-    unset.push({ setting: "reasoning", binding: { ...binding, reasoning: input.documentedDefault ?? middleReasoning(family, published) } });
-  }
-  let holds = true;
-  for (const { setting, binding: probed } of unset) {
-    const probe = await sendProbe(execute, published, "recheck", setting, probed);
+    const probe = await send("reasoning", { ...binding, reasoning: input.documentedDefault ?? middleReasoning(family, published) });
     if (probe === null) return { holds: false, probes };
-    probes.push(probe);
-    if (supportFrom(probe, setting) !== "parameter_rejected") holds = false;
+    if (reasoningSupportFrom(probe) !== "parameter_rejected") holds = false;
   }
   return { holds, probes };
 }
 
 /**
- * What stops a binding at a governed gate (ADR-0014 section 2): candidate
- * creation, activation, and sealed calibration need a resolved binding; an
- * explicit temperature unless the family takes no sampling or the record
- * shows the model rejecting the parameter itself with the saved reasoning;
- * and explicit reasoning unless the family has no shape or the record shows
- * the model rejecting the reasoning parameter itself. The record must be the
- * one resolved for this binding.
+ * What stops a binding at a governed gate (ADR-0014 section 2 and decision
+ * 12). Candidate creation, activation, and sealed calibration need a
+ * resolved binding. Temperature must be stated wherever the model lets the
+ * author choose it; it may stay unset where the family takes no sampling,
+ * the record shows 0 and 0.5 both rejected with the saved reasoning and
+ * topP, or the record lists the combination as ignoring temperature, where a
+ * stated one is refused. Reasoning must be explicit unless the family has no
+ * shape or the record shows the model rejecting the reasoning parameter
+ * itself. The record must be the one resolved for this binding, and its
+ * table version decides the listing, never a newer table.
  */
 export function governedGateProblems(binding: ExecutionBinding, record: ResolutionRecord | null): string[] {
   const problems: string[] = [];
   if (record?.status !== "resolved") problems.push(`the execution binding is ${record?.status ?? "unresolved"}, not resolved`);
-  if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null && record?.temperatureSupport !== "parameter_rejected") {
-    problems.push("temperature must be explicit: the model hasn't been shown to reject the temperature parameter");
+  if (takesSamplingSettings(binding.provider)) {
+    const listed = record?.ignoredTemperatureEntry ?? null;
+    if (binding.sampling.temperature === null) {
+      if (listed === null && record?.temperatureSupport !== "not_adjustable") {
+        problems.push("temperature must be explicit: the model hasn't been shown to reject temperatures 0 and 0.5 with the saved reasoning and topP");
+      }
+    } else if (record !== null && listed !== null) {
+      problems.push(`temperature must be unset: ${record.ignoredTemperatureVersion} lists ${binding.modelId} as ignoring temperature with the saved reasoning`);
+    }
   }
   if (reasoningFamilyFor(binding.provider) !== null && binding.reasoning === null && record?.reasoningSupport !== "parameter_rejected") {
     problems.push("reasoning must be explicit: the model hasn't been shown to reject the reasoning parameter");

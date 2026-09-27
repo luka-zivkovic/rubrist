@@ -1,12 +1,14 @@
 import { EvaluatorCallError, type ExecutionFetch, type VerdictSpec } from "@rubrist/audit/runtime";
 import {
   CapabilityCheckReportSchema,
+  IGNORED_TEMPERATURE_VERSION,
   REASONING_DEFAULTS_VERSION,
   defaultVerdictProtocol,
   documentedReasoningDefault,
   mutableModelAlias,
   reasoningFamilyFor,
   takesSamplingSettings,
+  temperatureOutcome,
   verdictProtocolsFor,
   type CapabilityCheckInput,
   type CapabilityCheckReport,
@@ -17,9 +19,11 @@ import {
   type JudgeProviderCredentialSource,
   type ResolutionRecord
 } from "@rubrist/shared";
+import { canonicalJson } from "./canonical-json.js";
 import { fetchPublishedCapabilities, type CapabilityFetch } from "./evaluator-capability.js";
 import {
   PROBE_TIMEOUT_MS,
+  classifyTemperatureFor,
   governedGateProblems,
   recheckExecutionBinding,
   resolveExecutionBinding,
@@ -27,6 +31,7 @@ import {
   bindingProbeExecutor
 } from "./evaluator-resolution.js";
 import { endpointUrlFor, executionBindingFromInput } from "./execution-binding.js";
+import { ignoredTemperatureEntries, ignoredTemperatureEntryFor } from "./ignored-temperature.js";
 import { judgeProviderEnvironmentKey } from "./judge-provider.js";
 
 // Resolution and re-check as the governed gates and runs use them (ADR-0014
@@ -75,6 +80,15 @@ export interface GovernedBinding {
   spec: VerdictSpec;
 }
 
+/**
+ * A binding as the re-check reads it: with the resolution record it guards,
+ * whose ignored-temperature entry, in the table version recorded at
+ * resolution, says whether temperature is probed (ADR-0014 decision 12).
+ */
+export interface RecheckedBinding extends GovernedBinding {
+  record: ResolutionRecord | null;
+}
+
 async function probeContext(services: BindingResolutionServices, governed: GovernedBinding) {
   const binding = governed.executionBinding;
   const credential = binding.provider === "mock"
@@ -100,15 +114,16 @@ async function probeContext(services: BindingResolutionServices, governed: Gover
   };
 }
 
-/** Resolution at a governed gate: the confirming probe and, where unset, up to two setting probes. */
+/** Resolution at a governed gate: the confirming probe and, where unset, up to two temperature probes and a reasoning probe. */
 export async function resolveGovernedBinding(services: BindingResolutionServices, governed: GovernedBinding): Promise<ResolutionRecord> {
   return resolveBinding(services, governed, "gate");
 }
 
 /**
  * Resolution after save (ADR-0014 section 4): the confirming probe and, where
- * temperature is unset, a temperature probe, so at most 2 calls. It confirms
- * the saved binding and never changes it.
+ * temperature is unset and not listed as ignored, up to two temperature
+ * probes, so at most 3 calls. It confirms the saved binding and never changes
+ * it.
  */
 export async function resolveSavedBinding(services: BindingResolutionServices, governed: GovernedBinding): Promise<ResolutionRecord> {
   return resolveBinding(services, governed, "save");
@@ -123,6 +138,8 @@ async function resolveBinding(services: BindingResolutionServices, governed: Gov
     published: context.published,
     documentedDefault: context.documentedDefault,
     credentialSource: context.credential.source,
+    // Matched now, and kept in the record: the gates and re-check read this entry, never a newer table.
+    ignoredTemperature: ignoredTemperatureEntryFor(governed.executionBinding, governed.executionBinding.reasoning),
     execute: context.execute,
     now: services.now?.() ?? new Date()
   });
@@ -139,12 +156,13 @@ export interface RecheckOutcome {
  * resolution holds, but it doesn't show it no longer holds either: the run
  * waits and is re-checked later.
  */
-export async function recheckGovernedBinding(services: BindingResolutionServices, governed: GovernedBinding): Promise<RecheckOutcome> {
+export async function recheckGovernedBinding(services: BindingResolutionServices, governed: RecheckedBinding): Promise<RecheckOutcome> {
   const context = await probeContext(services, governed);
   const result = await recheckExecutionBinding({
     binding: governed.executionBinding,
     published: context.published,
     documentedDefault: context.documentedDefault,
+    temperatureIgnored: governed.record !== null && governed.record.ignoredTemperatureEntry !== null,
     execute: context.execute
   });
   if (result.holds) return { outcome: "holds", probes: result.probes };
@@ -152,13 +170,15 @@ export async function recheckGovernedBinding(services: BindingResolutionServices
   if (!confirm || confirm.outcome === "error") return { outcome: "unknown", probes: result.probes };
   if (confirm.outcome === "rejected") return { outcome: "no_longer_holds", probes: result.probes };
   // The saved request is still accepted. The resolution no longer holds once
-  // any unset setting has a definite answer other than "the parameter is
+  // temperature 0 or 0.5 is accepted (by outcome, ADR-0014 decision 12), or
+  // unset reasoning has a definite answer other than "the parameter is
   // rejected". A rejection Rubrist couldn't attribute only because the
   // provider's published capabilities couldn't be read is no such answer.
   const publishes = governed.executionBinding.provider === "anthropic" || governed.executionBinding.provider === "openrouter";
   const metadataMissing = publishes && context.published === null;
-  const definite = settings.some((probe) => probe.outcome === "accepted" ||
-    (probe.outcome === "rejected" && probe.rejection !== "parameter" && !(probe.rejection === "unattributed" && metadataMissing)));
+  const definite = temperatureOutcome(settings.filter((probe) => probe.purpose === "temperature")) === "adjustable" ||
+    settings.some((probe) => probe.purpose === "reasoning" && (probe.outcome === "accepted" ||
+      (probe.outcome === "rejected" && probe.rejection !== "parameter" && !(probe.rejection === "unattributed" && metadataMissing))));
   return { outcome: definite ? "no_longer_holds" : "unknown", probes: result.probes };
 }
 
@@ -182,10 +202,11 @@ function unsetSettings(binding: ExecutionBinding): Array<"temperature" | "reason
   ];
 }
 
-/** Unset settings the gate needs an answer for that the record doesn't have. */
+/** Unset settings the gate needs an answer for that the record doesn't have; a listed combination needs none for temperature. */
 function unansweredSettings(binding: ExecutionBinding, record: ResolutionRecord): Array<"temperature" | "reasoning"> {
   const unanswered: Array<"temperature" | "reasoning"> = [];
-  if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null && record.temperatureSupport === null) {
+  if (takesSamplingSettings(binding.provider) && binding.sampling.temperature === null &&
+      record.temperatureSupport === null && record.ignoredTemperatureEntry === null) {
     unanswered.push("temperature");
   }
   if (reasoningFamilyFor(binding.provider) !== null && binding.reasoning === null && record.reasoningSupport === null) {
@@ -195,11 +216,6 @@ function unansweredSettings(binding: ExecutionBinding, record: ResolutionRecord)
 }
 
 
-/**
- * Why a governed gate refuses a binding, with the suggestion ADR-0014 section 4
- * asks for: "leave it unset" only where the parameter itself was rejected,
- * "choose another value" where only a value was. `null` when the gate passes.
- */
 /**
  * Why a binding can't pass the governed gates, for its author: a mutable
  * model alias and the built-in mock are refused before resolution is read
@@ -236,15 +252,33 @@ export function bindingSettingStates(binding: ExecutionBinding): { temperature: 
   };
 }
 
+/**
+ * Why a governed gate refuses a binding, with the suggestion ADR-0014 section
+ * 4 asks for; `null` when the gate passes. Where the saved request was
+ * rejected and it may have been for the stated temperature, the suggestion
+ * comes from the record's temperature outcomes with the saved reasoning and
+ * topP, never from the rejection's wording (decision 12): "leave it unset"
+ * where 0 and 0.5 were both rejected, "choose another value" where one was
+ * accepted, and none where temperature is unknown. For another parameter,
+ * "leave it unset" where the parameter itself was rejected, and "choose
+ * another value" where only a value was.
+ */
 export function governedGateRefusal(binding: ExecutionBinding, record: ResolutionRecord | null): GovernedGateRefusal | null {
   const problems = governedGateProblems(binding, record);
   if (problems.length === 0) return null;
   const confirm = record?.probes.find((probe) => probe.stage === "resolution" && probe.purpose === "confirm") ?? null;
   const rejected = confirm?.outcome === "rejected" ? confirm : null;
+  const temperatureStated = takesSamplingSettings(binding.provider) && binding.sampling.temperature !== null;
+  const temperatureRejected = rejected !== null && temperatureStated && rejected.rejection !== "mechanism" &&
+    (rejected.rejectedParameter === null || rejected.rejectedParameter === "temperature");
   let suggestion: string;
-  if (rejected?.rejection === "parameter" && rejected.rejectedParameter !== null) {
+  if (temperatureRejected && record?.temperatureSupport === "not_adjustable") {
+    suggestion = "Save a new evaluator version that leaves temperature unset: the model rejected temperatures 0 and 0.5 with the saved reasoning.";
+  } else if (temperatureRejected && record?.temperatureSupport === "adjustable") {
+    suggestion = "Save a new evaluator version with another temperature value.";
+  } else if (rejected?.rejection === "parameter" && rejected.rejectedParameter !== null && rejected.rejectedParameter !== "temperature") {
     suggestion = `Save a new evaluator version that leaves ${rejected.rejectedParameter} unset.`;
-  } else if (rejected?.rejection === "value" && rejected.rejectedParameter !== null) {
+  } else if (rejected?.rejection === "value" && rejected.rejectedParameter !== null && rejected.rejectedParameter !== "temperature") {
     suggestion = `Save a new evaluator version with another ${rejected.rejectedParameter} value.`;
   } else if (rejected?.rejection === "mechanism") {
     // A provider with one protocol (TypeSafe's typed-question/v1) has no other to choose.
@@ -258,17 +292,27 @@ export function governedGateRefusal(binding: ExecutionBinding, record: Resolutio
   } else if (record?.status !== "resolved") {
     suggestion = "Try again once the provider is reachable with a working credential.";
   } else {
-    // An answered setting the model takes but the binding leaves unset needs
-    // a new version whatever else resolution finds, so it leads.
+    // An answered setting the binding must change needs a new version
+    // whatever else resolution finds, so it leads: a stated temperature the
+    // record lists as ignored, or an unset setting the model lets the author
+    // choose.
     const unanswered = unansweredSettings(binding, record);
-    const support = { temperature: record.temperatureSupport, reasoning: record.reasoningSupport };
-    const unstated = unsetSettings(binding).filter((setting) => support[setting] !== null && support[setting] !== "parameter_rejected");
+    const unstated = unsetSettings(binding).filter((setting) => setting === "temperature"
+      ? record.temperatureSupport === "adjustable" && record.ignoredTemperatureEntry === null
+      : record.reasoningSupport !== null && record.reasoningSupport !== "parameter_rejected");
     // Resolution after save never probes reasoning, so a setting may simply not have been asked about yet.
     const errored = unanswered.filter((setting) => record.probes.some((probe) => probe.purpose === setting && probe.outcome === "error"));
-    if (unstated.length > 0) {
+    const saved = canonicalJson({ reasoning: binding.reasoning, topP: binding.sampling.topP });
+    const zeroRejected = record.probes.some((probe) => probe.purpose === "temperature" && probe.sent.temperature === 0 &&
+      probe.failureKind === "provider_rejected_request" && canonicalJson({ reasoning: probe.sent.reasoning, topP: probe.sent.topP }) === saved);
+    if (temperatureStated && record.ignoredTemperatureEntry !== null) {
+      suggestion = `Save a new evaluator version that leaves temperature unset: ${record.ignoredTemperatureVersion} lists ${binding.modelId} as ignoring it with the saved reasoning${
+        unstated.length > 0 ? `, and states its ${unstated.join(" and ")} explicitly` : ""}.`;
+    } else if (unstated.length > 0) {
       suggestion = `Save a new evaluator version that states its ${unstated.join(" and ")} explicitly${
         unanswered.length > 0 ? `; resolve first to learn whether its ${unanswered.join(" and ")} must be stated too` : ""}.${
-        unstated.some((setting) => support[setting] === "value_rejected") ? " The model rejected the value the check probed, so choose one it accepts." : ""}`;
+        unstated.includes("temperature") && zeroRejected ? " The model rejected temperature 0 with the saved reasoning, so choose another value." : ""}${
+        unstated.includes("reasoning") && record.reasoningSupport === "value_rejected" ? " The model rejected the reasoning value the check probed, so choose one it accepts." : ""}`;
     } else if (errored.length > 0) {
       suggestion = `Try again: the model's answer about ${errored.join(" and ")} wasn't recorded, because its probe failed.`;
     } else {
@@ -297,18 +341,22 @@ export const CAPABILITY_CHECK_BUDGET_MS = 60_000;
  * what a saved binding would send: the endpoint and credential are derived as
  * saving derives them (only the custom provider names its own URL; OpenAI on
  * the managed endpoint uses the platform's base-URL override), so a check can
- * never send a key anywhere a saved binding couldn't. At most 6 probes in
+ * never send a key anywhere a saved binding couldn't. At most 7 probes in
  * sequence over the fixed probe input, within CAPABILITY_CHECK_BUDGET_MS; it
- * records nothing. An input no binding could have is an
- * ExecutionBindingInputError.
+ * records nothing. With `classifyTemperature` it classifies temperature for
+ * the author's reasoning instead, at most 3 probes (decision 12). The report
+ * says with which reasoning the ignored-temperature table lists the model,
+ * since only the server can match the endpoint. An input no binding could
+ * have is an ExecutionBindingInputError.
  */
 export async function checkBindingCapabilities(
   services: BindingResolutionServices,
   projectId: string,
   input: CapabilityCheckInput
 ): Promise<CapabilityCheckReport> {
+  const { classifyTemperature: classify, ...model } = input;
   const { executionBinding: saved, customEndpointUrl } = executionBindingFromInput({
-    ...input,
+    ...model,
     sampling: { temperature: null, topP: null },
     reasoning: null,
     verdictProtocol: defaultVerdictProtocol(input.provider)
@@ -328,7 +376,7 @@ export async function checkBindingCapabilities(
   const deadline = clock() + CAPABILITY_CHECK_BUDGET_MS;
   // Whether a probe couldn't be sent (out of time, or refused before the call).
   let unsent = false;
-  const check = await runCapabilityCheck({
+  const context = {
     base: {
       provider: saved.provider,
       endpoint: saved.endpoint,
@@ -339,9 +387,8 @@ export async function checkBindingCapabilities(
     },
     credentialSource: credential.source,
     published,
-    documentedDefault,
     // Each probe gets what is left of the budget; one that can't start ends the check.
-    execute: async (binding) => {
+    execute: async (binding: ExecutionBinding) => {
       const remaining = deadline - clock();
       try {
         if (remaining <= 0) {
@@ -359,7 +406,20 @@ export async function checkBindingCapabilities(
         throw error;
       }
     }
-  });
+  };
+  const check = classify === undefined
+    ? await runCapabilityCheck({
+        ...context,
+        documentedDefault,
+        temperatureIgnored: ignoredTemperatureEntryFor(saved, documentedDefault) !== null
+      })
+    : await classifyTemperatureFor({
+        ...context,
+        verdictProtocol: classify.verdictProtocol,
+        reasoning: classify.reasoning,
+        baselineAccepted: classify.baselineAccepted,
+        temperatureIgnored: ignoredTemperatureEntryFor(saved, classify.reasoning) !== null
+      });
   const last = check.probes.at(-1);
   return CapabilityCheckReportSchema.parse({
     credentialSource: credential.source,
@@ -370,6 +430,8 @@ export async function checkBindingCapabilities(
     probedReasoning: check.probedReasoning,
     documentedDefault,
     reasoningDefaultsVersion: REASONING_DEFAULTS_VERSION,
+    ignoredTemperatureVersion: IGNORED_TEMPERATURE_VERSION,
+    temperatureIgnoredWith: ignoredTemperatureEntries(saved).map((entry) => entry.reasoning),
     // The check ended early: a probe couldn't be sent, or the last one ended on a transient error.
     interrupted: unsent || last?.outcome === "error",
     published: published === null ? null : {
