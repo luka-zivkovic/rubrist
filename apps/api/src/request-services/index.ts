@@ -42,7 +42,7 @@ export interface CreateRequestServicesOptions {
 }
 
 export const PRODUCTION_INGEST_DEFAULT_RECORDS_PER_MINUTE = 60_000;
-/** Capability checks each owner may start per project per minute; each sends up to six provider calls. */
+/** Capability checks each owner may start per project per minute; each sends up to seven provider calls, a temperature classification up to three. */
 export const CAPABILITY_CHECKS_PER_MINUTE = 10;
 
 // createApp owns exactly one of these containers. Every extracted router gets

@@ -283,6 +283,16 @@ run("PgBinaryCalibrationRepository", () => {
       await saveResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING, unresolved);
       expect(await saveResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING, await resolvedRecordFor(SEEDED_BINDING), { onlyOverUnresolved: true }))
         .toMatchObject({ status: "resolved" });
+      // A record from before ADR-0014 decision 12, which probed temperature at
+      // 1 and summarized it by wording, doesn't parse: it reads as no record,
+      // and the next resolution replaces it even where it said failed.
+      const { ignoredTemperatureVersion: _version, ignoredTemperatureEntry: _entry, ...old } = await temperatureRejectingRecordFor(SEEDED_BINDING);
+      await pool.query(`update evaluator_resolution_records set status='failed', record=$2::jsonb where skill_version_id=$1`,
+        [skillVersionId, JSON.stringify({ ...old, temperatureSupport: "parameter_rejected" })]);
+      expect(await loadResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING)).toBeNull();
+      await expect(repository.createRun(OWNER, input)).rejects.toMatchObject({ code: "ineligible", message: expect.stringContaining("unresolved") });
+      expect(await saveResolutionRecord(pool, PROJECT_ID, skillVersionId, SEEDED_BINDING, await resolvedRecordFor(SEEDED_BINDING)))
+        .toMatchObject({ status: "resolved" });
       // A version whose text the definition's limits refuse has no identity.
       await pool.query(`update skill_versions set execution_binding = $2::jsonb, rubric_markdown = repeat('x', 100001) where id=$1`, [skillVersionId, JSON.stringify(storedBinding)]);
       await expect(repository.createRun(OWNER, input)).rejects.toMatchObject({

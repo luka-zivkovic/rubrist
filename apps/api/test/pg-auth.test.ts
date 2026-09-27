@@ -395,6 +395,16 @@ run("Postgres auth flow", () => {
         body: JSON.stringify({ provider: "anthropic", endpoint: { kind: "managed" }, modelId: "claude-opus-5-5", modelVersion: "claude-opus-5-5", outputTokenLimit: 1_200, routing: null })
       });
       expect(memberCapabilityCheck.status).toBe(403);
+      // So does a temperature classification for newly selected reasoning (ADR-0014 decision 12).
+      const memberClassification = await app.request("/api/judge/capability-check", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: memberCookie },
+        body: JSON.stringify({
+          provider: "anthropic", endpoint: { kind: "managed" }, modelId: "claude-sonnet-4-6", modelVersion: "claude-sonnet-4-6", outputTokenLimit: 1_200, routing: null,
+          classifyTemperature: { reasoning: { family: "anthropic", thinking: { type: "disabled" }, effort: "high" }, verdictProtocol: "anthropic.structured-output/v1", baselineAccepted: false }
+        })
+      });
+      expect(memberClassification.status).toBe(403);
 
       const memberInvite = await app.request("/api/users/invite", {
         method: "POST",

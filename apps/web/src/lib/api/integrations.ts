@@ -221,8 +221,10 @@ export async function fetchJudgeModels(provider: JudgeProviderId): Promise<Judge
 }
 
 /**
- * The capability check before save (ADR-0014 section 4): up to 6 probes of the
- * model, with the credential and endpoint a saved binding would use.
+ * The capability check before save (ADR-0014 section 4): up to 7 probes of the
+ * model, with the credential and endpoint a saved binding would use. With
+ * `classifyTemperature`, up to 3 probes classify temperature for reasoning
+ * the author selected after the check (decision 12).
  */
 export async function checkModelCapabilities(input: CapabilityCheckInput): Promise<CapabilityCheckReport> {
   const response = await apiFetch(`${API_BASE}/api/judge/capability-check`, {

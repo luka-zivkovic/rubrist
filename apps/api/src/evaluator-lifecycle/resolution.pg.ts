@@ -35,7 +35,9 @@ const parseJson = (value: unknown): unknown => typeof value === "string" ? JSON.
 /**
  * A version's resolution record, only if it was resolved for exactly this
  * binding: a record for another binding (the version's binding changed out of
- * band) is no record at all.
+ * band) is no record at all. So is one that doesn't parse under the current
+ * rules, such as a record that probed temperature at 1 before ADR-0014
+ * decision 12, so the binding resolves again.
  */
 export async function loadResolutionRecord(
   db: Db,
@@ -48,7 +50,8 @@ export async function loadResolutionRecord(
     [projectId, skillVersionId]
   )).rows[0];
   if (!row || String(row.binding_digest) !== sha256Digest(binding)) return null;
-  return ResolutionRecordSchema.parse(parseJson(row.record));
+  const parsed = ResolutionRecordSchema.safeParse(parseJson(row.record));
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -58,7 +61,8 @@ export async function loadResolutionRecord(
  * resolved; the stored failed record is returned instead. With
  * `onlyOverUnresolved`, a record for the same binding replaces only an
  * unresolved one, so resolution after save, which never probes reasoning,
- * can't erase a fuller record a concurrent resolution stored.
+ * can't erase a fuller record a concurrent resolution stored. A stored record
+ * that no longer parses reads as no record, so any status replaces it.
  */
 export async function saveResolutionRecord(
   db: Db,
@@ -69,6 +73,9 @@ export async function saveResolutionRecord(
   options: { onlyOverUnresolved?: boolean } = {}
 ): Promise<ResolutionRecord | null> {
   const parsed = ResolutionRecordSchema.parse(record);
+  // Locked, so a concurrent resolution can't store a current record between this read and the write.
+  const stored = (await db.query(`select record from evaluator_resolution_records where skill_version_id=$1 for update`, [skillVersionId])).rows[0];
+  const stale = stored !== undefined && !ResolutionRecordSchema.safeParse(parseJson(stored.record)).success;
   await db.query(
     `insert into evaluator_resolution_records (skill_version_id,project_id,binding_digest,status,record)
      values ($1,$2,$3,$4,$5::jsonb)
@@ -79,7 +86,7 @@ export async function saveResolutionRecord(
        and (evaluator_resolution_records.status=any($6::text[])
          or evaluator_resolution_records.binding_digest<>excluded.binding_digest)`,
     [skillVersionId, projectId, sha256Digest(binding), parsed.status, JSON.stringify(parsed),
-      options.onlyOverUnresolved ? ["unresolved"] : ["unresolved", "resolved"]]
+      stale ? ["unresolved", "resolved", "failed"] : options.onlyOverUnresolved ? ["unresolved"] : ["unresolved", "resolved"]]
   );
   const owner = (await db.query(`select project_id from evaluator_resolution_records where skill_version_id=$1`, [skillVersionId])).rows[0];
   if (owner && String(owner.project_id) !== projectId) {

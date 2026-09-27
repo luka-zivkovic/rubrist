@@ -31,7 +31,8 @@ const { BindingResolutionStatus } = await import("../src/components/binding-reso
 const status = (id: string, checkedAt: string | null): Status => ({
   skillVersionId: id, projectRole: "owner",
   record: checkedAt === null ? null : {
-    status: "unresolved", capabilitySnapshotDigest: null, reasoningDefaultsVersion: null, credentialSource: "project",
+    status: "unresolved", capabilitySnapshotDigest: null, reasoningDefaultsVersion: null,
+    ignoredTemperatureVersion: "rubrist-ignored-temperature/v1", ignoredTemperatureEntry: null, credentialSource: "project",
     temperatureSupport: null, reasoningSupport: null, probes: [], checkedAt
   },
   settings: { temperature: "stated", reasoning: "stated" },

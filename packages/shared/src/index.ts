@@ -401,6 +401,7 @@ export * from "./evaluator-lifecycle.js";
 
 export * from "./evaluator-execution.js";
 export * from "./reasoning-defaults.js";
+export * from "./ignored-temperature.js";
 export * from "./assessment-receipt.js";
 export * from "./binary-calibration.js";
 export * from "./evaluator-suite-manifest.js";

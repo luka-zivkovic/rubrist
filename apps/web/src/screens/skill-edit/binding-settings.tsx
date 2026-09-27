@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { Button } from "../../components/ui/button.js";
 import { Eyebrow } from "../../components/rubrist/index.js";
@@ -8,6 +8,8 @@ import {
   pickerBlockingProblems,
   reasoningAccepted,
   reasoningOffered,
+  sameReasoning,
+  sentReasoning,
   type BindingPickerGuidance,
   type SettingGuidance
 } from "../../lib/binding-picker.js";
@@ -19,6 +21,7 @@ import {
 } from "../../lib/execution-binding-draft.js";
 import {
   CapabilityCheckInputSchema,
+  probeRequestAccepted,
   reasoningFamilyFor,
   takesSamplingSettings,
   type CapabilityCheckReport,
@@ -34,6 +37,10 @@ import {
 // check of the chosen model. When the author picks a model the check runs by
 // itself; the author can run it again. The picker pre-fills the documented
 // default reasoning, which the author saves explicitly (founder decision 2).
+// Temperature starts empty; the picker fills in 0 only where the check saw 0
+// accepted with the selected reasoning, and classifies temperature for
+// reasoning the check didn't probe it with before the author saves (decision
+// 12).
 
 export type PickerSettings = Pick<Required<ExecutionBindingFields>, "reasoning" | "verdictProtocol" | "outputTokenLimit">;
 
@@ -54,6 +61,9 @@ interface CheckState {
   running: boolean;
   report: CapabilityCheckReport | null;
   error: string | null;
+  /** Reasoning whose temperature a classification was asked for since the check, and whether one is running. */
+  classified?: Array<ReasoningSettings | null>;
+  classifying?: boolean;
 }
 
 // Picks follow the model, so fixing a base URL or a model version keeps them;
@@ -62,8 +72,20 @@ const picksKey = (model: PickerModel) => `${model.provider}\u0000${model.modelId
 const checkKey = (model: PickerModel) =>
   `${picksKey(model)}\u0000${model.modelVersion.trim()}\u0000${model.provider === "custom" ? model.baseUrl.trim() : ""}`;
 
-/** How long the picker waits after the author picks a model before checking it. */
+/** How long the picker waits after the author picks a model, or selects reasoning, before checking it. */
 const AUTO_CHECK_DELAY_MS = 800;
+
+/** The check input for a model: what it would save, before its sampling, reasoning, and protocol are chosen. */
+function checkInputFor(model: PickerModel, outputTokenLimit: string) {
+  return {
+    provider: model.provider,
+    endpoint: model.provider === "custom" ? { kind: "custom", baseUrl: model.baseUrl.trim() } : { kind: "managed" },
+    modelId: model.modelId.trim(),
+    modelVersion: model.modelVersion.trim(),
+    outputTokenLimit: takesSamplingSettings(model.provider) && outputTokenLimit.trim() !== "" ? Number(outputTokenLimit) : null,
+    routing: model.provider === "openrouter" ? { requireParameters: true, allowFallbacks: false } : null
+  };
+}
 
 function settingsFrom(binding: Pick<SkillVersion, "executionBinding" | "customEndpointUrl">): PickerSettings {
   const saved = executionBindingFields(binding);
@@ -75,16 +97,20 @@ function settingsFrom(binding: Pick<SkillVersion, "executionBinding" | "customEn
  * author picked for it (else the base version's, for the same model, else the
  * documented defaults), and the capability check of exactly that model.
  * `canCheck` says a check can run: a model is named and its provider has a key.
+ * The editor owns the temperature; the picker fills it in where decision 12
+ * says to.
  */
 export function useBindingPicker(
   model: PickerModel,
   base: ExecutionBinding | null,
-  options: { canCheck: boolean; temperature: string }
+  options: { canCheck: boolean; temperature: string; setTemperature: (value: string) => void }
 ) {
   const [picks, setPicks] = useState<Record<string, Picks>>({});
   const [checks, setChecks] = useState<Record<string, CheckState>>({});
   // Set when the author picks a model, so only their choice starts a check by itself.
   const [autoCheckArmed, setAutoCheckArmed] = useState(false);
+  // Whether the temperature holds a 0 the picker filled in, rather than the author's or a version's.
+  const filledZero = useRef(false);
 
   const fallback = useCallback((target: PickerModel): Picks => {
     if (base && base.provider === target.provider && base.modelId === target.modelId.trim()) {
@@ -114,6 +140,7 @@ export function useBindingPicker(
   /** Loads a saved version's settings, or clears the picks for a version whose binding the editor can't keep. */
   const load = useCallback((version: Pick<SkillVersion, "executionBinding" | "customEndpointUrl"> | null) => {
     setAutoCheckArmed(false);
+    filledZero.current = false;
     if (version === null) {
       setPicks({});
       return;
@@ -134,14 +161,7 @@ export function useBindingPicker(
   const runCheck = useCallback(async () => {
     const checked = { ...model };
     const key = checkKey(checked);
-    const input = CapabilityCheckInputSchema.safeParse({
-      provider: checked.provider,
-      endpoint: checked.provider === "custom" ? { kind: "custom", baseUrl: checked.baseUrl.trim() } : { kind: "managed" },
-      modelId: checked.modelId.trim(),
-      modelVersion: checked.modelVersion.trim(),
-      outputTokenLimit: takesSamplingSettings(checked.provider) && settings.outputTokenLimit.trim() !== "" ? Number(settings.outputTokenLimit) : null,
-      routing: checked.provider === "openrouter" ? { requireParameters: true, allowFallbacks: false } : null
-    });
+    const input = CapabilityCheckInputSchema.safeParse(checkInputFor(checked, settings.outputTokenLimit));
     if (!input.success) {
       // The limit field states its own problem; anything else is a model the check can't take.
       const limit = outputTokenLimitProblem(checked.provider, settings.outputTokenLimit);
@@ -182,6 +202,81 @@ export function useBindingPicker(
     return () => clearTimeout(timer);
   }, [autoCheckArmed, options.canCheck, model.provider, currentCheckKey, alreadyChecked, runCheck]);
 
+  // When the author selects reasoning the check didn't probe temperature
+  // with, the picker classifies it before save: up to three calls, within the
+  // check's limits (ADR-0014 decision 12). Each reasoning is asked about once
+  // per check, so an error leaves the field empty for resolution to decide.
+  const classifyReasoning = sentReasoning(model.provider, report, settings.reasoning);
+  const classifyProtocol = settings.verdictProtocol;
+  const classifyTemperature = useCallback(async () => {
+    const checked = { ...model };
+    const key = checkKey(checked);
+    const probes = report?.probes ?? [];
+    // The request the temperature probes add to may already have been accepted in the check.
+    const baselineAccepted = probes.some((probe) => probe.sent.temperature === null && probe.sent.topP === null &&
+      probe.verdictProtocol === classifyProtocol && sameReasoning(probe.sent.reasoning, classifyReasoning) && probeRequestAccepted(probe));
+    const input = CapabilityCheckInputSchema.safeParse({
+      ...checkInputFor(checked, settings.outputTokenLimit),
+      classifyTemperature: { reasoning: classifyReasoning, verdictProtocol: classifyProtocol, baselineAccepted }
+    });
+    const asked = (state: CheckState | undefined) => [...(state?.classified ?? []), classifyReasoning];
+    if (!input.success) {
+      setChecks((previous) => previous[key] ? { ...previous, [key]: { ...previous[key], classified: asked(previous[key]) } } : previous);
+      return;
+    }
+    setChecks((previous) => previous[key] ? { ...previous, [key]: { ...previous[key], classified: asked(previous[key]), classifying: true } } : previous);
+    try {
+      const result = await checkModelCapabilities(input.data);
+      // The classification's probes join the check's, so the guidance reads them all.
+      setChecks((previous) => {
+        const now = previous[key];
+        if (!now?.report) return previous;
+        return { ...previous, [key]: { ...now, classifying: false, report: { ...now.report, probes: [...now.report.probes, ...result.probes] } } };
+      });
+    } catch (error) {
+      setChecks((previous) => previous[key] ? {
+        ...previous,
+        [key]: {
+          ...previous[key],
+          classifying: false,
+          error: `Temperature wasn't checked with this reasoning: ${error instanceof Error ? error.message : "the check failed."}`
+        }
+      } : previous);
+    }
+  }, [model, report, classifyReasoning, classifyProtocol, settings.outputTokenLimit]);
+
+  const needsClassification = options.canCheck && check !== null && !check.running && check.classifying !== true && report !== null &&
+    report.protocol !== null && guidance.temperature.shown && guidance.temperature.support === null &&
+    !(guidance.reasoning.shown && guidance.reasoning.guidance === "rejected") &&
+    guidance.protocols.find((option) => option.protocol === classifyProtocol)?.guidance !== "rejected" &&
+    !sameReasoning(report.probedReasoning, classifyReasoning) &&
+    !(check.classified ?? []).some((asked) => sameReasoning(asked, classifyReasoning));
+  useEffect(() => {
+    if (!needsClassification) return;
+    const timer = setTimeout(() => void classifyTemperature(), AUTO_CHECK_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [needsClassification, classifyTemperature]);
+
+  // The picker fills in 0 where the check saw 0 accepted with the selected
+  // reasoning, and empties a 0 it filled once 0 is rejected with the
+  // reasoning selected; a value the author typed stays (decision 12).
+  const { setTemperature } = options;
+  const temperatureNow = useRef(options.temperature);
+  temperatureNow.current = options.temperature;
+  const fill = !guidance.temperature.shown ? null
+    : guidance.temperature.acceptedValue === 0 ? "zero" as const
+      : guidance.temperature.zeroRejected ? "not_zero" as const : null;
+  const fillKey = `${checkKey(model)}\u0000${JSON.stringify(classifyReasoning)}\u0000${fill}`;
+  useEffect(() => {
+    if (fill === "zero" && temperatureNow.current.trim() === "") {
+      filledZero.current = true;
+      setTemperature("0");
+    } else if (fill === "not_zero" && filledZero.current && temperatureNow.current.trim() === "0") {
+      filledZero.current = false;
+      setTemperature("");
+    }
+  }, [fillKey, fill, setTemperature]);
+
   /** The fields the editor saves: a setting the model rejects outright isn't sent. */
   const temperatureShown = guidance.temperature.shown;
   const reasoningShown = guidance.reasoning.shown;
@@ -202,6 +297,8 @@ export function useBindingPicker(
     checking: check?.running === true,
     checkError: check?.error ?? null,
     runCheck,
+    /** Whether temperature is being classified for the selected reasoning, or is about to be; saving waits for it. */
+    temperaturePending: needsClassification || check?.classifying === true,
     savedFields,
     blockingProblems: pickerBlockingProblems(guidance, settings)
   };
@@ -365,7 +462,7 @@ export function BindingSettings({
             {report
               ? `Checked with ${report.probes.length} probe${report.probes.length === 1 ? "" : "s"}: ${report.protocol ? `${report.protocol} accepted` : report.interrupted ? "no protocol confirmed" : "no protocol accepted"}.${report.interrupted ? " The check ended early; what it didn't reach is confirmed at resolution after save." : ""}`
               : canCheck
-                ? "Picking a model checks it (up to 6 calls), so the picker offers only settings it takes."
+                ? "Picking a model checks it (up to 7 calls), so the picker offers only settings it takes."
                 : "Choose a model whose provider has a key to check which settings it takes."}
           </span>
           {checkError ? <span className="text-[11px] text-signal">{checkError}</span> : null}
@@ -387,6 +484,8 @@ export function BindingSettings({
             />
             {!temperatureValid ? (
               <span className="text-[11px] text-signal">Enter a number from 0 to 2, or leave it blank to not send one.</span>
+            ) : picker.temperaturePending ? (
+              <span className="text-[11px] text-ink-3">Checking which temperatures the model takes with this reasoning…</span>
             ) : guidance.temperature.guidance !== null ? (
               <GuidanceNote
                 guidance={guidance.temperature.guidance}
@@ -394,15 +493,23 @@ export function BindingSettings({
                   ? `The check accepted temperature ${acceptedTemperature}; ${temperature.trim()} is confirmed at resolution after save.`
                   : undefined}
               />
+            ) : guidance.temperature.zeroRejected ? (
+              <span className="text-[11px] text-ink-3">
+                The model rejected 0 with this reasoning and accepted {acceptedTemperature}; state the temperature to send.
+              </span>
             ) : (
               <span className="text-[11px] text-ink-3">
-                Use 0 for repeatable judge decisions. Governed use needs an explicit value wherever the model accepts one.
+                Use 0 for repeatable judge decisions. Governed use needs an explicit value wherever the model lets you choose one.
               </span>
             )}
           </>
         ) : (
           <span className="text-[11px] text-ink-3">
-            {samples ? "The model rejects temperature with this reasoning, so none is sent." : `${provider} takes no sampling settings.`}
+            {guidance.temperature.hidden === "ignored"
+              ? `The model ignores temperature with this reasoning, as its provider documents (${report?.ignoredTemperatureVersion ?? "the ignored-temperature table"}), so none is sent.`
+              : guidance.temperature.hidden === "not_adjustable"
+                ? "The model doesn't let you choose temperature with this reasoning: it rejected 0 and 0.5 in the check, so none is sent and the model sets it."
+                : `${provider} takes no sampling settings.`}
           </span>
         )}
       </Setting>

@@ -46,7 +46,8 @@ export function runtimeVersion(binding: ExecutionBinding, overrides: Partial<Eva
 
 /**
  * A resolution record from a gate resolution in which the provider accepted
- * every probe: `resolved`, with any unset setting shown accepted.
+ * every probe: `resolved`, with an unset temperature shown adjustable and
+ * unset reasoning accepted.
  */
 export async function resolvedRecordFor(binding: ExecutionBinding): Promise<ResolutionRecord> {
   return resolveExecutionBinding({
@@ -56,15 +57,17 @@ export async function resolvedRecordFor(binding: ExecutionBinding): Promise<Reso
     published: null,
     documentedDefault: null,
     credentialSource: "project",
+    ignoredTemperature: null,
     execute: async () => ({ usage: null }),
     now: new Date("2026-09-26T00:00:00.000Z")
   });
 }
 
 /**
- * A resolution record in which the model rejects the temperature parameter
- * itself: the saved request (which leaves it unset) is accepted, and the
- * temperature probe is refused naming the parameter.
+ * A resolution record in which the model doesn't let the author choose
+ * temperature (ADR-0014 decision 12): the saved request is accepted when it
+ * leaves temperature unset, and temperatures 0 and 0.5 are both refused. A
+ * binding that states a temperature fails.
  */
 export async function temperatureRejectingRecordFor(binding: ExecutionBinding): Promise<ResolutionRecord> {
   return resolveExecutionBinding({
@@ -74,6 +77,7 @@ export async function temperatureRejectingRecordFor(binding: ExecutionBinding): 
     published: null,
     documentedDefault: null,
     credentialSource: "project",
+    ignoredTemperature: null,
     execute: async (probed) => {
       if (probed.sampling.temperature === null) return { usage: null };
       const message = "`temperature` is deprecated for this model.";

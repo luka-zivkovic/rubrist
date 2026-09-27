@@ -8,7 +8,7 @@ import type {
   ResolutionRecord,
   TypedQuestion
 } from "@rubrist/shared";
-import type { GovernedBinding } from "../lib/binding-resolution.js";
+import type { GovernedBinding, RecheckedBinding } from "../lib/binding-resolution.js";
 import type { ResolutionAttemptInput } from "../evaluator-lifecycle/resolution.pg.js";
 
 export type BinaryCalibrationProjectRole = "owner" | "member";
@@ -136,7 +136,8 @@ export interface BinaryCalibrationControlRepository {
 
 /** What the re-check before authorization reads (ADR-0014 section 4). */
 export interface BinaryCalibrationRecheckTarget {
-  binding: GovernedBinding;
+  /** The run's pinned binding, with the version's resolution record for exactly that binding. */
+  binding: RecheckedBinding;
   /** Whether the run already passed authorization; only the first authorization is re-checked. */
   authorized: boolean;
   /** How long ago, by the database clock, the run's latest re-check ended unknown, so a transient error backs off. */

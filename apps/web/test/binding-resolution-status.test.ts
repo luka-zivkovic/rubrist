@@ -31,7 +31,8 @@ function probe(overrides: Partial<CapabilityProbe>): CapabilityProbe {
 
 function record(overrides: Partial<ResolutionRecord> = {}): ResolutionRecord {
   return {
-    status: "resolved", capabilitySnapshotDigest: null, reasoningDefaultsVersion: null, credentialSource: "project",
+    status: "resolved", capabilitySnapshotDigest: null, reasoningDefaultsVersion: null,
+    ignoredTemperatureVersion: "rubrist-ignored-temperature/v1", ignoredTemperatureEntry: null, credentialSource: "project",
     temperatureSupport: null, reasoningSupport: null, probes: [probe({})], checkedAt: "2026-09-26T08:30:12.000Z",
     ...overrides
   };
@@ -123,12 +124,29 @@ describe("the resolution view", () => {
   });
 
   it("states what the model showed about the settings the binding leaves unset, and nothing about the rest", () => {
-    const answered = record({ temperatureSupport: "parameter_rejected", reasoningSupport: null });
+    const answered = record({ temperatureSupport: "not_adjustable", reasoningSupport: null });
     expect(resolutionView(status({ record: answered, settings: { temperature: "unset", reasoning: "unset" } })).settings).toEqual([
-      { setting: "Temperature", support: "left unset; rejected as a parameter, so it stays unset" },
+      { setting: "Temperature", support: "left unset; not adjustable: the model rejected 0 and 0.5, so it is set by the model" },
       { setting: "Reasoning", support: "left unset; not probed yet" }
     ]);
     expect(resolutionView(status({ record: answered, settings: { temperature: "stated", reasoning: "not_applicable" } })).settings).toEqual([]);
+  });
+
+  it("says whether an unset temperature is set by the model, adjustable, or ignored by this model (ADR-0014 decision 12)", () => {
+    const temperature = (patch: Partial<ResolutionRecord>) =>
+      resolutionView(status({ record: record(patch), settings: { temperature: "unset", reasoning: "stated" } })).settings;
+    expect(temperature({ temperatureSupport: "adjustable" })).toEqual([
+      { setting: "Temperature", support: "left unset; adjustable: the model accepted 0 or 0.5, so a governed evaluator states it" }
+    ]);
+    expect(temperature({
+      ignoredTemperatureEntry: {
+        endpoint: { kind: "custom", baseUrl: "https://api.deepseek.com" }, modelId: "deepseek-flash", reasoning: null,
+        sources: ["https://api-docs.deepseek.com/guides/thinking_mode"], reviewedOn: "2026-09-27"
+      }
+    })).toEqual([
+      { setting: "Temperature", support: "left unset; ignored by this model, as its provider documents (rubrist-ignored-temperature/v1), so none is sent" }
+    ]);
+    expect(temperature({})).toEqual([{ setting: "Temperature", support: "left unset; not probed yet" }]);
   });
 });
 

@@ -179,7 +179,8 @@ class FakeExecutionRepository implements BinaryCalibrationExecutionRepository {
         projectId: run.projectId,
         executionBinding: run.executionBinding,
         customEndpointUrl: run.customEndpointUrl,
-        spec: { verdictKind: "binary", scalarRange: null, categoricalChoiceScores: null }
+        spec: { verdictKind: "binary", scalarRange: null, categoricalChoiceScores: null },
+        record: null
       },
       authorized: this.authorized,
       msSinceUnknownRecheck: this.msSinceUnknownRecheck

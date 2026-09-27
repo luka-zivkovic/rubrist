@@ -419,21 +419,33 @@ export const EvaluatorScoreSchema = z.object({
 }).strict();
 export type EvaluatorScore = z.infer<typeof EvaluatorScoreSchema>;
 
-/** How a probed setting fared: `parameter_rejected` only when the provider named the parameter itself. */
+/** How a probed reasoning setting fared: `parameter_rejected` only when the provider named the parameter itself. */
 export const SettingSupportSchema = z.enum(["accepted", "value_rejected", "parameter_rejected"]);
 export type SettingSupport = z.infer<typeof SettingSupportSchema>;
 
+/**
+ * Whether a model lets the author choose temperature with one reasoning and
+ * `topP` (ADR-0014 decision 12), classified by outcome and never by the
+ * wording of a rejection: `adjustable` where temperature 0 or 0.5 was
+ * accepted, `not_adjustable` where both were rejected.
+ */
+export const TemperatureSupportSchema = z.enum(["adjustable", "not_adjustable"]);
+export type TemperatureSupport = z.infer<typeof TemperatureSupportSchema>;
+
+/** What a temperature probe sends, in order: 0, and 0.5 only where 0 was rejected (ADR-0014 decision 12). */
+export const TEMPERATURE_PROBE_VALUES = [0, 0.5] as const;
+
 const REJECTION_FAILURE_KINDS: readonly EvaluatorFailureKind[] = ["provider_rejected_request", "provider_protocol"];
-// ADR-0014 section 4: a check sends up to 3 protocol, 1 temperature, and 2
-// reasoning probes; a resolution attempt one confirming probe plus at most one
-// temperature and one reasoning probe.
+// ADR-0014 section 4: a check sends up to 3 protocol, 2 temperature, and 2
+// reasoning probes; a resolution attempt one confirming probe plus at most two
+// temperature probes and one reasoning probe.
 const PROBE_LIMITS = {
-  capability_check: { protocol: 3, temperature: 1, reasoning: 2, confirm: 0 },
-  resolution: { protocol: 0, temperature: 1, reasoning: 1, confirm: 1 },
+  capability_check: { protocol: 3, temperature: 2, reasoning: 2, confirm: 0 },
+  resolution: { protocol: 0, temperature: 2, reasoning: 1, confirm: 1 },
   recheck: { protocol: 0, temperature: 0, reasoning: 0, confirm: 0 }
 } as const;
-const CAPABILITY_CHECK_PROBE_LIMIT = 6;
-const RESOLUTION_PROBE_LIMIT = 3;
+const CAPABILITY_CHECK_PROBE_LIMIT = 7;
+const RESOLUTION_PROBE_LIMIT = 4;
 
 /** Settings compare by value, whatever order a producer wrote their keys in. */
 function sameSettings(left: unknown, right: unknown): boolean {
@@ -446,9 +458,9 @@ function sameSettings(left: unknown, right: unknown): boolean {
 /**
  * One probe call (ADR-0014 section 4), with every optional setting it sent.
  * A rejection names the output mechanism, a parameter, or only one of its
- * values, or can't be attributed. On a temperature or reasoning probe an
- * unattributed rejection counts as a value rejection, so it never lets a
- * setting go unset.
+ * values, or can't be attributed. On a reasoning probe an unattributed
+ * rejection counts as a value rejection, so it never lets reasoning go unset.
+ * Temperature is classified by outcome only (decision 12).
  */
 export const CapabilityProbeSchema = z.object({
   stage: z.enum(["capability_check", "resolution", "recheck"]),
@@ -494,51 +506,105 @@ export const CapabilityProbeSchema = z.object({
   if ((probe.purpose === "temperature" && sent.temperature === null) || (probe.purpose === "reasoning" && sent.reasoning === null)) {
     ctx.addIssue({ code: "custom", path: ["sent"], message: `a ${probe.purpose} probe sends an explicit ${probe.purpose}` });
   }
+  if (probe.purpose === "temperature" && sent.temperature !== null && !TEMPERATURE_PROBE_VALUES.some((value) => value === sent.temperature)) {
+    ctx.addIssue({ code: "custom", path: ["sent", "temperature"], message: "a temperature probe sends 0 or 0.5" });
+  }
 });
 export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;
 
 /**
- * Whether some probe in the record supports the summary a gate reads. Once a
- * confirming probe exists, its reasoning is the saved reasoning, and a
- * temperature summary must come from a probe sent with that reasoning.
+ * Whether the provider accepted a probe's request, as temperature is
+ * classified (ADR-0014 decision 12): a response counts as accepted even if it
+ * breaks the protocol.
  */
-function supportIsRecorded(
-  allProbes: readonly CapabilityProbe[],
-  setting: "temperature" | "reasoning",
-  support: SettingSupport,
-  confirm: CapabilityProbe | undefined
-): boolean {
-  const probes = setting === "temperature" && confirm
-    ? allProbes.filter((probe) => sameSettings(probe.sent.reasoning, confirm.sent.reasoning))
-    : allProbes;
+export function probeRequestAccepted(probe: CapabilityProbe): boolean {
+  return probe.outcome === "accepted" || probe.failureKind === "provider_protocol";
+}
+
+// Only a rejected request is a rejection, whatever its wording.
+const requestRejected = (probe: CapabilityProbe) => probe.outcome === "rejected" && probe.failureKind === "provider_rejected_request";
+
+/**
+ * How temperature probes sent after an accepted request without temperature
+ * classify (ADR-0014 decision 12): 0 or 0.5 accepted is `adjustable`, and 0
+ * and 0.5 both rejected is `not_adjustable`. Anything else, an error
+ * included, is unknown (`null`).
+ */
+export function temperatureOutcome(temperatureProbes: readonly CapabilityProbe[]): TemperatureSupport | null {
+  if (temperatureProbes.some(probeRequestAccepted)) return "adjustable";
+  return TEMPERATURE_PROBE_VALUES.every((value) => temperatureProbes.some((probe) => probe.sent.temperature === value && requestRejected(probe)))
+    ? "not_adjustable"
+    : null;
+}
+
+/**
+ * How a model treats temperature with one reasoning and `topP`, from the
+ * probes recorded for it. A temperature probe counts only where the same
+ * request without temperature, on the same protocol, was accepted: in a
+ * check, the reasoning probe with that reasoning, or the protocol probe where
+ * no reasoning is sent; at resolution, the confirming probe.
+ */
+export function temperatureSupportWith(
+  probes: readonly CapabilityProbe[],
+  settings: { reasoning: ReasoningSettings | null; topP: number | null }
+): TemperatureSupport | null {
+  const same = probes.filter((probe) => sameSettings(probe.sent.reasoning, settings.reasoning) && probe.sent.topP === settings.topP);
+  return temperatureOutcome(same.filter((probe) => probe.purpose === "temperature" && same.some((baseline) =>
+    baseline.sent.temperature === null && baseline.verdictProtocol === probe.verdictProtocol && probeRequestAccepted(baseline))));
+}
+
+/** Whether some probe in the record supports the reasoning summary a gate reads. */
+function reasoningSupportIsRecorded(probes: readonly CapabilityProbe[], support: SettingSupport): boolean {
   switch (support) {
     case "accepted":
-      return probes.some((probe) => probe.outcome === "accepted" && probe.sent[setting] !== null);
+      return probes.some((probe) => probe.outcome === "accepted" && probe.sent.reasoning !== null);
     case "parameter_rejected":
-      return probes.some((probe) => probe.purpose === setting && probe.rejection === "parameter" && probe.rejectedParameter === setting);
+      return probes.some((probe) => probe.purpose === "reasoning" && probe.rejection === "parameter" && probe.rejectedParameter === "reasoning");
     case "value_rejected":
-      return probes.some((probe) => probe.purpose === setting &&
-        (probe.rejection === "unattributed" || (probe.rejection === "value" && probe.rejectedParameter === setting)));
+      return probes.some((probe) => probe.purpose === "reasoning" &&
+        (probe.rejection === "unattributed" || (probe.rejection === "value" && probe.rejectedParameter === "reasoning")));
   }
 }
 
 /**
+ * An entry of the ignored-temperature table (ADR-0014 decision 12): a model
+ * and reasoning, `null` for unset, that accepts temperature without applying
+ * it, at a managed provider's endpoint or a custom endpoint named by its
+ * public base URL, with the provider documentation that says so.
+ */
+export const IgnoredTemperatureEntrySchema = z.object({
+  endpoint: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("managed"), provider: ExecutionProviderIdSchema }).strict(),
+    z.object({ kind: z.literal("custom"), baseUrl: EndpointBaseUrlSchema }).strict()
+  ]),
+  modelId: NonEmptyTextSchema(240),
+  reasoning: ReasoningSettingsSchema.nullable(),
+  sources: z.array(z.string().min(1).max(2_000)).min(1),
+  reviewedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+}).strict();
+export type IgnoredTemperatureEntry = z.infer<typeof IgnoredTemperatureEntrySchema>;
+
+/**
  * What Rubrist learned about a binding: the capability check before save
- * (at most 6 probes) and the latest resolution attempt after it (at most 3,
+ * (at most 7 probes) and the latest resolution attempt after it (at most 4,
  * with one confirming probe). Not identity; it confirms or fails the binding
  * and never rewrites it. Re-check probes, and earlier attempts that ended
  * unresolved, are recorded against what triggered them, never here.
  *
  * The support fields are what the governed gates read (ADR-0014 section 2):
- * temperature as probed with the saved reasoning, and `null` when not probed.
+ * temperature as probed with the saved reasoning and `topP`, and `null` when
+ * not classified. The gates read the ignored-temperature entry this record
+ * matched in the table version it names, never a newer table (decision 12).
  * Only the confirming probe decides `resolved` or `failed`.
  */
 export const ResolutionRecordSchema = z.object({
   status: z.enum(["resolved", "unresolved", "failed"]),
   capabilitySnapshotDigest: Sha256DigestSchema.nullable(),
   reasoningDefaultsVersion: z.string().min(1).max(100).nullable(),
+  ignoredTemperatureVersion: z.string().min(1).max(100),
+  ignoredTemperatureEntry: IgnoredTemperatureEntrySchema.nullable(),
   credentialSource: JudgeProviderCredentialSourceSchema.nullable(),
-  temperatureSupport: SettingSupportSchema.nullable(),
+  temperatureSupport: TemperatureSupportSchema.nullable(),
   reasoningSupport: SettingSupportSchema.nullable(),
   probes: z.array(CapabilityProbeSchema).max(CAPABILITY_CHECK_PROBE_LIMIT + RESOLUTION_PROBE_LIMIT),
   checkedAt: z.string().datetime({ offset: true }).nullable()
@@ -561,7 +627,10 @@ export const ResolutionRecordSchema = z.object({
     }
   });
   if (checkProbes.length > CAPABILITY_CHECK_PROBE_LIMIT || resolutionProbes.length > RESOLUTION_PROBE_LIMIT) {
-    ctx.addIssue({ code: "custom", path: ["probes"], message: "a record holds at most 6 capability-check probes and 3 resolution probes" });
+    ctx.addIssue({
+      code: "custom", path: ["probes"],
+      message: `a record holds at most ${CAPABILITY_CHECK_PROBE_LIMIT} capability-check probes and ${RESOLUTION_PROBE_LIMIT} resolution probes`
+    });
   }
   const confirm = resolutionProbes.find((probe) => probe.purpose === "confirm");
   if (resolutionProbes.length > 0 && confirm === undefined) {
@@ -575,11 +644,28 @@ export const ResolutionRecordSchema = z.object({
   if (!statusFits) {
     ctx.addIssue({ code: "custom", path: ["status"], message: `status ${record.status} doesn't match the confirming probe` });
   }
-  for (const [field, setting] of [["temperatureSupport", "temperature"], ["reasoningSupport", "reasoning"]] as const) {
-    const support = record[field];
-    if (support !== null && !supportIsRecorded(record.probes, setting, support, confirm)) {
-      ctx.addIssue({ code: "custom", path: [field], message: `no probe in the record shows ${setting} ${support}${setting === "temperature" && confirm ? " with the saved reasoning" : ""}` });
-    }
+  // Once a confirming probe exists, it sent the saved reasoning and topP, and
+  // the temperature summary is for those; before one, for any probed.
+  const temperatureSettings = confirm !== undefined
+    ? [confirm.sent]
+    : record.probes.filter((probe) => probe.purpose === "temperature").map((probe) => probe.sent);
+  if (record.temperatureSupport !== null &&
+      !temperatureSettings.some((sent) => temperatureSupportWith(record.probes, sent) === record.temperatureSupport)) {
+    ctx.addIssue({
+      code: "custom", path: ["temperatureSupport"],
+      message: `no probes in the record show temperature ${record.temperatureSupport}${confirm ? " with the saved reasoning and topP" : ""}`
+    });
+  }
+  if (record.reasoningSupport !== null && !reasoningSupportIsRecorded(record.probes, record.reasoningSupport)) {
+    ctx.addIssue({ code: "custom", path: ["reasoningSupport"], message: `no probe in the record shows reasoning ${record.reasoningSupport}` });
+  }
+  // A listed combination is the saved one, and it sends no temperature probe.
+  const listed = record.ignoredTemperatureEntry;
+  if (listed !== null && confirm !== undefined && !sameSettings(listed.reasoning, confirm.sent.reasoning)) {
+    ctx.addIssue({ code: "custom", path: ["ignoredTemperatureEntry"], message: "the ignored-temperature entry names the saved reasoning" });
+  }
+  if (listed !== null && record.probes.some((probe) => probe.purpose === "temperature" && sameSettings(probe.sent.reasoning, listed.reasoning))) {
+    ctx.addIssue({ code: "custom", path: ["probes"], message: "a combination listed as ignoring temperature is sent no temperature probe" });
   }
 });
 export type ResolutionRecord = z.infer<typeof ResolutionRecordSchema>;
@@ -621,6 +707,12 @@ export type BindingResolutionStatus = z.infer<typeof BindingResolutionStatusSche
  * What a capability check probes (ADR-0014 section 4): a model at an
  * endpoint, before its sampling, reasoning, and verdict protocol are chosen.
  * The check finds those, so the author can choose them.
+ *
+ * With `classifyTemperature`, it classifies temperature for reasoning the
+ * author selected after the check, in place of a whole check (decision 12):
+ * that reasoning without temperature, unless the check already saw that
+ * request accepted (`baselineAccepted`), then the temperature probes, so at
+ * most 3 calls.
  */
 export const CapabilityCheckInputSchema = ExecutionBindingInputSchema.pick({
   provider: true,
@@ -629,6 +721,12 @@ export const CapabilityCheckInputSchema = ExecutionBindingInputSchema.pick({
   modelVersion: true,
   outputTokenLimit: true,
   routing: true
+}).extend({
+  classifyTemperature: z.object({
+    reasoning: ReasoningSettingsSchema.nullable(),
+    verdictProtocol: VerdictProtocolIdSchema,
+    baselineAccepted: z.boolean()
+  }).strict().optional()
 }).strict().superRefine((input, ctx) => {
   // The binding rules a check's input can break, as a saved binding's would.
   if ((input.provider === "custom") !== (input.endpoint.kind === "custom")) {
@@ -643,25 +741,47 @@ export const CapabilityCheckInputSchema = ExecutionBindingInputSchema.pick({
   if (!takesSamplingSettings(input.provider) && input.outputTokenLimit !== null) {
     ctx.addIssue({ code: "custom", path: ["outputTokenLimit"], message: `${input.provider} takes no output token limit` });
   }
+  const classify = input.classifyTemperature;
+  if (classify !== undefined) {
+    if (!takesSamplingSettings(input.provider)) {
+      ctx.addIssue({ code: "custom", path: ["classifyTemperature"], message: `${input.provider} takes no temperature` });
+    }
+    if (!PROTOCOLS_BY_PROVIDER[input.provider].includes(classify.verdictProtocol)) {
+      ctx.addIssue({ code: "custom", path: ["classifyTemperature", "verdictProtocol"], message: `${classify.verdictProtocol} is not a ${input.provider} protocol` });
+    }
+    if (classify.reasoning !== null && classify.reasoning.family !== reasoningFamilyFor(input.provider)) {
+      ctx.addIssue({ code: "custom", path: ["classifyTemperature", "reasoning"], message: `${input.provider} has no ${classify.reasoning.family} reasoning shape` });
+    }
+  }
 });
 export type CapabilityCheckInput = z.infer<typeof CapabilityCheckInputSchema>;
 
 /**
  * What a capability check found, for the model picker: the first protocol a
  * probe accepted, how temperature (with the reasoning it was probed with) and
- * reasoning fared, the documented default reasoning to pre-fill, and what the
- * provider publishes about the model. `null` means unknown, never absent.
+ * reasoning fared, the documented default reasoning to pre-fill, the
+ * reasoning with which the ignored-temperature table lists the model, and
+ * what the provider publishes about the model. A temperature classification
+ * reports the same for the reasoning it classified, on the author's
+ * protocol. `null` means unknown, never absent.
  */
 export const CapabilityCheckReportSchema = z.object({
   credentialSource: JudgeProviderCredentialSourceSchema.nullable(),
   protocol: VerdictProtocolIdSchema.nullable(),
   probes: z.array(CapabilityProbeSchema),
-  temperatureSupport: SettingSupportSchema.nullable(),
+  temperatureSupport: TemperatureSupportSchema.nullable(),
   reasoningSupport: SettingSupportSchema.nullable(),
   probedReasoning: ReasoningSettingsSchema.nullable(),
   documentedDefault: ReasoningSettingsSchema.nullable(),
   /** The dated reasoning-defaults table the documented default comes from. */
   reasoningDefaultsVersion: z.string(),
+  /** The dated ignored-temperature table the check read. */
+  ignoredTemperatureVersion: z.string(),
+  /**
+   * The reasoning (`null` for unset) with which that table lists this model at
+   * this endpoint as ignoring temperature; the picker hides temperature for it.
+   */
+  temperatureIgnoredWith: z.array(ReasoningSettingsSchema.nullable()),
   /** Whether the check ended early: a probe couldn't be sent, or ended on a transient error. */
   interrupted: z.boolean(),
   published: z.object({
