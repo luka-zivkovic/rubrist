@@ -111,7 +111,10 @@ refusal counts no call. The mock makes no call, so it can't be calibrated.
 
 Creating a run is a governed gate (ADR-0014 sections 2 and 4). It needs a
 resolved execution binding that states its temperature and reasoning, unless
-the resolution shows the model rejecting that parameter itself. An unresolved
+the resolution shows the model rejecting that parameter itself (CURRENT).
+ADR-0014 decision 12 (2026-09-27) lets temperature stay unset wherever the
+model doesn't let the author choose it, classified by probing 0 and then 0.5
+(TARGET). An unresolved
 binding resolves at the gate with up to three probes over a fixed,
 non-sensitive input. A failed binding is fixed only by a new evaluator
 version. Before a run's first authorization, and so before any sealed
