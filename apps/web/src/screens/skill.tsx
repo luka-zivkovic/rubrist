@@ -9,6 +9,7 @@ import { TypedQuestionView } from "../components/typed-question-view.js";
 import { fetchCurrentSkill } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
 import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { measuredCount } from "@/lib/regression-gate";
 import { useDashboard } from "@/lib/dashboard-context";
 import { skillEditConsequence, skillVersionStateLabel } from "../lib/skill-presentation.js";
 import { cn } from "@/lib/utils";
@@ -169,9 +170,7 @@ export function SkillScreen() {
               </span>
             </button>
             <div className="px-2 py-1.5 font-mono text-[11px] text-ink-3">
-              {/* Stored zeros until a check measures them. */}
-              Strict {v.goldenSetAgreement == null ? "—" : v.tooStrictCount} · Lenient{" "}
-              {v.goldenSetAgreement == null ? "—" : v.tooLenientCount}
+              Strict {measuredCount(v, v.tooStrictCount)} · Lenient {measuredCount(v, v.tooLenientCount)}
             </div>
           </div>
 

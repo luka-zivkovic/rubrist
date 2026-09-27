@@ -4,6 +4,7 @@ import { ApiError } from "../src/lib/api/transport.js";
 import {
   chainImprovementsGap,
   chainRecordedNote,
+  chainRetryable,
   chainStepRun,
   chainTotals,
   chainTotalsGap,
@@ -13,8 +14,9 @@ import {
   type ChainStep
 } from "../src/lib/compare-chain.js";
 
-// Only the id matters to the chain; the rest of the version is carried through.
-const version = (id: string) => ({ id, version: id.replace("skillv_", "") }) as SkillVersion;
+// The chain reads a version's id, label, and criterion revision.
+const version = (id: string, criterionVersionId = "criterionv_1") =>
+  ({ id, version: id.replace("skillv_", ""), criterionVersionId }) as SkillVersion;
 
 function run(
   skillVersionId: string,
@@ -82,12 +84,12 @@ describe("run comparison chain", () => {
     const totals = chainTotals([recorded("skillv_3", 1, 0), recorded("skillv_2", 2, 3)], from);
 
     expect(totals).toEqual({
-      saves: 2,
       recorded: 2,
       unrecorded: 0,
       failed: 0,
       checkFailed: 0,
       notCompared: 0,
+      improvementsCountedBySave: [true, true],
       improvementsCounted: true,
       regressed: 3,
       improved: 3
@@ -124,7 +126,7 @@ describe("run comparison chain", () => {
   it("names unreadable runs first when a read failed", () => {
     const totals = chainTotals([failed("skillv_4"), unrecorded("skillv_3"), recorded("skillv_2", 0, 1)], from);
 
-    expect(totals).toMatchObject({ saves: 3, recorded: 1, unrecorded: 1, failed: 1, regressed: null, improved: null });
+    expect(totals).toMatchObject({ recorded: 1, unrecorded: 1, failed: 1, regressed: null, improved: null });
     expect(chainTotalsGap(totals)).toBe("1 save's run couldn't be loaded");
     // The unreadable save is not counted as one without a run.
     expect(chainRecordedNote(totals)).toBe("1 with a recorded run · 1 couldn't be loaded");
@@ -137,23 +139,48 @@ describe("run comparison chain", () => {
 
     // The starting version has no run: every improvement on the oldest save
     // is zero by construction, while its regressions were measured.
+    const path = [recorded("skillv_3", 1, 2), recorded("skillv_2", 0, 1)];
     const unmeasuredFrom = unrecorded("skillv_1");
-    const totals = chainTotals([recorded("skillv_3", 1, 2), recorded("skillv_2", 0, 1)], unmeasuredFrom);
-    expect(totals).toMatchObject({ regressed: 1, improved: null, improvementsCounted: false });
+    const totals = chainTotals(path, unmeasuredFrom);
+    expect(totals).toMatchObject({ regressed: 1, improved: null, improvementsCounted: false, improvementsCountedBySave: [true, false] });
     expect(chainTotalsGap(totals)).toBeNull();
-    expect(chainImprovementsGap(totals, unmeasuredFrom)).toBe("v1 has no measured run to count improvements from");
+    expect(chainImprovementsGap(totals, path, unmeasuredFrom)).toBe("v1 has no measured run to count improvements from");
 
     // An earlier save on the path recorded counts without cases.
-    const oldFormat = chainTotals([recorded("skillv_3", 0, 2), recorded("skillv_2", 0, 1, { cases: [] })], from);
+    const oldFormatPath = [recorded("skillv_3", 0, 2), recorded("skillv_2", 0, 1, { cases: [] })];
+    const oldFormat = chainTotals(oldFormatPath, from);
     expect(oldFormat.improved).toBeNull();
-    expect(chainImprovementsGap(oldFormat, from)).toBe("an earlier save has no per-case record to count improvements from");
+    expect(chainImprovementsGap(oldFormat, oldFormatPath, from)).toBe("v2's run has no per-case record");
 
-    const counted = chainTotals([recorded("skillv_3", 0, 2), recorded("skillv_2", 0, 1)], from);
+    const counted = chainTotals(path, from);
     expect(counted).toMatchObject({ improved: 3, improvementsCounted: true });
-    expect(chainImprovementsGap(counted, from)).toBeNull();
+    expect(chainImprovementsGap(counted, path, from)).toBeNull();
+  });
+
+  it("doesn't count improvements across a change of criterion revision", () => {
+    // The API counts improvements against the newest earlier version on the
+    // same criterion revision; the first save on a new revision has none.
+    const newRevision: ChainStep = { ...recorded("skillv_2", 0, 0), version: version("skillv_2", "criterionv_2") };
+    const next: ChainStep = { ...recorded("skillv_3", 0, 1), version: version("skillv_3", "criterionv_2") };
+    const totals = chainTotals([next, newRevision], from);
+
+    expect(totals).toMatchObject({ regressed: 0, improved: null, improvementsCountedBySave: [true, false] });
+    expect(chainImprovementsGap(totals, [next, newRevision], from)).toBe("v1 and v2 are on different criterion revisions");
+  });
+
+  it("keeps a failed read of the starting version's run a failure, and retryable", () => {
+    const path = [recorded("skillv_3", 0, 1), recorded("skillv_2", 0, 1)];
+    const unreadableFrom: ChainStep = { ...failed("skillv_1"), retryable: true };
+    const totals = chainTotals(path, unreadableFrom);
+
+    expect(totals.improved).toBeNull();
+    expect(chainImprovementsGap(totals, path, unreadableFrom)).toBe("v1's run couldn't be loaded");
+    expect(chainRetryable(path, unreadableFrom)).toBe(true);
+    expect(chainRetryable(path, from)).toBe(false);
+    expect(chainRetryable(path, { ...unreadableFrom, retryable: false })).toBe(false);
   });
 
   it("has no total for an empty path", () => {
-    expect(chainTotals([], from)).toMatchObject({ saves: 0, recorded: 0, regressed: null, improved: null });
+    expect(chainTotals([], from)).toMatchObject({ recorded: 0, regressed: null, improved: null });
   });
 });

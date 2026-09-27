@@ -9,7 +9,6 @@ export type ChainStep =
   | { version: SkillVersion; status: "failed"; error: string; retryable: boolean };
 
 export interface ChainTotals {
-  saves: number;
   // Saves with a recorded run, whatever the run found.
   recorded: number;
   unrecorded: number;
@@ -19,10 +18,13 @@ export interface ChainTotals {
   // were no reference cases to compare.
   checkFailed: number;
   notCompared: number;
-  // Whether every save's improvements could be counted. A run counts a case as
-  // improved only against the previous save's recorded verdicts: the next step
-  // on the path, or the baseline (the `from` version) for the oldest step.
-  // Without them its improvements are zero by construction, not measured.
+  // Per save, newest first: whether its improvements could be counted. The API
+  // counts a case as improved only against the recorded verdicts of the newest
+  // earlier version on the same criterion revision. The path can show that
+  // only when the previous save on it (or `from`, for the oldest) is on the
+  // same revision and recorded per-case verdicts; otherwise the save's
+  // improvements are zero by construction, not measured.
+  improvementsCountedBySave: boolean[];
   improvementsCounted: boolean;
   // Sums over the whole path, or null unless every save on it has a recorded
   // run that compared reference cases. Missing, unreadable, failed, and empty
@@ -65,6 +67,20 @@ export function runHasVerdicts(run: RegressionRunResult): boolean {
   return runCompared(run) && run.cases.length > 0;
 }
 
+// Why one save's improvements can't be counted against the save before it on
+// the path, or null when they can.
+function previousSaveGap(step: ChainStep, previous: ChainStep): string | null {
+  if (previous.status === "failed") return `v${previous.version.version}'s run couldn't be loaded`;
+  if (previous.version.criterionVersionId !== step.version.criterionVersionId) {
+    return `v${previous.version.version} and v${step.version.version} are on different criterion revisions`;
+  }
+  if (previous.status !== "recorded" || !runCompared(previous.run)) {
+    return `v${previous.version.version} has no measured run to count improvements from`;
+  }
+  if (!runHasVerdicts(previous.run)) return `v${previous.version.version}'s run has no per-case record`;
+  return null;
+}
+
 // `steps` run newest to oldest; `baseline` is the `from` version, which is not
 // on the path but is the oldest step's previous save.
 export function chainTotals(steps: ReadonlyArray<ChainStep>, baseline: ChainStep): ChainTotals {
@@ -93,16 +109,19 @@ export function chainTotals(steps: ReadonlyArray<ChainStep>, baseline: ChainStep
     }
   }
   const complete = steps.length > 0 && recorded === steps.length && checkFailed === 0 && notCompared === 0;
-  const improvementsCounted = [...steps.slice(1), baseline].every(
-    (previous) => previous.status === "recorded" && runHasVerdicts(previous.run)
+  const improvementsCountedBySave = steps.map((step, index) =>
+    step.status === "recorded"
+    && runCompared(step.run)
+    && previousSaveGap(step, steps[index + 1] ?? baseline) === null
   );
+  const improvementsCounted = improvementsCountedBySave.every(Boolean);
   return {
-    saves: steps.length,
     recorded,
     unrecorded,
     failed,
     checkFailed,
     notCompared,
+    improvementsCountedBySave,
     improvementsCounted,
     regressed: complete ? regressed : null,
     improved: complete && improvementsCounted ? improved : null
@@ -128,14 +147,25 @@ export function chainTotalsGap(totals: ChainTotals): string | null {
 }
 
 // Why the improvements total is unknown, or null when it is known. The path's
-// own gaps come first; then a previous save without per-case verdicts.
-export function chainImprovementsGap(totals: ChainTotals, baseline: ChainStep): string | null {
+// own gaps come first; then the oldest save whose improvements couldn't be
+// counted against the save before it.
+export function chainImprovementsGap(
+  totals: ChainTotals,
+  steps: ReadonlyArray<ChainStep>,
+  baseline: ChainStep
+): string | null {
   const gap = chainTotalsGap(totals);
   if (gap || totals.improvementsCounted) return gap;
-  if (baseline.status !== "recorded" || !runHasVerdicts(baseline.run)) {
-    return `v${baseline.version.version} has no measured run to count improvements from`;
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const reason = previousSaveGap(steps[index]!, steps[index + 1] ?? baseline);
+    if (reason) return reason;
   }
-  return "an earlier save has no per-case record to count improvements from";
+  return null;
+}
+
+// Whether any read on the path, including `from`'s, failed in a way Retry can fix.
+export function chainRetryable(steps: ReadonlyArray<ChainStep>, baseline: ChainStep): boolean {
+  return [...steps, baseline].some((step) => step.status === "failed" && step.retryable);
 }
 
 // How many saves have a recorded run, without implying the unreadable ones

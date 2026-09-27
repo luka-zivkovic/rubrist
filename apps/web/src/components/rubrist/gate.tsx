@@ -17,7 +17,8 @@ const GATE_VARIANT: Record<GateState, BadgeProps["variant"]> = {
   first: "outline",
   running: "outline",
   unrecorded: "outline",
-  unavailable: "outline"
+  unavailable: "outline",
+  loading: "outline"
 };
 
 export function GateChip({ state, title, className }: { state: GateState; title?: string; className?: string }) {

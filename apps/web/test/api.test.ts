@@ -282,6 +282,15 @@ describe("web API helpers", () => {
   });
 
   it("reads only the API's no-run answer as a version without a recorded run", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      error: "No regression run recorded for this version",
+      code: "regression_run_not_recorded"
+    }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
+    // The code decides, whatever the wording; an API that predates the code
+    // is matched by its message.
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "Reworded", code: "regression_run_not_recorded" }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "No regression run recorded for this version" }, 404)));
     await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
 

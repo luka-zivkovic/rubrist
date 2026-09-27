@@ -11,7 +11,8 @@ export type GateState =
   | "first"
   | "running"
   | "unrecorded"
-  | "unavailable";
+  | "unavailable"
+  | "loading";
 
 export const GATE_LABEL: Record<GateState, string> = {
   clean: "regression · clean",
@@ -22,8 +23,16 @@ export const GATE_LABEL: Record<GateState, string> = {
   first: "regression · no baseline",
   running: "regression · running",
   unrecorded: "regression · not recorded",
-  unavailable: "regression · unavailable"
+  unavailable: "regression · unavailable",
+  // Shown while the run is being read; gateStateForVersion never returns it.
+  loading: "regression · loading"
 };
+
+// Stored disagreement counts are zeros until a check measures them; while a
+// version has no agreement value they are unknown, never zero.
+export function measuredCount(version: SkillVersion, count: number): number | "—" {
+  return version.goldenSetAgreement == null ? "—" : count;
+}
 
 export function isGateState(value: string): value is GateState {
   return Object.hasOwn(GATE_LABEL, value);

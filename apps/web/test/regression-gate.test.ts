@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { RegressionRunResult, SkillVersion } from "@rubrist/shared";
-import { GATE_LABEL, gateStateForVersion, type GateState } from "../src/lib/regression-gate.js";
+import { GATE_LABEL, gateStateForVersion, measuredCount, type GateState } from "../src/lib/regression-gate.js";
 import { GateChip } from "../src/components/rubrist/gate.js";
 
 vi.mock("@/components/ui/badge", () => ({
@@ -126,6 +126,14 @@ describe("evaluator-version regression state", () => {
     expect(GATE_LABEL.unrecorded).toBe("regression · not recorded");
     expect(GATE_LABEL.unavailable).toBe("regression · unavailable");
     expect(GATE_LABEL.running).toBe("regression · running");
+  });
+});
+
+describe("measuredCount", () => {
+  it("shows stored zero counts as unknown while a version has no agreement value", () => {
+    expect(measuredCount(version({ goldenSetAgreement: null }), 0)).toBe("—");
+    expect(measuredCount(version({ goldenSetAgreement: 0.8 }), 0)).toBe(0);
+    expect(measuredCount(version({ goldenSetAgreement: 0.8 }), 3)).toBe(3);
   });
 });
 

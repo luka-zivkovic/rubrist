@@ -25,6 +25,9 @@ function retryableStatus(status: number): boolean {
 // of printing the dump.
 export function loadFailure(error: unknown): LoadFailure {
   if (error instanceof Error && error.name === "ZodError") return UNREADABLE;
+  // A body that isn't JSON at all, often a proxy's error page, can be
+  // transient, so it keeps Retry but not the parser's message.
+  if (error instanceof SyntaxError) return { message: UNREADABLE.message, retryable: true };
   if (error instanceof ApiError) {
     if (error.status < 400) return UNREADABLE;
     return { message: error.message, retryable: retryableStatus(error.status) };

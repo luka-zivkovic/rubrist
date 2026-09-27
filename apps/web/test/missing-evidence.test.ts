@@ -66,6 +66,11 @@ describe("missing evidence never reads as a result", () => {
       retryable: false
     });
     expect(loadFailure(new TypeError("Failed to fetch"))).toEqual({ message: "Failed to fetch", retryable: true });
+    // A body that isn't JSON, often a proxy's error page, can be transient.
+    expect(loadFailure(new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON"))).toEqual({
+      message: "Rubrist returned a response this page couldn't read.",
+      retryable: true
+    });
     expect(loadFailure("offline")).toEqual({ message: "offline", retryable: true });
   });
 
@@ -161,6 +166,11 @@ describe("missing evidence never reads as a result", () => {
     expect(stopped).toContain("Skill version not found");
     expect(stopped).toContain("Open Version history to follow it");
     expect(stopped).not.toContain("keep retrying");
+    // The page no longer follows the check, so it doesn't claim it's running.
+    expect(retrying).toContain("Regression check running");
+    expect(retrying).toContain("animate-spin");
+    expect(stopped).toContain("Regression check status unavailable");
+    expect(stopped).not.toContain("animate-spin");
   });
 
   // The root layout needs the whole app's providers to render, so the top bar

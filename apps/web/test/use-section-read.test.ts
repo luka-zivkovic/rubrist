@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import { StrictMode, act, createElement } from "react";
 import type { Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The hook imports app aliases (`@/...`) that only the node transform lets
 // these mocks replace, so this test runs in node with a jsdom window installed
@@ -47,6 +47,10 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 function Probe({ sectionKey, read }: { sectionKey: string | null; read: ((key: string) => () => Promise<string>) }) {

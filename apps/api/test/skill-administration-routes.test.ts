@@ -280,7 +280,10 @@ describe("skill administration routes", () => {
 
     const unrecorded = await localApp.request("/api/skills/skill_support_quality/versions/skillv_1_2_0/regression");
     expect(unrecorded.status).toBe(404);
-    await expect(unrecorded.json()).resolves.toEqual({ error: "No regression run recorded for this version" });
+    await expect(unrecorded.json()).resolves.toEqual({
+      error: "No regression run recorded for this version",
+      code: "regression_run_not_recorded"
+    });
 
     const missing = await localApp.request("/api/skills/skill_support_quality/versions/skillv_missing/regression");
     expect(missing.status).toBe(404);

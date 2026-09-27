@@ -1,5 +1,5 @@
 import * as React from "react";
-import { RefreshCcw } from "lucide-react";
+import { LoaderCircle, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LoadFailure } from "@/lib/load-error";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,17 @@ export function PageLoadError({
       }
       secondary={back}
     />
+  );
+}
+
+// One section of a page whose data is still loading. It says what it is
+// waiting for, so the section never reads as empty meanwhile.
+export function SectionLoading({ label, className }: { label: React.ReactNode; className?: string }) {
+  return (
+    <div role="status" className={cn("flex items-center gap-2 py-2 text-[12.5px] text-ink-3", className)}>
+      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+      {label}
+    </div>
   );
 }
 

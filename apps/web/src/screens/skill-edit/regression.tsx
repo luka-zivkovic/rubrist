@@ -89,6 +89,12 @@ export function RegressionRunning({
   pollError: LoadFailure | null;
   onOpenHistory: () => void;
 }) {
+  // The page stopped following the check: its last status refresh failed in a
+  // way retrying can't fix. The check itself may still be running.
+  const stopped = pollError !== null && !pollError.retryable;
+  const statusIcon = stopped
+    ? <Clock className="size-5 text-ink-3" aria-hidden="true" />
+    : <LoaderCircle className="size-5 animate-spin text-ink-2" />;
   if (firstRun) {
     return (
       <div className="fadeUp mx-auto max-w-[900px]">
@@ -106,7 +112,7 @@ export function RegressionRunning({
               </div>
               <CardDescription>The exact quality question bound to Check v{version.version}</CardDescription>
             </div>
-            <LoaderCircle className="size-5 animate-spin text-ink-2" />
+            {statusIcon}
           </CardHeader>
           <CardContent>
             <p className="font-serif text-[21px] leading-7 text-ink">
@@ -155,9 +161,11 @@ export function RegressionRunning({
 
       <Card className="mb-5">
         <CardContent className="flex items-start gap-3 py-5">
-          <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-ink-2" />
+          <span className="mt-0.5 shrink-0">{statusIcon}</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium text-ink">Regression check running</div>
+            <div className="text-[13px] font-medium text-ink">
+              {stopped ? "Regression check status unavailable" : "Regression check running"}
+            </div>
             <p className="mt-1 max-w-[72ch] text-[12px] leading-5 text-ink-2">
               Rubrist records the full outcome only after every case in the pinned revision finishes.
               Until then this version is not presented as passed or current.

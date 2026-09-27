@@ -27,6 +27,7 @@ import { loadFailure, type LoadFailure } from "@/lib/load-error";
 import {
   chainImprovementsGap,
   chainRecordedNote,
+  chainRetryable,
   chainStepRun,
   chainTotals,
   chainTotalsGap,
@@ -43,30 +44,32 @@ export function CompareVersionsScreen() {
   const { selectedCriterionId } = useCriterion();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [skillId, setSkillId] = useState<string | null>(null);
-  const [versions, setVersions] = useState<SkillVersion[]>([]); // newest → oldest
-  const [listLoading, setListLoading] = useState(true);
-  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
+  // The version list and a failed list read, each keyed by the criterion it
+  // was read for, so another criterion's list or error never shows for this
+  // one. Versions run newest → oldest.
+  const [list, setList] = useState<{ criterionId: string | null; skillId: string; versions: SkillVersion[] } | null>(null);
+  const [listFailure, setListFailure] = useState<{ criterionId: string | null; failure: LoadFailure } | null>(null);
   const [listReloadKey, setListReloadKey] = useState(0);
   // The recorded runs for one path, keyed by it so another pair's runs never
   // show for this one.
   const [chain, setChain] = useState<{ key: string; steps: ChainStep[]; baseline: ChainStep } | null>(null);
   const [stepsReloadKey, setStepsReloadKey] = useState(0);
+  // True from a path Retry until its reads settle.
+  const [retryingSteps, setRetryingSteps] = useState(false);
 
   const fromId = searchParams.get("from");
   const toId = searchParams.get("to");
 
   useEffect(() => {
     let cancelled = false;
-    setListLoading(true);
-    setLoadError(null);
+    const criterionId = selectedCriterionId;
+    setListFailure(null);
     void (async () => {
       try {
-        const skill = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+        const skill = await fetchCurrentSkill(criterionId ?? undefined);
         const list = await fetchSkillVersions(skill.id, 200);
         if (cancelled) return;
-        setSkillId(skill.id);
-        setVersions(list);
+        setList({ criterionId, skillId: skill.id, versions: list });
         // Default pair: previous → newest. A criterion switch can leave
         // the other lineage's version ids in the URL, so replace stale pairs
         // while preserving the criterion selector and other query state.
@@ -87,9 +90,7 @@ export function CompareVersionsScreen() {
           );
         }
       } catch (err) {
-        if (!cancelled) setLoadError(loadFailure(err));
-      } finally {
-        if (!cancelled) setListLoading(false);
+        if (!cancelled) setListFailure({ criterionId, failure: loadFailure(err) });
       }
     })();
     return () => {
@@ -97,6 +98,11 @@ export function CompareVersionsScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCriterionId, listReloadKey]);
+
+  const currentList = list !== null && list.criterionId === selectedCriterionId ? list : null;
+  const loadError = listFailure !== null && listFailure.criterionId === selectedCriterionId ? listFailure.failure : null;
+  const skillId = currentList?.skillId ?? null;
+  const versions = useMemo(() => currentList?.versions ?? [], [currentList]);
 
   const iFrom = versions.findIndex((v) => v.id === fromId);
   const iTo = versions.findIndex((v) => v.id === toId);
@@ -126,7 +132,10 @@ export function CompareVersionsScreen() {
       const read = (version: SkillVersion) =>
         loadChainStep(version, () => fetchSkillVersionRegression(skillId, version.id));
       const [steps, baseline] = await Promise.all([Promise.all(chainVersions.map(read)), read(from)]);
-      if (!cancelled) setChain({ key: chainKey, steps, baseline });
+      if (!cancelled) {
+        setChain({ key: chainKey, steps, baseline });
+        setRetryingSteps(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -145,11 +154,12 @@ export function CompareVersionsScreen() {
   const improvementsNote = (complete: string) =>
     totals === null || loaded === null
       ? "loading recorded runs"
-      : chainImprovementsGap(totals, loaded.baseline) ?? complete;
+      : chainImprovementsGap(totals, loaded.steps, loaded.baseline) ?? complete;
 
   // The newest step's per-case diff — the recorded record of the final hop.
   const newestStep = steps?.[0];
   const newestRun = newestStep?.status === "recorded" ? newestStep.run : null;
+  const newestImprovementsCounted = totals?.improvementsCountedBySave[0] ?? false;
 
   function setPair(nextFrom: string, nextTo: string) {
     setSearchParams((current) => {
@@ -177,7 +187,7 @@ export function CompareVersionsScreen() {
   }
 
   // The list is empty while it loads; that is not "nothing to compare".
-  if (listLoading) {
+  if (!currentList) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Run comparison" title="Loading versions" />
@@ -297,11 +307,19 @@ export function CompareVersionsScreen() {
                   Each row is one saved version and the regression check recorded when it was saved, if any.
                 </CardDescription>
               </div>
-              {steps?.some((step) => step.status === "failed" && step.retryable) ? (
+              {loaded && chainRetryable(loaded.steps, loaded.baseline) ? (
                 <>
                   <div className="flex-1" />
-                  <Button variant="ghost" size="sm" onClick={() => setStepsReloadKey((key) => key + 1)}>
-                    <RefreshCcw /> Retry
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={retryingSteps}
+                    onClick={() => {
+                      setRetryingSteps(true);
+                      setStepsReloadKey((key) => key + 1);
+                    }}
+                  >
+                    <RefreshCcw /> {retryingSteps ? "Retrying…" : "Retry"}
                   </Button>
                 </>
               ) : null}
@@ -361,8 +379,8 @@ export function CompareVersionsScreen() {
                         <td className="text-right font-mono tabular-nums">{measured ? run.improved : "—"}</td>
                         <td className="text-[12.5px] text-ink-3">
                           {step.status === "failed" ? (
-                            <span className="text-signal" title={step.error}>
-                              Couldn't load this save's run
+                            <span className="text-signal">
+                              Couldn't load this save's run · {step.error}
                             </span>
                           ) : run?.status === "error" ? (
                             <span className="text-signal" title={run.error ?? undefined}>
@@ -399,10 +417,24 @@ export function CompareVersionsScreen() {
                 <div className="flex-1" />
                 <div className="flex gap-2">
                   <Chip variant="fail">{newestRun.regressed} regressed</Chip>
-                  <Chip>{newestRun.improved} improved</Chip>
-                  <Chip variant="outline">
-                    {Math.max(0, newestRun.compared - newestRun.regressed - newestRun.improved)} unchanged
-                  </Chip>
+                  {newestImprovementsCounted ? (
+                    <>
+                      <Chip>{newestRun.improved} improved</Chip>
+                      <Chip variant="outline">
+                        {Math.max(0, newestRun.compared - newestRun.regressed - newestRun.improved)} unchanged
+                      </Chip>
+                    </>
+                  ) : (
+                    // Without the previous save's verdicts an improved case is
+                    // recorded as agreeing, so improved and unchanged can't be
+                    // told apart.
+                    <>
+                      <Chip variant="outline">
+                        {Math.max(0, newestRun.compared - newestRun.regressed)} agree with the label
+                      </Chip>
+                      <Chip variant="outline">improvements not counted</Chip>
+                    </>
+                  )}
                 </div>
               </CardHeader>
               <Table>

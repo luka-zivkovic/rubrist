@@ -9,10 +9,11 @@ import { TypedQuestionView } from "@/components/typed-question-view";
 import { regressionReceiptLabel, skillVersionChangeLabels } from "@/lib/skill-edit-flow";
 import { Table } from "@/components/ui/table";
 import { RowLink } from "@/components/row-action";
-import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError } from "@/components/rubrist";
+import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError, SectionLoading } from "@/components/rubrist";
 import { fetchCurrentSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
 import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { measuredCount } from "@/lib/regression-gate";
 import { useSectionRead } from "@/hooks/use-section-read";
 import { verdictKindDescription } from "@/lib/verdict-kind";
 import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
@@ -45,17 +46,18 @@ const STATUS_LABEL: Record<SkillStatus, string> = {
   deprecated:   "deprecated"
 };
 
-// A governed candidate reads as calibrating for its whole candidate life, so
-// once its regression run is recorded it is a candidate, not a running check.
-function StatusChip({ status, hasRun }: { status: SkillStatus; hasRun: boolean }) {
-  const label = status === "calibrating" && hasRun ? "candidate" : STATUS_LABEL[status];
+// A governed candidate reads as calibrating for its whole candidate life. With
+// its regression run recorded it is a candidate; with none, its check is
+// running; while the run can't be read, the page can't tell which.
+function StatusChip({ status, run }: { status: SkillStatus; run: RegressionRunResult | null | undefined }) {
+  const label = status !== "calibrating"
+    ? STATUS_LABEL[status]
+    : run === undefined
+      ? "calibrating"
+      : run === null
+        ? STATUS_LABEL.calibrating
+        : "candidate";
   return <Chip variant={STATUS_VARIANT[status]}>{label}</Chip>;
-}
-
-// Stored disagreement counts are zeros until a check measures them; without an
-// agreement value they are unknown.
-function measuredCount(version: SkillVersion, count: number): number | "—" {
-  return version.goldenSetAgreement == null ? "—" : count;
 }
 
 export function SkillVersionsScreen() {
@@ -90,12 +92,16 @@ export function SkillVersionsScreen() {
   // Async regression check (M0 C5b): a `calibrating` version without a recorded
   // run is a gate.run in flight — poll quietly until its run lands so the
   // history updates without a manual refresh. A governed candidate stays
-  // calibrating after its run is recorded, so it doesn't keep the poll alive.
+  // calibrating after its run is recorded, so it only keeps a slow poll: the
+  // versions and runs are separate reads, and a check that lands between them
+  // shows a run on a still-calibrating version until the next tick.
   // Silent refetch (no setLoading) to avoid a shell flash on every tick; the
-  // interval tears down once no check is running.
-  const anyCalibrating = versions.some((candidate) => candidate.status === "calibrating" && !regressionRuns[candidate.id]);
+  // interval tears down once nothing is calibrating.
+  const anyCheckRunning = versions.some((candidate) => candidate.status === "calibrating" && !regressionRuns[candidate.id]);
+  const anyCalibrating = versions.some((candidate) => candidate.status === "calibrating");
+  const pollInterval = anyCheckRunning ? 3_000 : anyCalibrating ? 30_000 : null;
   useEffect(() => {
-    if (!anyCalibrating) return;
+    if (pollInterval === null) return;
     let cancelled = false;
     const timer = setInterval(() => {
       void (async () => {
@@ -110,12 +116,12 @@ export function SkillVersionsScreen() {
           // Transient poll failure keeps last-good state; next tick retries.
         }
       })();
-    }, 3000);
+    }, pollInterval);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [anyCalibrating, selectedCriterionId]);
+  }, [pollInterval, selectedCriterionId]);
 
   if (loading && versions.length === 0) {
     return (
@@ -209,7 +215,7 @@ export function SkillVersionsScreen() {
                   </td>
                   <td>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusChip status={v.status} hasRun={Boolean(regressionRun)} />
+                      <StatusChip status={v.status} run={regressionRun ?? null} />
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
                       <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
@@ -279,17 +285,20 @@ export function SkillVersionDetailScreen() {
   const [skill, setSkill] = useState<Skill | null>(null);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<LoadFailure | null>(null);
+  const [failure, setFailure] = useState<{ routeKey: string; failure: LoadFailure } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // Which version and criterion `skill` and `versions` were read for. Until they
-  // match the route, the page is still loading, never "not found".
+  // match the route, the page is still loading, never "not found", and another
+  // route's failure never shows for this one.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const routeKey = `${selectedCriterionId ?? ""}|${id ?? ""}`;
+  const error = failure !== null && failure.routeKey === routeKey ? failure.failure : null;
 
   useEffect(() => {
     let cancelled = false;
+    const readFor = `${selectedCriterionId ?? ""}|${id ?? ""}`;
     setLoading(true);
-    setError(null);
+    setFailure(null);
     (async () => {
       try {
         const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
@@ -298,9 +307,9 @@ export function SkillVersionDetailScreen() {
         if (cancelled) return;
         setSkill(s);
         setVersions(vs);
-        setLoadedFor(`${selectedCriterionId ?? ""}|${id ?? ""}`);
+        setLoadedFor(readFor);
       } catch (err) {
-        if (!cancelled) setError(loadFailure(err));
+        if (!cancelled) setFailure({ routeKey: readFor, failure: loadFailure(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -337,8 +346,8 @@ export function SkillVersionDetailScreen() {
     evidenceKey,
     evidence && (() => fetchJudgeCard(evidence.skillId, evidence.versionId))
   );
-  // The recorded run, null when this version has none, and undefined when the
-  // read failed.
+  // The recorded run, null when this version has none, and undefined while it
+  // is read or when the read failed.
   const regressionRun = regression.status === "loaded" ? regression.data : undefined;
   const convergenceAudit = convergence.status === "loaded" ? convergence.data : null;
 
@@ -348,12 +357,10 @@ export function SkillVersionDetailScreen() {
     </Button>
   );
 
-  // Wait for every first read: a section still loading must not render as
-  // empty. A section's retry keeps the page in place.
-  if (
-    (!current && !error)
-    || [regression, convergence, consistency, judgeCard].some((read) => read.status === "loading")
-  ) {
+  // The page renders once its version is read. Each evidence section then
+  // says it is loading until its own read settles, so a slow section never
+  // holds up the rest and never reads as empty meanwhile.
+  if (!current && !error) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Judge card" title="Loading version" />
@@ -413,15 +420,20 @@ export function SkillVersionDetailScreen() {
           : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "—"} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
         right={
           <div className="flex items-center gap-2">
-            <StatusChip status={v.status} hasRun={Boolean(regressionRun)} />
+            <StatusChip status={v.status} run={regressionRun} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-            <GateChip state={gateStateForVersion(v, regressionRun)} title={v.knownLimitations.join(" · ")} />
+            <GateChip
+              state={regression.status === "loading" ? "loading" : gateStateForVersion(v, regressionRun)}
+              title={v.knownLimitations.join(" · ")}
+            />
             {isCurrent ? <Chip>current</Chip> : null}
           </div>
         }
       />
 
-      {judgeCard.status === "failed" ? (
+      {judgeCard.status === "loading" ? (
+        <SectionLoading className="mb-6" label="Loading the Judge Card…" />
+      ) : judgeCard.status === "failed" ? (
         <SectionLoadError
           className="mb-6"
           title="Couldn't load the Judge Card."
@@ -561,7 +573,9 @@ export function SkillVersionDetailScreen() {
       </div>
 
       <div className="mt-6">
-        {regression.status === "failed" ? (
+        {regression.status === "loading" ? (
+          <SectionLoading label="Loading the regression run…" />
+        ) : regression.status === "failed" ? (
           <SectionLoadError
             title="Couldn't load the regression run."
             failure={regression.failure}
@@ -582,7 +596,9 @@ export function SkillVersionDetailScreen() {
         ) : null}
       </div>
 
-      {convergence.status === "failed" ? (
+      {convergence.status === "loading" ? (
+        <SectionLoading className="mt-6" label="Loading the convergence audit…" />
+      ) : convergence.status === "failed" ? (
         <div className="mt-6">
           <SectionLoadError
             title="Couldn't load the convergence audit."
@@ -617,7 +633,10 @@ export function SkillVersionDetailScreen() {
             onRetry={consistency.retry}
           />
         ) : (
-          <SelfConsistencyCard report={consistency.status === "loaded" ? consistency.data : null} />
+          <SelfConsistencyCard
+            report={consistency.status === "loaded" ? consistency.data : null}
+            loading={consistency.status === "loading"}
+          />
         )}
       </div>
     </div>
@@ -762,11 +781,13 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
 
 function SelfConsistencyCard({
   report,
+  loading = false,
   failure,
   retrying = false,
   onRetry
 }: {
   report: SelfConsistencyReport | null;
+  loading?: boolean;
   failure?: LoadFailure;
   retrying?: boolean;
   onRetry?: () => void;
@@ -783,7 +804,9 @@ function SelfConsistencyCard({
             </span>
           ) : null}
         </div>
-        {failure && onRetry ? (
+        {loading ? (
+          <SectionLoading label="Loading self-consistency…" />
+        ) : failure && onRetry ? (
           <SectionLoadError
             className="mt-2"
             title="Couldn't load self-consistency."

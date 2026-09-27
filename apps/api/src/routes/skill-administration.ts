@@ -105,7 +105,9 @@ export function registerSkillAdministrationRoutes(
       return c.json({ error: "Skill version not found" }, 404);
     }
     const run = await repository.getRegressionRunForVersion(projectId, version.id);
-    if (!run) return c.json({ error: "No regression run recorded for this version" }, 404);
+    if (!run) {
+      return c.json({ error: "No regression run recorded for this version", code: "regression_run_not_recorded" }, 404);
+    }
     return c.json({ regressionRun: run });
   });
 
