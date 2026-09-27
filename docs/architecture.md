@@ -152,9 +152,10 @@ behind the table; it makes live calls and is not run in CI. A failed binding
 that stated a temperature carries a suggestion from the record's temperature
 outcomes with the saved reasoning: leave temperature unset where 0 and 0.5
 were both rejected, choose another value where one was accepted, and nothing
-about temperature where it is unknown. Because a check's outcomes don't yet
-become the record, a failed record usually holds only its confirming probe,
-so that suggestion is rare (CURRENT).
+about temperature where it is unknown. That suggestion is not yet reachable
+(CURRENT): the check's outcomes don't yet become the record, and resolution
+sends nothing after a rejected confirming probe, so a failed record holds
+only that probe.
 
 Resolution also runs after save: the gate worker confirms a newly saved
 version's binding before its regression gate, with the confirming probe and,
@@ -174,7 +175,9 @@ the provider publishes, within a 60-second budget, and says when it ended
 early. The same route classifies temperature for reasoning the author selects
 after the check (`classifyTemperature`): that reasoning without temperature,
 unless the check already saw that request accepted, then the temperature
-probes, so at most 3 calls. Each owner may start 10 checks or
+probes, so at most 3 calls. Its report classifies temperature only from
+requests it sent itself; the picker reads its probes together with the
+check's. Each owner may start 10 checks or
 classifications a minute per project, and a project runs at most 2 at once.
 The check records nothing: ADR-0014 carries its outcomes into the resolution
 record (TARGET), but the record is built from resolution's own probes after
@@ -183,16 +186,23 @@ names, as the saved binding's calls would; restricting which hosts a custom
 endpoint may name is not yet enforced (CURRENT).
 
 In the model picker, temperature starts empty. The picker fills in 0 only
-where the check saw 0 accepted with the selected reasoning; where it saw 0
-rejected and 0.5 accepted, the field stays empty, 0 is marked rejected, and
-the author states a value. Where 0 and 0.5 were both rejected, or the table
-lists the combination, the field is hidden with the reason and nothing is
-sent. Where no check could run, or its temperature probes ended in errors,
-the field is shown empty and resolution decides the gate. When the author
-selects reasoning the check didn't probe temperature with, the picker
-classifies it before saving is allowed. First-project setup shows no picker:
-it keeps the seeded binding's temperature 0, and a provider it falls back to
-starts with temperature unset (CURRENT).
+where the check saw 0 accepted with the selected reasoning, and empties a 0
+it filled once that stops being so, for other reasoning or another model; a
+value the author typed stays. Where it saw 0 rejected and 0.5 accepted, the
+field stays empty, 0 is marked rejected, and the author states a value; a
+value the check saw rejected is marked so even where its probes classify
+nothing. Where 0 and 0.5 were both rejected, or the table lists the
+combination, the field is hidden with the reason and nothing is sent. Where
+no check could run, or its temperature probes ended in errors, the field is
+shown empty and resolution decides the gate. A check sends no `topP`, so
+where the draft carries over the base version's `topP`, the picker reads
+temperature as unknown and resolution classifies it with that `topP`. When
+the author selects reasoning the check didn't probe temperature with, the
+picker classifies it; saving waits for that, and for a newly picked model's
+check. A new check replaces the probes, so the picker drops a classification
+still answering for the old one and asks again. First-project setup shows no
+picker: it keeps the seeded binding's temperature 0, and a provider it falls
+back to starts with temperature unset (CURRENT).
 
 The author sees a version's resolution on its version page and in the
 evaluator lifecycle panel (`GET /api/evaluator-lifecycles/:id/resolution`):
