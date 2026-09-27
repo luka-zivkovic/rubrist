@@ -153,6 +153,7 @@ export class DemoJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort 
 
   async markFeedbackSyncBlocked(job: FeedbackSyncJob, error: unknown): Promise<void> {
     const context = await this.dependencies.loadFeedbackSyncContext(job);
+    if (context.status === "synced") return;
     this.store.feedbackJobs.set(job.feedbackSyncJobId, { ...context, status: "blocked" });
     this.store.feedbackJobLastError.set(job.feedbackSyncJobId, error instanceof Error ? error.message : String(error));
   }
