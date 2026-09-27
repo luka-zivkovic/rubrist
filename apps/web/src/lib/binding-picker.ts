@@ -1,9 +1,10 @@
 import {
   TEMPERATURE_PROBE_VALUES,
+  answeringTemperatureProbes,
   probeRequestAccepted,
   reasoningFamilyFor,
   takesSamplingSettings,
-  temperatureSupportWith,
+  temperatureOutcome,
   verdictProtocolsFor,
   type CapabilityCheckReport,
   type CapabilityProbe,
@@ -111,12 +112,13 @@ export function sentReasoning(provider: JudgeProviderId, report: CapabilityCheck
 /**
  * What the picker shows for a provider, from a capability check of the chosen
  * model (or `null` before one has run) and the reasoning and temperature the
- * author has. A blank temperature is not sent.
+ * author has, with the `topP` the draft carries over. A blank temperature is
+ * not sent.
  */
 export function bindingPickerGuidance(
   provider: JudgeProviderId,
   report: CapabilityCheckReport | null,
-  author: { reasoning: ReasoningSettings | null; temperature: string }
+  author: { reasoning: ReasoningSettings | null; temperature: string; topP?: number | null }
 ): BindingPickerGuidance {
   const probes = report?.probes ?? [];
   const protocolProbe = (protocol: VerdictProtocolId) => probes.find((probe) => probe.purpose === "protocol" && probe.verdictProtocol === protocol);
@@ -129,18 +131,24 @@ export function bindingPickerGuidance(
 
   const family = reasoningFamilyFor(provider);
   const reasoningRejectedOutright = report?.reasoningSupport === "parameter_rejected";
-  // Temperature probes answer for the reasoning they were sent with, and only
-  // once the same request without temperature was accepted; the check sends
-  // no topP. An accepted or rejected value holds for that value only, so any
-  // other value is confirmed at resolution. The reasoning is what the binding
-  // sends: none where the field is hidden.
+  // Temperature probes answer for the reasoning and topP they were sent with,
+  // and only once the same request without temperature was accepted; the
+  // check sends no topP, so a draft carrying one over learns nothing from it.
+  // An accepted or rejected value holds for that value only, even where the
+  // probes classify nothing, so any other value is confirmed at resolution.
+  // The reasoning is what the binding sends: none where the field is hidden.
   const sent = sentReasoning(provider, report, author.reasoning);
   const samples = takesSamplingSettings(provider);
   const listed = report !== null && report.temperatureIgnoredWith.some((ignored) => sameReasoning(ignored, sent));
-  const support = report === null || listed ? null : temperatureSupportWith(probes, { reasoning: sent, topP: null });
-  const answers = support === null ? [] : probes.filter((probe) =>
-    probe.purpose === "temperature" && probe.sent.topP === null && sameReasoning(probe.sent.reasoning, sent));
-  const answerFor = (temperature: number) => answers.find((probe) => probe.sent.temperature === temperature);
+  const answers = report === null || listed || (author.topP ?? null) !== null
+    ? []
+    : answeringTemperatureProbes(probes, { reasoning: sent, topP: null });
+  const support = temperatureOutcome(answers);
+  // A definite answer outranks an error for the same value.
+  const answerFor = (temperature: number) => {
+    const same = answers.filter((probe) => probe.sent.temperature === temperature);
+    return same.find((probe) => probe.outcome !== "error") ?? same[0];
+  };
   const acceptedValue = TEMPERATURE_PROBE_VALUES.find((probed) => {
     const answer = answerFor(probed);
     return answer !== undefined && probeRequestAccepted(answer);

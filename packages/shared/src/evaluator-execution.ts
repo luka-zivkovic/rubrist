@@ -538,19 +538,27 @@ export function temperatureOutcome(temperatureProbes: readonly CapabilityProbe[]
 }
 
 /**
- * How a model treats temperature with one reasoning and `topP`, from the
- * probes recorded for it. A temperature probe counts only where the same
- * request without temperature, on the same protocol, was accepted: in a
- * check, the reasoning probe with that reasoning, or the protocol probe where
- * no reasoning is sent; at resolution, the confirming probe.
+ * The temperature probes that answer for one reasoning and `topP`: those sent
+ * where the same request without temperature, on the same protocol, was
+ * accepted. In a check that is the reasoning probe with that reasoning, or the
+ * protocol probe where no reasoning is sent; at resolution, the confirming
+ * probe (ADR-0014 decision 12).
  */
+export function answeringTemperatureProbes(
+  probes: readonly CapabilityProbe[],
+  settings: { reasoning: ReasoningSettings | null; topP: number | null }
+): CapabilityProbe[] {
+  const same = probes.filter((probe) => sameSettings(probe.sent.reasoning, settings.reasoning) && probe.sent.topP === settings.topP);
+  return same.filter((probe) => probe.purpose === "temperature" && same.some((baseline) =>
+    baseline.sent.temperature === null && baseline.verdictProtocol === probe.verdictProtocol && probeRequestAccepted(baseline)));
+}
+
+/** How a model treats temperature with one reasoning and `topP`, from the probes recorded for it. */
 export function temperatureSupportWith(
   probes: readonly CapabilityProbe[],
   settings: { reasoning: ReasoningSettings | null; topP: number | null }
 ): TemperatureSupport | null {
-  const same = probes.filter((probe) => sameSettings(probe.sent.reasoning, settings.reasoning) && probe.sent.topP === settings.topP);
-  return temperatureOutcome(same.filter((probe) => probe.purpose === "temperature" && same.some((baseline) =>
-    baseline.sent.temperature === null && baseline.verdictProtocol === probe.verdictProtocol && probeRequestAccepted(baseline))));
+  return temperatureOutcome(answeringTemperatureProbes(probes, settings));
 }
 
 /** Whether some probe in the record supports the reasoning summary a gate reads. */

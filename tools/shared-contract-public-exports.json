@@ -1071,6 +1071,7 @@
     "VerdictSource",
     "VerdictSourceSchema",
     "adviseProductionThreshold",
+    "answeringTemperatureProbes",
     "buildAgentConnectSnippets",
     "buildProductionCalibrationArtifact",
     "compileJudgePrompt",

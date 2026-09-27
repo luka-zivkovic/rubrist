@@ -58,6 +58,16 @@ export function defaultBindingSettings(provider: JudgeProviderId, modelId: strin
 }
 
 /**
+ * The `topP` a draft sends: the base version's while the provider and model
+ * stay the same, since the editor doesn't edit it, and otherwise none.
+ */
+export function carriedTopP(base: ExecutionBinding | null, provider: JudgeProviderId, modelId: string): number | null {
+  return base !== null && base.provider === provider && base.modelId === modelId.trim() && takesSamplingSettings(provider)
+    ? base.sampling.topP
+    : null;
+}
+
+/**
  * What's wrong with an output token limit as the author typed it, or `null`
  * when it can be saved. Anthropic requires a limit, and one above the
  * thinking budget, since the budget counts toward it.
@@ -119,7 +129,7 @@ export function executionBindingInputFromFields(
     endpoint: fields.provider === "custom" ? { kind: "custom", baseUrl } : { kind: "managed" },
     modelId,
     modelVersion,
-    sampling: { temperature, topP: sameModel && takesSampling ? base.sampling.topP : null },
+    sampling: { temperature, topP: carriedTopP(base, fields.provider, modelId) },
     reasoning,
     outputTokenLimit,
     verdictProtocol,

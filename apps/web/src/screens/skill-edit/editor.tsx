@@ -38,7 +38,7 @@ export function SkillVersionEditor({
   usesImplicitRubric, unknownPromptVariables, availableProviderOptions,
   provider, setProvider, canCheckModel, selectedProviderOption, baseUrl, setBaseUrl, baseUrlValid,
   modelsLoading, models, modelId, setModelId, modelVersion, setModelVersion,
-  modelsError, pinnedModelMissing, temperature, setTemperature, temperatureValid, picker,
+  modelsError, pinnedModelMissing, temperature, temperatureValid, picker,
   verdictKind, scalarRange, choiceScores, hasConfiguredRealProvider, timeScope,
   setTimeScope, changeInput, submitError, canSave, submit
 }: {
@@ -90,7 +90,6 @@ export function SkillVersionEditor({
   modelsError: string | null;
   pinnedModelMissing: boolean;
   temperature: string;
-  setTemperature: Dispatch<SetStateAction<string>>;
   temperatureValid: boolean;
   picker: ReturnType<typeof useBindingPicker>;
   verdictKind: VerdictKind;
@@ -435,7 +434,6 @@ export function SkillVersionEditor({
           <BindingSettings
             provider={provider}
             temperature={temperature}
-            setTemperature={setTemperature}
             temperatureValid={temperatureValid}
             picker={picker}
             canCheck={canCheckModel}

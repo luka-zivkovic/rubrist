@@ -246,7 +246,7 @@ describe("guided evaluator editing", () => {
     expect(source).toContain('setTemperature(keeps ? fields.temperature : "");');
     expect(source).not.toContain('useState("0")');
     expect(source).toContain("temperature,\n    setTemperature\n  });");
-    expect(source).toContain("!picker.temperaturePending");
+    expect(source).toContain("!picker.checkPending && !picker.temperaturePending");
   });
 
   it("ignores a deferred create response after its criterion scope changes", async () => {

@@ -275,4 +275,125 @@ describe("the model picker's state", () => {
     expect(pending).toHaveLength(1);
     expect(temperature).toBe("");
   });
+
+  describe("a 0 the picker filled in, where the check stops showing 0 accepted", () => {
+    // Sonnet's check saw 0 accepted with its documented default, so the picker filled it in.
+    async function filledOnSonnet() {
+      await mount(SONNET);
+      let check!: Promise<void>;
+      await act(async () => { check = picker.runCheck(); });
+      await act(async () => { pending[0]!.resolve(checkedWith(DISABLED_HIGH, true)); await check; });
+      expect(temperature).toBe("0");
+    }
+
+    it("is emptied for newly selected reasoning, and stays empty when its classification fails", async () => {
+      vi.useFakeTimers();
+      await filledOnSonnet();
+      const { checkModelCapabilities } = await import("../src/lib/api.js");
+      vi.mocked(checkModelCapabilities).mockRejectedValueOnce(new Error("overloaded"));
+      await act(async () => picker.setSettings({ reasoning: ADAPTIVE }));
+      expect(temperature).toBe("");
+      await act(async () => { vi.advanceTimersByTime(1_000); });
+      await act(async () => { await Promise.resolve(); });
+      expect(picker.temperaturePending).toBe(false);
+      expect(picker.guidance.temperature).toMatchObject({ shown: true, support: null });
+      // Where the temperature probes ended in errors, the field is shown empty.
+      expect(temperature).toBe("");
+    });
+
+    it("is emptied for another model, whose check saving waits for, and stays empty when that check fails", async () => {
+      vi.useFakeTimers();
+      await filledOnSonnet();
+      await act(async () => { picker.modelPicked(); setModel(OPUS); });
+      expect(temperature).toBe("");
+      // The check is about to start by itself, so saving waits.
+      expect(picker.checkPending).toBe(true);
+      const { checkModelCapabilities } = await import("../src/lib/api.js");
+      let fail!: (error: Error) => void;
+      vi.mocked(checkModelCapabilities).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+      await act(async () => { vi.advanceTimersByTime(1_000); });
+      expect(picker.checking).toBe(true);
+      expect(picker.checkPending).toBe(true);
+      await act(async () => { fail(new Error("overloaded")); await Promise.resolve(); });
+      expect(picker).toMatchObject({ checking: false, checkPending: false, report: null });
+      expect(picker.guidance.temperature.shown).toBe(true);
+      // Where no check could run, the field is shown with no value filled in.
+      expect(temperature).toBe("");
+    });
+
+    it("is emptied where a classification saw 0 rejected, and a 0 the author then types is marked rejected", async () => {
+      vi.useFakeTimers();
+      await filledOnSonnet();
+      await act(async () => picker.setSettings({ reasoning: ADAPTIVE }));
+      await act(async () => { vi.advanceTimersByTime(1_000); });
+      const errored: CapabilityProbe = { ...probe("temperature", { temperature: 0.5, reasoning: ADAPTIVE }, false), outcome: "error", rejection: null, failureKind: "provider_unavailable" };
+      await act(async () => {
+        pending[1]!.resolve({ ...checkedWith(ADAPTIVE), probes: [probe("reasoning", { reasoning: ADAPTIVE }), probe("temperature", { temperature: 0, reasoning: ADAPTIVE }, false), errored] });
+      });
+      expect(picker.temperaturePending).toBe(false);
+      expect({ value: temperature, support: picker.guidance.temperature.support, guidance: picker.guidance.temperature.guidance, blocking: picker.blockingProblems })
+        .toEqual({ value: "", support: null, guidance: null, blocking: [] });
+      // The check saw 0 rejected with this reasoning after an accepted baseline, though 0.5 is unknown.
+      await act(async () => picker.editTemperature("0"));
+      expect(picker.guidance.temperature.guidance).toBe("rejected");
+      expect(picker.blockingProblems).toEqual(["The model rejected this temperature in the check; choose another value."]);
+    });
+
+    it("stays once the author types it, since it is theirs", async () => {
+      vi.useFakeTimers();
+      await filledOnSonnet();
+      await act(async () => picker.editTemperature("0"));
+      await act(async () => picker.setSettings({ reasoning: ADAPTIVE }));
+      expect(temperature).toBe("0");
+      expect(picker.guidance.temperature.guidance).toBe("confirmed at resolution");
+    });
+  });
+
+  it("learns nothing about temperature where the draft carries over a topP the check didn't send", async () => {
+    vi.useFakeTimers();
+    const base: ExecutionBinding = {
+      provider: "anthropic", endpoint: { kind: "managed" }, modelId: SONNET.modelId, modelVersion: SONNET.modelVersion,
+      sampling: { temperature: null, topP: 0.9 }, reasoning: DISABLED_HIGH, outputTokenLimit: 1_200, verdictProtocol: "anthropic.structured-output/v1", routing: null
+    };
+    await mount(SONNET, base);
+    let check!: Promise<void>;
+    await act(async () => { check = picker.runCheck(); });
+    await act(async () => { pending[0]!.resolve(checkedWith(DISABLED_HIGH, true)); await check; });
+    expect(temperature).toBe("");
+    expect(picker.guidance.temperature).toMatchObject({ shown: true, support: null, acceptedValue: null });
+    await act(async () => picker.editTemperature("0"));
+    expect(picker.guidance.temperature.guidance).toBe("confirmed at resolution");
+    // Only resolution can classify it, with the saved topP.
+    await act(async () => picker.setSettings({ reasoning: ADAPTIVE }));
+    await act(async () => { vi.advanceTimersByTime(2_000); });
+    expect(pending).toHaveLength(1);
+    expect(picker.temperaturePending).toBe(false);
+  });
+
+  it("drops a classification's answer once the author checks the model again, and asks again after the new check", async () => {
+    vi.useFakeTimers();
+    await mount(OPUS);
+    let check!: Promise<void>;
+    await act(async () => { check = picker.runCheck(); });
+    await act(async () => { pending[0]!.resolve(checkedWith(ADAPTIVE, false, false)); await check; });
+    await act(async () => picker.setSettings({ reasoning: DISABLED_HIGH }));
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(pending[1]!.input.classifyTemperature?.reasoning).toEqual(DISABLED_HIGH);
+
+    await act(async () => { check = picker.runCheck(); });
+    expect(picker).toMatchObject({ checking: true, checkPending: true });
+    // The earlier check's classification answers while the new check runs: nothing of it is kept.
+    await act(async () => {
+      pending[1]!.resolve({ ...checkedWith(DISABLED_HIGH), probes: [probe("reasoning", { reasoning: DISABLED_HIGH }), probe("temperature", { temperature: 0, reasoning: DISABLED_HIGH })] });
+    });
+    expect(picker).toMatchObject({ checking: true, checkError: null });
+    expect(picker.guidance.temperature.support).toBeNull();
+    expect(temperature).toBe("");
+
+    await act(async () => { pending[2]!.resolve(checkedWith(ADAPTIVE, false, false)); await check; });
+    expect(picker.temperaturePending).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(pending).toHaveLength(4);
+    expect(pending[3]!.input.classifyTemperature).toMatchObject({ reasoning: DISABLED_HIGH, baselineAccepted: false });
+  });
 });

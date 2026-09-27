@@ -134,6 +134,33 @@ describe("model picker guidance", () => {
     expect(bindingPickerGuidance("anthropic", noBaseline, { reasoning: ADAPTIVE, temperature: "" }).temperature).toMatchObject({ support: null, acceptedValue: null });
   });
 
+  it("marks a value the check saw rejected even where the probes classify nothing", () => {
+    const errored = probe({ purpose: "temperature", sent: { temperature: 0.5, topP: null, reasoning: null, outputTokenLimit: 1_200 }, outcome: "error", failureKind: "provider_timeout" });
+    const halfUnknown = withTemperatures(temperatureProbe(0, null, false), errored);
+    expect(bindingPickerGuidance("openai", halfUnknown, { reasoning: null, temperature: "" }).temperature)
+      .toEqual({ shown: true, hidden: null, support: null, guidance: null, acceptedValue: null, zeroRejected: false });
+    const zero = bindingPickerGuidance("openai", halfUnknown, { reasoning: null, temperature: "0" });
+    expect(zero.temperature.guidance).toBe("rejected");
+    expect(pickerBlockingProblems(zero, { verdictProtocol: "openai.structured-output/v1" }))
+      .toEqual(["The model rejected this temperature in the check; choose another value."]);
+    expect(bindingPickerGuidance("openai", halfUnknown, { reasoning: null, temperature: "0.5" }).temperature.guidance).toBe("confirmed at resolution");
+    // Without an accepted request to add it to, the rejection says nothing about the value.
+    const noBaseline = report({ probes: [probe({}), reasoningProbe(ADAPTIVE, false), temperatureProbe(0, ADAPTIVE, false)] });
+    expect(bindingPickerGuidance("anthropic", noBaseline, { reasoning: ADAPTIVE, temperature: "0" }).temperature.guidance).toBe("confirmed at resolution");
+  });
+
+  it("learns nothing about temperature where the draft carries over a topP the check didn't send", () => {
+    const zero = withTemperatures(temperatureProbe(0, null, true));
+    expect(bindingPickerGuidance("openai", zero, { reasoning: null, temperature: "0", topP: 0.9 }).temperature)
+      .toEqual({ shown: true, hidden: null, support: null, guidance: "confirmed at resolution", acceptedValue: null, zeroRejected: false });
+    // Not adjustable without topP isn't known to hold with it, so the field stays.
+    expect(bindingPickerGuidance("anthropic", report(), { reasoning: ADAPTIVE, temperature: "", topP: 0.9 }).temperature)
+      .toMatchObject({ shown: true, hidden: null, support: null });
+    // A listing names reasoning, not topP.
+    expect(bindingPickerGuidance("custom", { ...withTemperatures(), temperatureIgnoredWith: [null] }, { reasoning: null, temperature: "", topP: 0.9 }).temperature)
+      .toMatchObject({ shown: false, hidden: "ignored" });
+  });
+
   it("judges temperature with the reasoning the binding sends, none where the model rejects the reasoning parameter", () => {
     const rejectsReasoning = { ...withTemperatures(temperatureProbe(0, null, true)), reasoningSupport: "parameter_rejected" as const };
     expect(bindingPickerGuidance("openai", rejectsReasoning, { reasoning: { family: "openai", effort: "high" }, temperature: "" }).temperature)
@@ -215,7 +242,7 @@ describe("the binding settings fields", () => {
     };
   };
   const render = (checkReport: CapabilityCheckReport | null, reasoning: ReasoningSettings | null, temperature = "0") => renderToStaticMarkup(createElement(BindingSettings, {
-    provider: "anthropic", temperature, setTemperature: vi.fn(), temperatureValid: true,
+    provider: "anthropic", temperature, temperatureValid: true,
     picker: picker(checkReport, reasoning, temperature) as never, canCheck: true
   }));
 
@@ -231,7 +258,7 @@ describe("the binding settings fields", () => {
   });
 
   const openAIField = (checkReport: CapabilityCheckReport, temperature: string, pending = false) => renderToStaticMarkup(createElement(BindingSettings, {
-    provider: "openai", temperature, setTemperature: vi.fn(), temperatureValid: true, canCheck: true,
+    provider: "openai", temperature, temperatureValid: true, canCheck: true,
     picker: {
       ...picker(null, null),
       report: checkReport,
@@ -275,7 +302,7 @@ describe("the binding settings fields", () => {
     expect(html).toContain('placeholder="not sent"');
     expect(html).toContain("Anthropic requires a limit.");
     const blank = renderToStaticMarkup(createElement(BindingSettings, {
-      provider: "anthropic", temperature: "0", setTemperature: vi.fn(), temperatureValid: true, canCheck: false,
+      provider: "anthropic", temperature: "0", temperatureValid: true, canCheck: false,
       picker: { ...picker(null, ADAPTIVE), settings: { reasoning: { family: "anthropic", thinking: { type: "enabled", budgetTokens: 2_048 }, effort: null }, verdictProtocol: "anthropic.structured-output/v1", outputTokenLimit: "2000" } } as never
     }));
     expect(blank).toContain("The limit must exceed the thinking budget of 2048 tokens.");

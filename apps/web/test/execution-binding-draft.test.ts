@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SEEDED_DEFAULT_EXECUTION_BINDING, type ExecutionBinding } from "@rubrist/shared";
 import {
+  carriedTopP,
   defaultBindingSettings,
   executionBindingFields,
   executionBindingInputFromFields,
@@ -44,6 +45,10 @@ describe("editor execution-binding fields", () => {
       routing: { requireParameters: true, allowFallbacks: false },
       sampling: { topP: null }
     });
+    // The picker reads the same carried-over topP, since a check sends none.
+    expect(carriedTopP(base, "anthropic", ` ${SEEDED.modelId} `)).toBe(0.9);
+    expect(carriedTopP(base, "openrouter", SEEDED.modelId)).toBeNull();
+    expect(carriedTopP(null, "anthropic", SEEDED.modelId)).toBeNull();
   });
 
   it("needs a base URL for a custom endpoint", () => {

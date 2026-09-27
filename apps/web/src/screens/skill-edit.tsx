@@ -565,13 +565,13 @@ export function SkillEditScreen() {
   );
 
   // A setting the check saw rejected would fail resolution after save, so it
-  // blocks saving, and saving waits while temperature is being classified for
-  // the selected reasoning.
+  // blocks saving, and saving waits while a newly picked model is checked or
+  // temperature is classified for the selected reasoning.
   const draftInput = buildInput();
   const canSave =
     skill != null &&
     draftInput !== null &&
-    (firstRun || (picker.blockingProblems.length === 0 && !picker.temperaturePending)) &&
+    (firstRun || (picker.blockingProblems.length === 0 && !picker.checkPending && !picker.temperaturePending)) &&
     (typed
       ? typedQuestionFromDraft(typedDraft) !== null
       : rubric.trim().length > 0 && prompt.trim().length > 0) &&
@@ -907,7 +907,6 @@ export function SkillEditScreen() {
       modelsError={modelsError}
       pinnedModelMissing={pinnedModelMissing}
       temperature={temperature}
-      setTemperature={setTemperature}
       temperatureValid={temperatureValid}
       picker={picker}
       verdictKind={verdictKind}
