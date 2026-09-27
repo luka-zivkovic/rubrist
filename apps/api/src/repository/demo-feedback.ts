@@ -144,6 +144,7 @@ export class DemoJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort 
 
   async markFeedbackSyncFailed(job: FeedbackSyncJob, error: unknown): Promise<void> {
     const context = await this.dependencies.loadFeedbackSyncContext(job);
+    if (context.status === "synced") return;
     this.store.feedbackJobs.set(job.feedbackSyncJobId, { ...context, status: "failed" });
     // PG parity (C7): failures increment attempts and record the error.
     this.store.feedbackJobAttempts.set(job.feedbackSyncJobId, (this.store.feedbackJobAttempts.get(job.feedbackSyncJobId) ?? 0) + 1);
