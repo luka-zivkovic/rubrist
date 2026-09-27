@@ -111,10 +111,7 @@ refusal counts no call. The mock makes no call, so it can't be calibrated.
 
 Creating a run is a governed gate (ADR-0014 sections 2 and 4). It needs a
 resolved execution binding that states its temperature and reasoning, unless
-the resolution shows the model rejecting that parameter itself (CURRENT).
-ADR-0014 decision 12 (2026-09-27) lets temperature stay unset wherever the
-model doesn't let the author choose it, classified by probing 0 and then 0.5
-(TARGET). An unresolved
+the resolution shows the model rejecting that parameter itself. An unresolved
 binding resolves at the gate with up to three probes over a fixed,
 non-sensitive input. A failed binding is fixed only by a new evaluator
 version. Before a run's first authorization, and so before any sealed
@@ -144,6 +141,13 @@ the resolution record (TARGET), but the record is built from resolution's own
 probes after save (CURRENT). A check against a custom endpoint reaches the
 URL the owner names, as the saved binding's calls would; restricting which
 hosts a custom endpoint may name is not yet enforced (CURRENT).
+
+ADR-0014 decision 12 (2026-09-27) is TARGET, not yet implemented: temperature
+may stay unset wherever the model doesn't let the author choose it, classified
+by probing 0 and then 0.5; a stated temperature is refused where the
+ignored-temperature table lists the combination; the check sends up to 7
+probes, resolution after save up to 3, gate resolution up to 4, and the
+re-check one to four. The counts and rules above are CURRENT.
 
 The author sees a version's resolution on its version page and in the
 evaluator lifecycle panel (`GET /api/evaluator-lifecycles/:id/resolution`):

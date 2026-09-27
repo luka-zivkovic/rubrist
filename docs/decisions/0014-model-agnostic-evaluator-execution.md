@@ -42,7 +42,8 @@ Decision owner: Luka Živković (founder).
   `tool_choice: {type: "tool"}`. The OpenAI adapter always sends
   `temperature` and forces its verdict function.
 - `claude-sonnet-5`, `claude-opus-5-5`, and `claude-fable-5-1` reject
-  `temperature` with HTTP 400.
+  `temperature` with HTTP 400. (The 2026-09-27 study found they reject 0
+  and 0.5 and accept 1; decision 12.)
 - `claude-opus-5-5` also rejects a forced tool choice. Structured outputs
   work on it, and it thinks by default before answering.
 
@@ -216,6 +217,8 @@ An evaluator version has three parts.
   - the capability-snapshot digest;
   - the credential source (project key or platform key);
   - the reasoning-defaults table version;
+  - the ignored-temperature table version, and the entry that matched, if
+    any (decision 12);
   - the time of the check;
   - a status of `resolved`, `unresolved`, or `failed`.
 
@@ -245,33 +248,37 @@ contract, an unset value is canonical JSON `null`; it is never omitted.
   and unset means not sent. v2 is the first version that actually sends
   `topP`.
 - **Governed gates.**
-  - At candidate creation, activation, and sealed calibration,
+  - At candidate creation, activation, and sealed calibration, unless the
+    combination is listed as ignoring temperature (decision 12),
     `temperature` must be explicit whenever the model lets the author choose
-    it: the resolution record shows a non-default temperature accepted with
-    the saved reasoning. It may be unset where the record shows the model
-    doesn't let the author choose it (no non-default value accepted with the
-    saved reasoning), where the model is listed as ignoring temperature, or
-    where the family takes no sampling settings (`typesafe`, `mock`).
-    Decision 12 (2026-09-27) replaced the earlier rule, which required an
-    explicit value even where the model accepts only its default.
+    it: the resolution record shows temperature 0 or 0.5 accepted with the
+    saved reasoning and `topP`. It may be unset where the record shows 0 and
+    0.5 both rejected with them, where the combination is listed as ignoring
+    temperature, or where the family takes no sampling settings (`typesafe`,
+    `mock`). Decision 12 (2026-09-27) replaced the earlier rule, which
+    required an explicit value even where the model accepts only its
+    default.
   - A stated temperature is refused at the gates where the model is listed
     as ignoring temperature, because the evidence would claim a control the
     model doesn't apply (decision 12).
   - `topP` may stay unset at the gates. Some models reject `temperature`
     and `top_p` together.
   - Authoring may leave either unset.
-  - The seeded default binding keeps an explicit temperature of 0 where
-    the model lets the author choose it.
+  - The seeded default binding states temperature 0, which its model
+    (`claude-sonnet-4-6` without thinking) accepts (CURRENT, measured
+    2026-09-27).
   - The model picker hides the temperature field where the capability check
     (section 4) shows the model doesn't let the author choose it, or where
     the model is listed as ignoring temperature, and says why. It hides the
     `topP` field the check shows the model rejecting outright. A hidden field
     is recorded as not sent, and the author never sees or sets it. A
-    temperature outcome holds only for the reasoning it was probed with, so
-    if the author saves different reasoning, the field is shown again and
-    resolution probes it. Where no check could run, the field is shown with
-    no value filled in, and resolution decides the gate. The picker fills in
-    temperature 0 only where the check shows the model accepting it.
+    temperature outcome holds only for the reasoning and `topP` it was
+    probed with, so where the author selects different reasoning, the picker
+    classifies temperature for it before save (decision 12). Where no check
+    could run, the field is shown with no value filled in, and resolution
+    decides the gate. The picker fills in temperature 0 only where the check
+    shows 0 accepted; where only 0.5 was accepted, the field is shown empty
+    and the author states a value.
 - **Reasoning** has a closed, typed shape per provider family:
   - Anthropic: `thinking` of `disabled`, `enabled` with a token budget, or
     `adaptive`, plus an effort level where supported.
@@ -351,7 +358,10 @@ contract, an unset value is canonical JSON `null`; it is never omitted.
   temperature" fallback is removed.
 - **Evidence attests what was sent, not what the endpoint honoured.** This
   matters most for OpenAI-compatible custom endpoints, which can accept a
-  parameter and ignore it.
+  parameter and ignore it. Where the ignored-temperature table lists a
+  combination, a stated temperature is refused instead (decision 12); an
+  unlisted endpoint that drops or ignores temperature is still recorded as
+  sent.
 
 ### 3. Verdict protocols pin everything the model is shown
 
@@ -412,20 +422,21 @@ credential exists, the model picker runs a capability check.
      succeeds. They send no optional sampling or reasoning fields, so a
      parameter the model rejects can't hide which mechanism works;
    - up to two temperature probes on that protocol, with the documented
-     default reasoning (no reasoning fields where the table has no entry):
-     temperature 0, and temperature 0.5 only where 0 is rejected. Either
-     accepted means the model lets the author choose temperature; both
-     rejected means it doesn't, whatever the rejections say (decision 12).
-     The outcome holds only for that reasoning, because (CURRENT, measured
-     2026-09-27) some models take a temperature only with reasoning off;
+     default reasoning (no reasoning fields where the table has no entry)
+     and no `topP`: temperature 0, and 0.5 only where 0 is rejected,
+     classified as decision 12 describes, and none where the combination
+     is listed as ignoring temperature. The outcome holds only for that
+     reasoning, because (CURRENT, measured 2026-09-27) some models take a
+     temperature only with reasoning off;
    - up to two reasoning probes on that protocol: the documented default,
      or a middle value of the family's shape (such as effort `medium`)
      where the table has no entry; and the no-reasoning setting where the
      shape has one (`disabled`, or `none` for OpenAI).
 3. **Record the outcomes, which drive the picker.** The picker:
    - pre-selects the protocol that succeeded;
-   - hides the temperature field where the model doesn't let the author
-     choose it with the reasoning the author has selected, or is listed as
+   - fills in temperature 0 where the check shows 0 accepted with the
+     reasoning the author has selected, and hides the field where the model
+     doesn't let the author choose it with that reasoning, or is listed as
      ignoring temperature;
    - offers the family's reasoning modes as section 2 describes, and hides
      the field where the model rejected the reasoning parameter itself;
@@ -443,9 +454,10 @@ protocol.
 
 **Resolution (after save).** When the author saves, the check's outcomes
 become the binding's resolution record. Resolution then sends one confirming
-probe with the exact saved request. Where temperature is unset and the
-recorded probes don't yet classify it with the saved reasoning, it also
-sends the temperature probes above, so at most 3 calls. Resolution never
+probe with the exact saved request. Where temperature is unset, the
+combination isn't listed as ignoring temperature, and the recorded probes
+don't yet classify it with the saved reasoning and `topP`, it also sends the
+temperature probes above, so at most 3 calls. Resolution never
 changes the binding, and every identity field, including the protocol, is
 the author's saved value.
 
@@ -478,10 +490,10 @@ triggered it, as the re-check is.
 **Where resolution is required.** Drafts and authoring may use unresolved
 bindings. Candidate creation, activation, and sealed calibration require
 `resolved`. A binding that fails resolution is fixed only by a new evaluator
-version. The failure carries the provider's message and a suggestion that
-depends on what was rejected: "leave temperature unset" where the model
-doesn't let the author choose temperature, and "choose another value" where
-it does but refused the stated one.
+version. The failure carries the provider's message and a suggestion taken
+from the record's temperature outcomes with the saved reasoning: "leave
+temperature unset" where 0 and 0.5 were both rejected, "choose another
+value" where one was accepted, and none where temperature is unknown.
 
 **The resolution record** holds the fields listed in section 1. It records
 the credential source because capabilities can differ per key.
@@ -490,11 +502,13 @@ the credential source because capabilities can differ per key.
 authorized, which happens before its exposure event, and before any
 governed run starts, Rubrist repeats the confirming probe. Where the family
 has the setting and the binding leaves it unset, it also repeats the
-temperature probes with the saved reasoning or the reasoning probe, so one
-to four calls. A provider that starts letting the author choose an unset
-setting would otherwise apply its own default unseen: for temperature, a
-non-default value now accepted means the resolution no longer holds. It
-uses the probe input and never sealed data. If the resolution no longer
+temperature probes with the saved reasoning, unless the resolution record
+lists the combination as ignoring temperature (decision 12), and, where
+reasoning is unset, the reasoning probe, so one to four calls. A provider
+that starts letting the author choose an unset setting would otherwise apply
+its own default unseen: for temperature, 0 or 0.5 now accepted means the
+resolution no longer holds. It uses the probe input and never sealed
+data. If the resolution no longer
 holds, the run doesn't start and no sealed item is exposed. The re-check is
 recorded with the run or authorization it guards, and it never changes the
 resolution record, so a transient error delays a run but never fails the
@@ -652,9 +666,13 @@ baseline restarts every versioned identifier in the three repositories at v1
   happen.
 - **Keep a hand-maintained list of which models accept what.** Rejected as
   the primary mechanism, because it goes stale. Provider metadata and
-  probes replace it. The only table Rubrist keeps, the documented reasoning
-  defaults, suggests a starting value. It never decides what a model
-  accepts or what is sent.
+  probes replace it. Rubrist keeps two dated, versioned tables. The
+  documented reasoning defaults suggest a starting value and never decide
+  what a model accepts or what is sent. The ignored-temperature table
+  (decision 12) lists only combinations that accept temperature without
+  applying it, each with cited documentation; for those it hides the field
+  and refuses a stated temperature, so the only thing it decides is that
+  temperature isn't sent.
 - **Retry at call time with different parameters.** Rejected: it breaks
   the single-physical-call ledger.
 - **Keep v1 and refuse models v1 can't express.** Rejected: it excludes
@@ -691,7 +709,8 @@ baseline restarts every versioned identifier in the three repositories at v1
 - Each capability check costs up to seven probe calls, each resolution
   attempt up to four, and each governed-run re-check one to four. All are
   recorded. The seventh and fourth calls happen only where a model refuses
-  temperature 0 (decision 12).
+  temperature 0. Classifying temperature for reasoning the check didn't
+  probe costs up to three more (decision 12).
 - A provider that rejects the reasoning parameter with an error Rubrist
   can't attribute can't be governed on reasoning: unset is refused at the
   gate, and every explicit value fails resolution. Better attribution for
@@ -703,10 +722,9 @@ baseline restarts every versioned identifier in the three repositories at v1
 1. **Explicit settings at governed gates: required.** Where the model
    accepts it, a governed evaluator states its temperature and reasoning.
    Decision 12 (2026-09-27) narrows this for temperature to models that let
-   the author choose it.
-   The model picker hides a field the capability check shows the model
-   doesn't support. Where no check could run, resolution enforces the gate.
-   Sections 2 and 4 cover this.
+   the author choose it. The model picker hides a field the capability
+   check shows the model doesn't support. Where no check could run,
+   resolution enforces the gate. Sections 2 and 4 cover this.
 2. **Default reasoning for new bindings: the provider's default, stated
    explicitly.** The picker pre-fills it from a dated table of documented
    defaults, and the author saves it. For a model with no table entry, the
@@ -788,56 +806,98 @@ to it and change nothing it decides.
 12. **Temperature is stated only where the model lets the author choose
     it.** On 2026-09-27 the founder asked why an evaluator on Claude Opus
     5.5 must send a temperature at all, and approved this rule after a probe
-    study (`docs/temperature-behaviour-2026-09-27.md`).
-    - **What the study showed (CURRENT, 2026-09-27).** 23 model and
-      reasoning combinations on Anthropic, OpenAI, and Fireworks, 143
-      calls:
-      - many current models accept temperature only at their default of 1:
-        Claude Opus 4.8 and 5.5, Sonnet 5 in every thinking mode, Fable 5.1,
-        Sonnet 4.6 with thinking on, and OpenAI's gpt-5.5, gpt-5.6-sol,
-        gpt-6-sol, and o3 at their default reasoning. Section 2's former
-        rule made their evaluators state 1, a choice nobody made;
-      - reasoning changes the answer: gpt-5.5 and later accept any
-        temperature at reasoning effort `none`, and Sonnet 4.6 only with
-        thinking off;
-      - the same fact comes back in different words ("deprecated", "may only
-        be set to 1 when thinking is enabled", "Only the default (1) value
-        is supported"), so the wording can't classify it;
-      - one model accepted temperature 0 and ignored it: DeepSeek v4.1
-        flash on Fireworks gave 5 different answers out of 6 at temperature
-        0 and 6 of 6 at 1.5, as DeepSeek documents for thinking mode.
-    - **Probing.** A temperature probe sends a non-default value: 0, and 0.5
-      only where 0 is rejected. Either accepted means the model lets the
-      author choose temperature with that reasoning; both rejected means it
-      doesn't. Errors leave it unknown. The outcome decides, never the
-      rejection's wording, so an unattributed rejection no longer blocks the
-      gate for temperature.
+    study (`docs/temperature-behaviour-2026-09-27.md`). Details marked
+    "derived" follow from that approval and the founder's instruction to
+    take the recommended route; they can be revisited.
+    - **What the study showed (CURRENT, 2026-09-27).** 27 model and
+      reasoning combinations on Anthropic, OpenAI, and Fireworks, 24 of them
+      served (three Fireworks DeepSeek builds returned 404), 143 calls:
+      - Claude Opus 4.8 and 5.5, Sonnet 5 with adaptive thinking and with
+        thinking disabled, Fable 5.1, Sonnet 4.6 with thinking on, and
+        OpenAI's gpt-5.5, gpt-5.6-sol, gpt-6-sol, and o3 at their default
+        reasoning reject temperatures 0 and 0.5 and accept 1. Section 2's
+        former rule made their evaluators state 1, a choice nobody made;
+      - reasoning changes the answer: gpt-5.5, gpt-5.6-sol, and gpt-6-sol
+        accept temperature 0 at reasoning effort `none`, and Sonnet 4.6
+        only with thinking off;
+      - the same fact comes back in different words ("deprecated", "may
+        only be set to 1 when thinking is enabled", "Only the default (1)
+        value is supported"), so the wording can't classify it;
+      - one model accepted temperature 0 but gave nearly as many different
+        answers at 0 as at 1.5: DeepSeek v4.1 flash on Fireworks, 5 and 6
+        of 6. That is consistent with DeepSeek's documentation that its
+        thinking mode ignores temperature (ASSUMPTION: that documentation
+        covers DeepSeek's own API, not Fireworks, and the study didn't
+        confirm thinking was on). Six answers suggest, but don't prove,
+        that temperature was ignored.
+    - **Probing.** A temperature probe sends temperature 0, and 0.5 only
+      where 0 is rejected, with the reasoning being classified and the
+      saved `topP` (none in the check). It counts only where the same
+      request without temperature was accepted: in the check, the reasoning
+      probe with that reasoning, or the protocol probe where no reasoning
+      fields are sent; at resolution and the re-check, the confirming probe.
+      Then 0 or 0.5 accepted means the model lets the author choose
+      temperature with that reasoning and `topP`, and 0 and 0.5 both
+      rejected means it doesn't, whatever the rejections say. Otherwise,
+      and where a probe ends in an error, temperature is unknown and no
+      further temperature probe is sent. A response counts as accepted even
+      if it breaks the protocol. A model that accepts only values other
+      than 0 and 0.5 is treated as not letting the author choose.
     - **Gates.** Where the model lets the author choose temperature, a
-      governed evaluator states it, as decision 1 requires. Where it doesn't,
-      the evaluator leaves temperature unset, nothing is sent, and the
-      resolution record shows the probes that justify it. An explicit value
-      the model accepts is still valid; it is what was sent.
-    - **Why unset is safe here.** A model that takes only its default leaves
-      sampling to the provider whether or not 1 is sent, so a stated 1 pins
-      nothing the provider couldn't change behind it. "Deprecated" suggests
-      even 1 may later be refused, which would fail runs without improving
-      evidence. The model version pin, the re-check before governed runs,
-      and calibration remain the guards: when temperature is unset, the
-      re-check repeats the temperature probes, and a non-default value now
-      accepted stops the run before any sealed exposure.
-    - **Ignored temperature.** A dated, versioned table lists endpoint,
-      model, and reasoning combinations that accept temperature without
-      effect, each citing provider documentation or a dated spread test (a
-      few answers at a low and a high temperature, compared for variety).
-      For those, the picker hides the field and says so, and a stated
-      temperature is refused at the gates, since the evidence would claim a
-      control the model doesn't apply. The table is maintained with a
-      script, not probed at run time, because a spread test costs about a
-      dozen calls and its result is statistical.
-    - **Picker.** Temperature is filled in (as 0) only where the check shows
-      the model accepting it with the selected reasoning. Otherwise the
-      field is hidden with the reason, or shown empty where no check could
-      run.
-    - **Costs.** A capability check sends up to 7 calls, resolution up to 4,
-      and a re-check one to four. The extra call happens only where a model
-      refuses temperature 0.
+      governed evaluator states it, as decision 1 requires. Where it
+      doesn't, the evaluator leaves temperature unset, nothing is sent, and
+      the resolution record shows the probes that justify it. An explicit
+      value the model accepts is still valid, except on a combination the
+      ignored-temperature table lists (below); it is what was sent.
+    - **Why unset is safe here.** A model that takes only one value leaves
+      sampling to the provider whether or not that value is sent, so a
+      stated 1 pins nothing the provider couldn't change behind it. The
+      model version pin, the re-check before governed runs, and calibration
+      remain the guards: when temperature is unset, the re-check repeats the
+      temperature probes, and 0 or 0.5 now accepted stops the run before any
+      sealed exposure. (ASSUMPTION: "deprecated" suggests even 1 may later
+      be refused, which would fail runs that state it without improving
+      evidence.)
+    - **Ignored temperature (derived).** A dated, versioned table,
+      `rubrist-ignored-temperature/v1`, lists combinations that accept
+      temperature without applying it:
+      - each entry names the endpoint (a managed provider, or a custom
+        endpoint by its public base URL, matched through the binding's
+        endpoint digest in section 1), the exact model id, and the saved
+        reasoning, including unset. A base URL spelled differently doesn't
+        match, and then section 2's rule applies: evidence attests what was
+        sent;
+      - each entry cites dated provider documentation, optionally supported
+        by a spread test (a few answers at a low and a high temperature,
+        compared for variety). A spread test alone doesn't list an entry,
+        because a handful of answers can't tell an ignored temperature from
+        a model that varies anyway;
+      - for a listed combination, the picker hides the field and says why,
+        a stated temperature is refused at the gates, and the check,
+        resolution, and re-check send no temperature probe. The resolution
+        record carries the table version and the entry that matched;
+      - the gates and the re-check read the table version recorded at
+        resolution, so a newer table applies from the next resolution and
+        never refuses an active evaluator partway through its lifecycle;
+      - the table is maintained with a script, not probed at run time.
+    - **Picker (derived).** With the selected reasoning, the picker fills
+      in 0 where the check shows 0 accepted. Where it shows 0 rejected and
+      0.5 accepted, the field is shown empty, 0 is marked rejected, and the
+      author states a value. Where it shows both rejected, or the
+      combination is listed, the field is hidden with the reason. Where no
+      check could run, or its temperature probes ended in errors, the field
+      is shown empty. When the author selects reasoning the check didn't
+      classify temperature with, the picker classifies it before save: the
+      selected reasoning without temperature where the check has no answer
+      for it, then the temperature probes, so up to three calls, within the
+      check's rate limits. Without this, an author could save an empty
+      temperature that the gate later refuses, fixable only by a new
+      version.
+    - **Records resolved before this decision** probed temperature at 1,
+      which classifies nothing under it. Such a record doesn't parse under
+      the new rule and is read as no record, so the binding resolves again.
+      No production data exists (ADR-0011), so nothing is migrated.
+    - **Costs.** A capability check sends up to seven calls, resolution up
+      to four, a re-check one to four, and a temperature classification for
+      newly selected reasoning up to three. The extra temperature call
+      happens only where a model refuses temperature 0.
