@@ -10,6 +10,9 @@ Proposed.
 Last reviewed: 2026-09-26 · code and docs at `2c82321`. Every file:line
 citation, into code or docs, refers to that commit.
 
+Plan: the [index and plan](README.md) sequences every round's findings into
+implementation slices.
+
 Vocabulary: findings quote today's UI words, and the onboarding contract's
 words remain TARGET until
 [ADR-0015](../decisions/0015-one-vocabulary-one-display.md) is accepted.
