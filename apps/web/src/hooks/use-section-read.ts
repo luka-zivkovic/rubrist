@@ -14,8 +14,9 @@ export type SectionRead<T> =
   | { status: "failed"; failure: LoadFailure; retrying: boolean };
 
 // Reads once per key; `retry` reads that key again. A new key starts over,
-// and a read for an older key never lands on the new one. Pass a null key and
-// read until the page knows what to read.
+// and a read for an older key never lands on the new one. Pass a null key or
+// read until the page knows what to read; the section is idle meanwhile, and
+// forgets its last read so a later read of the same key starts fresh.
 export function useSectionRead<T>(
   key: string | null,
   read: (() => Promise<T>) | null
@@ -29,7 +30,10 @@ export function useSectionRead<T>(
 
   useEffect(() => {
     const readForKey = readRef.current;
-    if (key === null || readForKey === null) return;
+    if (key === null || readForKey === null) {
+      setState(null);
+      return;
+    }
     let cancelled = false;
     setState((previous) =>
       previous?.key === key && previous.read.status === "failed"
@@ -51,6 +55,6 @@ export function useSectionRead<T>(
 
   const retry = useCallback(() => setAttempt((count) => count + 1), []);
   const current: SectionRead<T> =
-    key === null ? { status: "idle" } : state?.key === key ? state.read : { status: "loading" };
+    key === null || read === null ? { status: "idle" } : state?.key === key ? state.read : { status: "loading" };
   return { ...current, retry };
 }

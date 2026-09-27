@@ -19,9 +19,15 @@ export interface ChainTotals {
   // were no reference cases to compare.
   checkFailed: number;
   notCompared: number;
+  // Whether every save's improvements could be counted. A run counts a case as
+  // improved only against the previous save's recorded verdicts: the next step
+  // on the path, or the baseline (the `from` version) for the oldest step.
+  // Without them its improvements are zero by construction, not measured.
+  improvementsCounted: boolean;
   // Sums over the whole path, or null unless every save on it has a recorded
   // run that compared reference cases. Missing, unreadable, failed, and empty
-  // checks are unknown, never zero.
+  // checks are unknown, never zero. Improvements also need every previous
+  // save's per-case verdicts.
   regressed: number | null;
   improved: number | null;
 }
@@ -53,7 +59,15 @@ export function runCompared(run: RegressionRunResult): boolean {
   return run.status !== "error" && !run.goldenSetMissing && run.compared > 0;
 }
 
-export function chainTotals(steps: ReadonlyArray<ChainStep>): ChainTotals {
+// Whether a run recorded per-case verdicts that the next save's improvements
+// are counted against. Older runs recorded counts without cases.
+export function runHasVerdicts(run: RegressionRunResult): boolean {
+  return runCompared(run) && run.cases.length > 0;
+}
+
+// `steps` run newest to oldest; `baseline` is the `from` version, which is not
+// on the path but is the oldest step's previous save.
+export function chainTotals(steps: ReadonlyArray<ChainStep>, baseline: ChainStep): ChainTotals {
   let recorded = 0;
   let unrecorded = 0;
   let failed = 0;
@@ -79,6 +93,9 @@ export function chainTotals(steps: ReadonlyArray<ChainStep>): ChainTotals {
     }
   }
   const complete = steps.length > 0 && recorded === steps.length && checkFailed === 0 && notCompared === 0;
+  const improvementsCounted = [...steps.slice(1), baseline].every(
+    (previous) => previous.status === "recorded" && runHasVerdicts(previous.run)
+  );
   return {
     saves: steps.length,
     recorded,
@@ -86,8 +103,9 @@ export function chainTotals(steps: ReadonlyArray<ChainStep>): ChainTotals {
     failed,
     checkFailed,
     notCompared,
+    improvementsCounted,
     regressed: complete ? regressed : null,
-    improved: complete ? improved : null
+    improved: complete && improvementsCounted ? improved : null
   };
 }
 
@@ -107,6 +125,17 @@ export function chainTotalsGap(totals: ChainTotals): string | null {
     return `${totals.unrecorded} ${totals.unrecorded === 1 ? "save has" : "saves have"} no recorded run`;
   }
   return null;
+}
+
+// Why the improvements total is unknown, or null when it is known. The path's
+// own gaps come first; then a previous save without per-case verdicts.
+export function chainImprovementsGap(totals: ChainTotals, baseline: ChainStep): string | null {
+  const gap = chainTotalsGap(totals);
+  if (gap || totals.improvementsCounted) return gap;
+  if (baseline.status !== "recorded" || !runHasVerdicts(baseline.run)) {
+    return `v${baseline.version.version} has no measured run to count improvements from`;
+  }
+  return "an earlier save has no per-case record to count improvements from";
 }
 
 // How many saves have a recorded run, without implying the unreadable ones

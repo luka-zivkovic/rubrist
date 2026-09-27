@@ -13,7 +13,7 @@ for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInput
   vi.stubGlobal(name, (dom.window as unknown as Record<string, unknown>)[name]);
 }
 const { createRoot } = await import("react-dom/client");
-const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+const { MemoryRouter, Route, Routes, useNavigate } = await import("react-router-dom");
 
 const api = vi.hoisted(() => ({
   fetchCurrentSkill: vi.fn(),
@@ -46,7 +46,9 @@ const box = (tag: string) => ({ children }: Props) => createElement(tag, null, c
 
 vi.mock("@/lib/api", () => api);
 vi.mock("@/lib/criterion-context", () => ({ useCriterion: () => criterion }));
-vi.mock("@/lib/dashboard-context", () => ({ useDashboard: () => ({ dashboard: null, refresh: () => undefined }) }));
+// Stable across renders, like the real context: the editor's poll depends on it.
+const dashboard = vi.hoisted(() => ({ dashboard: null, refresh: () => undefined }));
+vi.mock("@/lib/dashboard-context", () => ({ useDashboard: () => dashboard }));
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ")
 }));
@@ -123,7 +125,11 @@ vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({ useBindingPick
 vi.mock("../src/screens/skill-edit/regression.js", () => ({
   GovernedEvaluatorEditBoundary: () => createElement("section"),
   RegressionResult: () => createElement("section"),
-  RegressionRunning: () => createElement("section")
+  RegressionRunning: ({ referenceCount, referenceCountUnavailable, pollError }: Props) => {
+    const poll = pollError as { message: string; retryable: boolean } | null;
+    return createElement("section", null,
+      `count=${String(referenceCount)} unavailable=${String(referenceCountUnavailable)} poll=${poll ? `${poll.message} (${poll.retryable ? "retrying" : "stopped"})` : "none"}`);
+  }
 }));
 
 const { ApiError } = await import("../src/lib/api/transport.js");
@@ -186,7 +192,7 @@ function run(skillVersionId: string, overrides: Partial<RegressionRunResult> = {
     improved: 0,
     flipped: 0,
     goldenSetMissing: false,
-    cases: [],
+    cases: [{ caseId: `case_${skillVersionId}`, traceId: "trace_1", agreedLabel: "pass", newLabel: "pass", change: "agree", rationale: null }],
     createdAt: "2026-09-01T00:00:30.000Z",
     ...overrides
   };
@@ -217,9 +223,17 @@ afterEach(() => {
   container.remove();
 });
 
+// Navigates inside the rendered router, so a route param changes in place.
+let navigateTo: (path: string) => void = () => undefined;
+function Navigator() {
+  navigateTo = useNavigate();
+  return null;
+}
+
 async function render(path: string, routePath: string, screen: () => ReactNode) {
   await act(async () => {
     root.render(createElement(MemoryRouter, { initialEntries: [path] },
+      createElement(Navigator),
       createElement(Routes, null, createElement(Route, { path: routePath, element: screen() }))));
   });
   await settle();
@@ -250,9 +264,12 @@ describe("version page", () => {
 
   it("keeps the version readable when one evidence read fails, and retries only that section", async () => {
     readsSucceed();
+    let finishRetry: (report: SelfConsistencyReport) => void = () => undefined;
     api.fetchSkillVersionSelfConsistency
       .mockRejectedValueOnce(new ApiError("Self-consistency request failed: 503", 503))
-      .mockResolvedValue(emptyConsistency(current.id));
+      .mockReturnValueOnce(new Promise<SelfConsistencyReport>((resolve) => {
+        finishRetry = resolve;
+      }));
 
     await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
 
@@ -266,7 +283,15 @@ describe("version page", () => {
     expect(text()).not.toContain("Version not found");
 
     await act(async () => buttons("Retry")[0]!.click());
+    await settle();
+    // While the retry is in flight, the section keeps its error and the page
+    // keeps its content.
+    expect(text()).toContain("Retrying…");
+    expect(text()).toContain("Couldn't load self-consistency.");
+    expect(text()).toContain("Guide 1.0.2");
     expect(text()).not.toContain("Loading version");
+
+    await act(async () => finishRetry(emptyConsistency(current.id)));
     await settle();
 
     expect(text()).toContain("No repeat runs under this version yet.");
@@ -275,6 +300,33 @@ describe("version page", () => {
     expect(api.fetchCurrentSkill).toHaveBeenCalledTimes(1);
     expect(api.fetchSkillVersionSelfConsistency).toHaveBeenCalledTimes(2);
     expect(api.fetchSkillVersionRegression).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reads a version the page hasn't loaded yet as not found", async () => {
+    readsSucceed();
+    const created = version("skillv_3", "1.0.3");
+    api.fetchSkillVersions
+      .mockResolvedValueOnce([current, version("skillv_1", "1.0.1")])
+      .mockResolvedValue([created, current, version("skillv_1", "1.0.1")]);
+    await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
+    expect(text()).toContain("Guide 1.0.2");
+
+    // Every rendered state, including ones replaced before the next check.
+    let sawNotFound = false;
+    const observer = new dom.window.MutationObserver((records) => {
+      for (const record of records) {
+        const texts = [...record.addedNodes].map((node) => node.textContent ?? "");
+        if (record.type === "characterData") texts.push(record.oldValue ?? "", record.target.textContent ?? "");
+        if (texts.some((value) => value.includes("Version not found"))) sawNotFound = true;
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
+    await act(async () => navigateTo("/skill/versions/skillv_3"));
+    await settle();
+    observer.disconnect();
+
+    expect(sawNotFound).toBe(false);
+    expect(text()).toContain("Guide 1.0.3");
   });
 
   it("reads a run that couldn't be loaded as unavailable, never as not recorded or clean", async () => {
@@ -308,17 +360,28 @@ describe("version page", () => {
 });
 
 describe("version history", () => {
-  it("reads a version without a recorded run as not recorded, and one with a passed run as clean", async () => {
+  it("reads each version from its recorded run, and unmeasured counts as unknown", async () => {
+    // A governed candidate stays calibrating after its run is recorded.
+    const candidate = version("skillv_3", "1.0.3", { status: "calibrating", approvedAt: null });
     const newest = version("skillv_2", "1.0.2");
-    const oldest = version("skillv_1", "1.0.1");
+    const oldest = version("skillv_1", "1.0.1", { goldenSetAgreement: null });
     api.fetchCurrentSkill.mockResolvedValue(skillWith(newest));
-    api.fetchSkillVersionHistory.mockResolvedValue({ versions: [newest, oldest], regressionRuns: [run(newest.id)] });
+    api.fetchSkillVersionHistory.mockResolvedValue({
+      versions: [candidate, newest, oldest],
+      regressionRuns: [run(candidate.id), run(newest.id)]
+    });
 
     await render("/skill/versions", "/skill/versions", () => createElement(SkillVersionsScreen));
 
-    const rows = [...container.querySelectorAll("tbody tr")].map((row) => row.textContent ?? "");
-    expect(rows.find((row) => row.includes("v1.0.2"))).toContain("regression · clean");
-    expect(rows.find((row) => row.includes("v1.0.1"))).toContain("regression · not recorded");
+    const row = (label: string) => container.querySelector(`tbody tr:has(a[href="/skill/versions/${label}"])`);
+    const cells = (label: string) => [...(row(label)?.querySelectorAll("td") ?? [])].map((cell) => cell.textContent);
+    expect(row("skillv_3")?.textContent).toContain("candidate");
+    expect(row("skillv_3")?.textContent).toContain("regression · clean");
+    expect(row("skillv_3")?.textContent).not.toContain("regression running");
+    expect(row("skillv_2")?.textContent).toContain("regression · clean");
+    expect(row("skillv_1")?.textContent).toContain("regression · not recorded");
+    // Agreement, strict, and lenient: stored zeros are not shown as results.
+    expect(cells("skillv_1").slice(3, 6)).toEqual(["—", "—", "—"]);
   });
 });
 
@@ -338,7 +401,8 @@ describe("run comparison", () => {
     let v2Reads = 0;
     api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) => {
       if (versionId === v4.id) return run(v4.id, { status: "overridden", regressed: 1, improved: 2, overrideReason: "known flake" });
-      if (versionId === v3.id) return run(v3.id, { status: "error", compared: 0, error: "judge timed out" });
+      if (versionId === v3.id) return run(v3.id, { status: "error", compared: 0, error: "judge timed out", cases: [] });
+      if (versionId === v1.id) return run(v1.id);
       v2Reads += 1;
       if (v2Reads === 1) throw new ApiError("Regression run request failed: 503", 503);
       return run(v2.id);
@@ -369,8 +433,11 @@ describe("run comparison", () => {
   it("sums the path when every save's check compared reference cases", async () => {
     api.fetchCurrentSkill.mockResolvedValue(skillWith(v3));
     api.fetchSkillVersions.mockResolvedValue([v3, v2, v1]);
-    api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) =>
-      versionId === v3.id ? run(v3.id, { status: "overridden", regressed: 1, overrideReason: "accepted" }) : run(v2.id, { improved: 2 }));
+    api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) => {
+      if (versionId === v3.id) return run(v3.id, { status: "overridden", regressed: 1, overrideReason: "accepted" });
+      if (versionId === v2.id) return run(v2.id, { improved: 2 });
+      return run(v1.id);
+    });
 
     await render("/skill/compare?from=skillv_1&to=skillv_3", "/skill/compare", () => createElement(CompareVersionsScreen));
 
@@ -378,6 +445,22 @@ describe("run comparison", () => {
     expect(kpi("Improvements")).toContain("Improvements: 2 | flips toward the label");
     // Equal agreement is unchanged, not improved.
     expect(kpi("Known-failure agreement")).toContain("100 → 100% | unchanged");
+  });
+
+  it("keeps improvements unknown when the starting version has no measured run", async () => {
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(v3));
+    api.fetchSkillVersions.mockResolvedValue([v3, v2, v1]);
+    api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) => {
+      if (versionId === v3.id) return run(v3.id, { improved: 1 });
+      if (versionId === v2.id) return run(v2.id, { improved: 2 });
+      return null;
+    });
+
+    await render("/skill/compare?from=skillv_1&to=skillv_3", "/skill/compare", () => createElement(CompareVersionsScreen));
+
+    // v1.0.2's improvements had no verdicts on v1.0.1 to be counted against.
+    expect(kpi("Regressions across versions")).toContain("Regressions across versions: 0 | changes against recorded labels");
+    expect(kpi("Improvements")).toContain("Improvements: — | v1.0.1 has no measured run to count improvements from");
   });
 
   it("doesn't read the loading version list as nothing to compare", async () => {
@@ -400,6 +483,38 @@ describe("run comparison", () => {
 });
 
 describe("evaluator editor", () => {
+  it("says a count is loading until its read settles, and stops polling on a refused read", async () => {
+    const base = version("skillv_1", "1.0.1");
+    const running = version("skillv_2", "1.0.2", { status: "calibrating", approvedAt: null, regressionDatasetRevisionId: "revision_2" });
+    let finishCount: (metadata: { itemCount: number }) => void = () => undefined;
+    api.fetchLatestSkill.mockResolvedValue(skillWith(base));
+    api.fetchJudgeProviders.mockResolvedValue({ providers: [] });
+    api.fetchJudgeModels.mockResolvedValue([]);
+    api.fetchSkillVersions.mockResolvedValue([running, base]);
+    api.fetchSkillVersionRegression
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new ApiError("Skill version not found", 404));
+    api.fetchDatasetRevisionMetadata.mockReturnValue(new Promise((resolve) => {
+      finishCount = resolve;
+    }));
+
+    const timers = vi.spyOn(globalThis, "setTimeout");
+
+    await render("/skill/edit?criterion=criterion_1&version=skillv_2", "/skill/edit", () => createElement(SkillEditScreen));
+
+    expect(text()).toContain("count=null unavailable=false");
+    expect(text()).toContain("poll=Skill version not found (stopped)");
+    // The refused read fails the same way every time, so no next poll is set.
+    expect(timers.mock.calls.some(([, delay]) => delay === 2000)).toBe(false);
+    timers.mockRestore();
+
+    await act(async () => finishCount({ itemCount: 7 }));
+    await settle();
+
+    expect(text()).toContain("count=7 unavailable=false");
+    expect(api.fetchDatasetRevisionMetadata).toHaveBeenCalledWith("revision_2");
+  });
+
   it("replaces the loading state with a load error when a criterion is selected", async () => {
     api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("Skill request failed: 503", 503));
     api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("No evaluator exists for this criterion", 404));

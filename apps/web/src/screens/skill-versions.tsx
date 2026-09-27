@@ -44,8 +44,17 @@ const STATUS_LABEL: Record<SkillStatus, string> = {
   deprecated:   "deprecated"
 };
 
-function StatusChip({ status }: { status: SkillStatus }) {
-  return <Chip variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Chip>;
+// A governed candidate reads as calibrating for its whole candidate life, so
+// once its regression run is recorded it is a candidate, not a running check.
+function StatusChip({ status, hasRun }: { status: SkillStatus; hasRun: boolean }) {
+  const label = status === "calibrating" && hasRun ? "candidate" : STATUS_LABEL[status];
+  return <Chip variant={STATUS_VARIANT[status]}>{label}</Chip>;
+}
+
+// Stored disagreement counts are zeros until a check measures them; without an
+// agreement value they are unknown.
+function measuredCount(version: SkillVersion, count: number): number | "—" {
+  return version.goldenSetAgreement == null ? "—" : count;
 }
 
 export function SkillVersionsScreen() {
@@ -77,11 +86,13 @@ export function SkillVersionsScreen() {
     void load();
   }, [load]);
 
-  // Async regression check (M0 C5b): a `calibrating` version is a gate.run in flight —
-  // poll quietly until it lands as approved/regressing so the history updates
-  // without a manual refresh. Silent refetch (no setLoading) to avoid a shell
-  // flash on every tick; the interval tears down once nothing is calibrating.
-  const anyCalibrating = versions.some((candidate) => candidate.status === "calibrating");
+  // Async regression check (M0 C5b): a `calibrating` version without a recorded
+  // run is a gate.run in flight — poll quietly until its run lands so the
+  // history updates without a manual refresh. A governed candidate stays
+  // calibrating after its run is recorded, so it doesn't keep the poll alive.
+  // Silent refetch (no setLoading) to avoid a shell flash on every tick; the
+  // interval tears down once no check is running.
+  const anyCalibrating = versions.some((candidate) => candidate.status === "calibrating" && !regressionRuns[candidate.id]);
   useEffect(() => {
     if (!anyCalibrating) return;
     let cancelled = false;
@@ -120,6 +131,11 @@ export function SkillVersionsScreen() {
         title="Couldn't load versions"
         failure={error ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
       />
     );
   }
@@ -192,7 +208,7 @@ export function SkillVersionsScreen() {
                   </td>
                   <td>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusChip status={v.status} />
+                      <StatusChip status={v.status} hasRun={Boolean(regressionRun)} />
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
                       <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
@@ -218,8 +234,8 @@ export function SkillVersionsScreen() {
                       </>
                     )}
                   </td>
-                  <td className="text-right font-mono tabular-nums">{v.tooStrictCount}</td>
-                  <td className="text-right font-mono tabular-nums">{v.tooLenientCount}</td>
+                  <td className="text-right font-mono tabular-nums">{measuredCount(v, v.tooStrictCount)}</td>
+                  <td className="text-right font-mono tabular-nums">{measuredCount(v, v.tooLenientCount)}</td>
                   <td className="font-mono text-ink-3">
                     <div title={v.createdAt}>
                       {new Date(v.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
@@ -264,6 +280,10 @@ export function SkillVersionDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadFailure | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Which version and criterion `skill` and `versions` were read for. Until they
+  // match the route, the page is still loading, never "not found".
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const routeKey = `${selectedCriterionId ?? ""}|${id ?? ""}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -277,6 +297,7 @@ export function SkillVersionDetailScreen() {
         if (cancelled) return;
         setSkill(s);
         setVersions(vs);
+        setLoadedFor(`${selectedCriterionId ?? ""}|${id ?? ""}`);
       } catch (err) {
         if (!cancelled) setError(loadFailure(err));
       } finally {
@@ -294,7 +315,8 @@ export function SkillVersionDetailScreen() {
   // Each evidence read fails on its own: the version stays readable, a failed
   // section says so where its data would be, and its Retry reads only that
   // section again. fetchSkillVersionRegression maps "no recorded run" to null.
-  const evidence = !loading && !error && skill && v ? { skillId: skill.id, versionId: v.id } : null;
+  const current = !loading && !error && loadedFor === routeKey;
+  const evidence = current && skill && v ? { skillId: skill.id, versionId: v.id } : null;
   const evidenceKey = evidence ? `${evidence.skillId}:${evidence.versionId}` : null;
   const regression = useSectionRead(
     evidenceKey,
@@ -327,7 +349,10 @@ export function SkillVersionDetailScreen() {
 
   // Wait for every first read: a section still loading must not render as
   // empty. A section's retry keeps the page in place.
-  if (loading || [regression, convergence, consistency, judgeCard].some((read) => read.status === "loading")) {
+  if (
+    (!current && !error)
+    || [regression, convergence, consistency, judgeCard].some((read) => read.status === "loading")
+  ) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Judge card" title="Loading version" />
@@ -388,7 +413,7 @@ export function SkillVersionDetailScreen() {
           : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "—"} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
         right={
           <div className="flex items-center gap-2">
-            <StatusChip status={v.status} />
+            <StatusChip status={v.status} hasRun={Boolean(regressionRun)} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
             <GateChip state={gateStateForVersion(v, regressionRun)} title={v.knownLimitations.join(" · ")} />
             {isCurrent ? <Chip>current</Chip> : null}
@@ -447,11 +472,11 @@ export function SkillVersionDetailScreen() {
                   {agreementPct == null ? "—" : `${agreementPct}%`}
                 </div>
                 <div className="text-ink-3">Too strict</div>
-                <div className="font-mono">{v.tooStrictCount}</div>
+                <div className="font-mono">{measuredCount(v, v.tooStrictCount)}</div>
                 <div className="text-ink-3">Too lenient</div>
-                <div className="font-mono">{v.tooLenientCount}</div>
+                <div className="font-mono">{measuredCount(v, v.tooLenientCount)}</div>
                 <div className="text-ink-3">Ambiguous</div>
-                <div className="font-mono">{v.ambiguousCount}</div>
+                <div className="font-mono">{measuredCount(v, v.ambiguousCount)}</div>
               </div>
             </CardContent>
           </Card>

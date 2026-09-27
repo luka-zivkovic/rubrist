@@ -57,6 +57,14 @@ describe("missing evidence never reads as a result", () => {
     expect(loadFailure(new ApiError("Too many requests", 429)).retryable).toBe(true);
     expect(loadFailure(new ApiError("No evaluator exists for this criterion", 404)).retryable).toBe(false);
     expect(loadFailure(new ApiError("Forbidden", 403)).retryable).toBe(false);
+    expect(loadFailure(new ApiError("Not configured", 501)).retryable).toBe(false);
+    // Signing in again can make the same read work.
+    expect(loadFailure(new ApiError("Sign in required", 401)).retryable).toBe(true);
+    // Some helpers rethrow a parse failure as an ApiError with the success status.
+    expect(loadFailure(new ApiError('[{"code":"invalid_type"}]', 200))).toEqual({
+      message: "Rubrist returned a response this page couldn't read.",
+      retryable: false
+    });
     expect(loadFailure(new TypeError("Failed to fetch"))).toEqual({ message: "Failed to fetch", retryable: true });
     expect(loadFailure("offline")).toEqual({ message: "offline", retryable: true });
   });
@@ -128,6 +136,31 @@ describe("missing evidence never reads as a result", () => {
     expect(running(null, true)).toContain("Count unavailable");
     expect(running(null, true)).not.toContain("Loading exact count…");
     expect(running(7, false)).toContain("<dd>7</dd>");
+  });
+
+  it("says polling stopped when retrying the status refresh can't work", () => {
+    const version = { id: "skillv_2", version: "1.0.2", regressionDatasetRevisionId: "revision_1" } as SkillVersion;
+    const skill = { name: "Support answer quality" } as Skill;
+    const running = (pollError: { message: string; retryable: boolean }) =>
+      renderToStaticMarkup(createElement(RegressionRunning, {
+        skill,
+        baseVersion: "1.0.1",
+        version,
+        firstRun: false,
+        criterionVersion: null,
+        referenceCount: 7,
+        referenceCountUnavailable: false,
+        pollError,
+        onOpenHistory: () => undefined
+      }));
+
+    const retrying = running({ message: "Regression run request failed: 503", retryable: true });
+    const stopped = running({ message: "Skill version not found", retryable: false });
+
+    expect(retrying).toContain("this page will keep retrying");
+    expect(stopped).toContain("Skill version not found");
+    expect(stopped).toContain("Open Version history to follow it");
+    expect(stopped).not.toContain("keep retrying");
   });
 
   // The root layout needs the whole app's providers to render, so the top bar

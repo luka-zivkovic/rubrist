@@ -6,20 +6,30 @@ export interface LoadFailure {
   retryable: boolean;
 }
 
+const UNREADABLE: LoadFailure = {
+  message: "Rubrist returned a response this page couldn't read.",
+  retryable: false
+};
+
+// Retrying can work after a network failure, a server error, a timeout, rate
+// limiting, or a sign-in. A 501 is an unconfigured feature, and other 4xx
+// responses are refused requests or missing resources: they fail the same way
+// again.
+function retryableStatus(status: number): boolean {
+  return status === 401 || status === 408 || status === 429 || (status >= 500 && status !== 501);
+}
+
 // A response the page could not parse throws a schema validation error whose
-// message is a raw JSON dump, so the page names the failure instead of
-// printing the dump. Retry is offered only when retrying can work: a network
-// failure, a server error, a timeout, or rate limiting. A request the API
-// refused, or a resource it doesn't have, fails the same way again.
+// message is a raw JSON dump. Some API helpers rethrow it as an ApiError that
+// carries the successful status. Either way the page names the failure instead
+// of printing the dump.
 export function loadFailure(error: unknown): LoadFailure {
-  if (error instanceof Error && error.name === "ZodError") {
-    return { message: "Rubrist returned a response this page couldn't read.", retryable: false };
-  }
-  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof Error && error.name === "ZodError") return UNREADABLE;
   if (error instanceof ApiError) {
-    return { message, retryable: error.status >= 500 || error.status === 408 || error.status === 429 };
+    if (error.status < 400) return UNREADABLE;
+    return { message: error.message, retryable: retryableStatus(error.status) };
   }
-  return { message, retryable: true };
+  return { message: error instanceof Error ? error.message : String(error), retryable: true };
 }
 
 // The fallback when a read settles with no skill and no error.

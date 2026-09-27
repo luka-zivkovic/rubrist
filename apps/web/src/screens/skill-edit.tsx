@@ -164,12 +164,13 @@ export function SkillEditScreen() {
   const [phase, setPhase] = useState<SkillEditPhase>("edit");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pollError, setPollError] = useState<string | null>(null);
+  // A failed status refresh. Polling continues only while retrying can work.
+  const [pollError, setPollError] = useState<LoadFailure | null>(null);
   const [pendingVersion, setPendingVersion] = useState<SkillVersion | null>(null);
-  // The pinned revision's case count, keyed by revision so a count read for
-  // one revision never shows for another. count is null when the read failed
-  // or returned no count.
-  const [pinnedCount, setPinnedCount] = useState<{ revisionId: string; count: number | null } | null>(null);
+  // The pinned revision's case count, keyed by version and revision so a count
+  // read for one never shows for another, and each saved version reads its
+  // own. count is null when the read failed or returned no count.
+  const [pinnedCount, setPinnedCount] = useState<{ key: string; count: number | null } | null>(null);
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -391,24 +392,29 @@ export function SkillEditScreen() {
   }, [setSearchParams]);
 
   const pinnedRevisionId = pendingVersion?.regressionDatasetRevisionId ?? result?.version.regressionDatasetRevisionId ?? null;
+  const pinnedVersionId = pendingVersion?.id ?? result?.version.id ?? null;
+  const pinnedCountKey = pinnedRevisionId && pinnedVersionId ? `${pinnedVersionId}|${pinnedRevisionId}` : null;
   useEffect(() => {
     const revisionId = pinnedRevisionId;
-    if (!revisionId) return;
+    const key = pinnedCountKey;
+    if (!revisionId || !key) return;
     let cancelled = false;
     void fetchDatasetRevisionMetadata(revisionId)
       .then((metadata) => {
-        if (!cancelled) setPinnedCount({ revisionId, count: metadata?.itemCount ?? null });
+        if (!cancelled) setPinnedCount({ key, count: metadata?.itemCount ?? null });
       })
       .catch(() => {
         // The durable version receipt still names the pinned revision. A read
         // failure only withholds the count; terminal evidence remains exact.
-        if (!cancelled) setPinnedCount({ revisionId, count: null });
+        if (!cancelled) setPinnedCount({ key, count: null });
       });
     return () => {
       cancelled = true;
     };
-  }, [pinnedRevisionId]);
-  const pinnedCountRead = pinnedCount !== null && pinnedCount.revisionId === pinnedRevisionId ? pinnedCount : null;
+    // pinnedCountKey names the version and pinnedRevisionId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinnedCountKey]);
+  const pinnedCountRead = pinnedCount !== null && pinnedCount.key === pinnedCountKey ? pinnedCount : null;
   const pinnedReferenceCount = pinnedCountRead?.count ?? null;
   // Unavailable when there is no pinned revision, or when its read settled
   // without a count. Until then the running check says the count is loading.
@@ -440,9 +446,11 @@ export function SkillEditScreen() {
         }
         setPollError(null);
       } catch (error) {
-        if (!cancelled) {
-          setPollError(error instanceof Error ? error.message : "Could not refresh the regression status.");
-        }
+        if (cancelled) return;
+        const failure = loadFailure(error);
+        setPollError(failure);
+        // A refused or missing version fails the same way on every poll.
+        if (!failure.retryable) return;
       }
       if (!cancelled) timer = setTimeout(() => void poll(), 2000);
     };

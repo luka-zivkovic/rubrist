@@ -25,6 +25,7 @@ import type { SkillVersion } from "@rubrist/shared";
 import { useCriterion } from "@/lib/criterion-context";
 import { loadFailure, type LoadFailure } from "@/lib/load-error";
 import {
+  chainImprovementsGap,
   chainRecordedNote,
   chainStepRun,
   chainTotals,
@@ -47,8 +48,9 @@ export function CompareVersionsScreen() {
   const [listLoading, setListLoading] = useState(true);
   const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const [listReloadKey, setListReloadKey] = useState(0);
-  // null while the recorded runs load.
-  const [steps, setSteps] = useState<ChainStep[] | null>(null);
+  // The recorded runs for one path, keyed by it so another pair's runs never
+  // show for this one.
+  const [chain, setChain] = useState<{ key: string; steps: ChainStep[]; baseline: ChainStep } | null>(null);
   const [stepsReloadKey, setStepsReloadKey] = useState(0);
 
   const fromId = searchParams.get("from");
@@ -110,29 +112,40 @@ export function CompareVersionsScreen() {
     [versions, valid, iTo, iFrom]
   );
 
+  const chainKey = skillId && from && chainVersions.length > 0
+    ? `${skillId}|${from.id}|${chainVersions.map((version) => version.id).join(",")}`
+    : null;
+
   useEffect(() => {
-    if (!skillId || chainVersions.length === 0) {
-      setSteps(chainVersions.length === 0 ? [] : null);
-      return;
-    }
+    if (!chainKey || !skillId || !from) return;
     let cancelled = false;
-    setSteps(null);
     void (async () => {
       // A failed read stays a failure; it never reads as "no run recorded".
-      const loaded = await Promise.all(
-        chainVersions.map((version) => loadChainStep(version, () => fetchSkillVersionRegression(skillId, version.id)))
-      );
-      if (!cancelled) setSteps(loaded);
+      // `from` is read too: the oldest save's improvements are counted
+      // against its verdicts.
+      const read = (version: SkillVersion) =>
+        loadChainStep(version, () => fetchSkillVersionRegression(skillId, version.id));
+      const [steps, baseline] = await Promise.all([Promise.all(chainVersions.map(read)), read(from)]);
+      if (!cancelled) setChain({ key: chainKey, steps, baseline });
     })();
     return () => {
       cancelled = true;
     };
-  }, [skillId, chainVersions, stepsReloadKey]);
+    // chainKey names skillId, from, and chainVersions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainKey, stepsReloadKey]);
 
-  // null until every run on the path has been read.
-  const totals = useMemo(() => (steps ? chainTotals(steps) : null), [steps]);
+  // null until every run on this path has been read. A retry keeps the rows
+  // it is re-reading in place.
+  const loaded = chain !== null && chain.key === chainKey ? chain : null;
+  const steps = loaded?.steps ?? null;
+  const totals = useMemo(() => (loaded ? chainTotals(loaded.steps, loaded.baseline) : null), [loaded]);
   const totalsNote = (complete: string) =>
     totals === null ? "loading recorded runs" : chainTotalsGap(totals) ?? complete;
+  const improvementsNote = (complete: string) =>
+    totals === null || loaded === null
+      ? "loading recorded runs"
+      : chainImprovementsGap(totals, loaded.baseline) ?? complete;
 
   // The newest step's per-case diff — the recorded record of the final hop.
   const newestStep = steps?.[0];
@@ -154,6 +167,11 @@ export function CompareVersionsScreen() {
         title="Couldn't load versions"
         failure={loadError}
         onRetry={() => setListReloadKey((key) => key + 1)}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
       />
     );
   }
@@ -262,7 +280,7 @@ export function CompareVersionsScreen() {
             <KPI
               label="Improvements"
               num={totals?.improved ?? "—"}
-              delta={totalsNote("flips toward the label")}
+              delta={improvementsNote("flips toward the label")}
             />
             <KPI
               label="Saves between"

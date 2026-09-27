@@ -67,6 +67,11 @@ export function SkillScreen() {
         title="Couldn't load the skill"
         failure={error ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
       />
     );
   }
@@ -151,7 +156,9 @@ export function SkillScreen() {
               </span>
             </button>
             <div className="px-2 py-1.5 font-mono text-[11px] text-ink-3">
-              Strict {v.tooStrictCount} · Lenient {v.tooLenientCount}
+              {/* Stored zeros until a check measures them. */}
+              Strict {v.goldenSetAgreement == null ? "—" : v.tooStrictCount} · Lenient{" "}
+              {v.goldenSetAgreement == null ? "—" : v.tooLenientCount}
             </div>
           </div>
 

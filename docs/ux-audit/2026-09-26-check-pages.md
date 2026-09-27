@@ -898,8 +898,9 @@ that three findings describe. The findings above keep their as-audited text.
   couldn't be read reads "regression · unavailable". A governed candidate
   reads from its run once one is recorded. Compare shows "—", and says why,
   for any total that includes a save whose run is missing, unreadable, failed,
-  or compared no reference cases. The picker bar counts saves and recorded
-  runs separately. The chip keeps the existing "regression · …" wording until
+  or compared no reference cases. Improvements also need the previous save's
+  measured verdicts, including the run of the version the path starts from.
+  The picker bar counts saves and recorded runs separately. The chip keeps the existing "regression · …" wording until
   C12 and ADR-0015 settle the labels.
 - **C6: in part.** "Cases in revision" says "Count unavailable" when there is
   no pinned revision or the read fails. Elapsed time and the long-wait message

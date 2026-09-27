@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Chip, Eyebrow, KPI, KPIRow, MarginNote, RegressionDiffTable, SectionHead } from "@/components/rubrist";
 import { SkillEditFlow, type SkillEditOutcome } from "@/components/skill-edit-flow";
 import type { CompletedSkillVersionResult } from "@/lib/api";
+import type { LoadFailure } from "@/lib/load-error";
 import { cn } from "@/lib/utils";
 import {
   regressionDirectionCounts,
@@ -85,7 +86,7 @@ export function RegressionRunning({
   criterionVersion: CriterionVersion | null;
   referenceCount: number | null;
   referenceCountUnavailable: boolean;
-  pollError: string | null;
+  pollError: LoadFailure | null;
   onOpenHistory: () => void;
 }) {
   if (firstRun) {
@@ -118,7 +119,10 @@ export function RegressionRunning({
         </Card>
         {pollError ? (
           <MarginNote tone="signal" who="Status refresh" className="mb-4">
-            {pollError} The Check is still saved; this page will keep checking.
+            {pollError.message}{" "}
+            {pollError.retryable
+              ? "The Check is still saved; this page will keep checking."
+              : "The Check is still saved. Open the saved version to follow it."}
           </MarginNote>
         ) : null}
         <div className="flex justify-end">
@@ -179,7 +183,10 @@ export function RegressionRunning({
       {pollError ? (
         <div role="status" aria-live="polite">
           <MarginNote tone="signal" who="Status refresh" className="mb-5">
-            {pollError} The version is still recorded; this page will keep retrying.
+            {pollError.message}{" "}
+            {pollError.retryable
+              ? "The version is still recorded; this page will keep retrying."
+              : "The version is still recorded. Open Version history to follow it."}
           </MarginNote>
         </div>
       ) : null}
