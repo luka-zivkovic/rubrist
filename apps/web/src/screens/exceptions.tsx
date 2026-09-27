@@ -327,8 +327,8 @@ export function ExceptionsScreen() {
             </span>
           }
           cta={
-            <Button size="sm" onClick={() => navigate("/skill/edit")}>
-              Open rubric alongside
+            <Button size="sm" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
+              {dashboard?.viewerRole === "owner" ? "Open rubric alongside" : "View evaluator"}
             </Button>
           }
         />

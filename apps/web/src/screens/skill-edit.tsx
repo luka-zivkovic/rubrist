@@ -60,6 +60,7 @@ import {
   typedQuestionFromDraft,
   type TypedQuestionDraft
 } from "../lib/typed-question-draft.js";
+import { useEditorUnsavedChanges } from "../hooks/use-editor-unsaved-changes.js";
 import { useBindingPicker } from "./skill-edit/binding-settings.js";
 import { SkillVersionEditor } from "./skill-edit/editor.js";
 import {
@@ -185,17 +186,15 @@ export function SkillEditScreen() {
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
 
-  // Load a version's binding into the editor fields. A provider the project
-  // can't use now (no key, or not yet editable here) falls back to an
-  // available one with empty model fields.
+  // Preserve an existing binding even when its credentials or catalog are unavailable.
+  // Only the separate first-project setup flow chooses an initial available provider.
   const applyBindingFields = useCallback((
     version: Pick<SkillVersion, "executionBinding" | "customEndpointUrl">,
     options: ReadonlyArray<JudgeProviderAvailabilityItem>
   ) => {
-    const { provider: selectedProvider, preservesBinding: keeps } = resolveJudgeProviderSelection(
-      version.executionBinding.provider,
-      options
-    );
+    const { provider: selectedProvider, preservesBinding: keeps } = firstRun
+      ? resolveJudgeProviderSelection(version.executionBinding.provider, options)
+      : { provider: version.executionBinding.provider, preservesBinding: true };
     const fields = executionBindingFields(version);
     setProvider(selectedProvider);
     setModelId(keeps ? fields.modelId : "");
@@ -203,7 +202,7 @@ export function SkillEditScreen() {
     setBaseUrl(keeps && selectedProvider === "custom" ? fields.baseUrl : "");
     setTemperature(keeps ? fields.temperature : selectedProvider === "mock" ? "" : "0");
     loadPickerSettings(keeps ? version : null);
-  }, [loadPickerSettings]);
+  }, [loadPickerSettings, firstRun]);
 
   // Apply a starter template's content over the form. Model binding stays as
   // whatever's loaded (the team's existing pinned model) — starters
@@ -482,8 +481,6 @@ export function SkillEditScreen() {
       setModels([]);
       setModelsError(null);
       setModelsLoading(false);
-      setModelId("");
-      setModelVersion("");
       return;
     }
     // A custom endpoint and TypeSafe publish no model catalog: the author names the model.
@@ -504,16 +501,13 @@ export function SkillEditScreen() {
         if (!active) return;
         setModels(catalog.models);
         if (catalog.models.length === 0) {
-          setModelId("");
-          setModelVersion("");
           setModelsError(`No judge-capable models were returned by ${provider}.`);
           return;
         }
-        // NEVER silently replace a pinned model that dropped out of the
-        // catalog (deprecations, listing filters): keep the pin — it renders
-        // as an explicit "not in catalog" option with a warning below — and
-        // only default to the catalog head when nothing is pinned yet.
-        if (modelId && !catalog.models.some((model) => model.id === modelId)) return;
+        // Catalog reads never rewrite a saved pin, including its model version.
+        // Only first-project setup chooses an initial model; the ordinary
+        // editor waits for the author to select one after changing provider.
+        if (modelId || !firstRun) return;
         const selected = catalog.models.find((model) => model.id === modelId) ?? catalog.models[0]!;
         setModelId(selected.id);
         setModelVersion(selected.version);
@@ -521,8 +515,6 @@ export function SkillEditScreen() {
       .catch((err) => {
         if (!active) return;
         setModels([]);
-        setModelId("");
-        setModelVersion("");
         setModelsError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
@@ -579,6 +571,7 @@ export function SkillEditScreen() {
   // A setting the check saw rejected would fail resolution after save, so it blocks saving.
   const draftInput = buildInput();
   const canSave =
+    dashboard?.viewerRole === "owner" &&
     skill != null &&
     draftInput !== null &&
     (firstRun || picker.blockingProblems.length === 0) &&
@@ -594,6 +587,12 @@ export function SkillEditScreen() {
     !modelsError &&
     !submitting;
 
+  const unsaved = useEditorUnsavedChanges(JSON.stringify({
+    rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl,
+    temperature, settings: picker.settings, timeScope, verdictKind, choiceScores,
+    scalarRange, starterSuppliedOutputContract
+  }), !firstRun && !loading && dashboard?.viewerRole === "owner");
+
   // The create request is short-lived: a 202 returns the immutable version
   // receipt immediately, then the visible running stage polls by that exact id.
   const mountedRef = useRef(true);
@@ -605,7 +604,7 @@ export function SkillEditScreen() {
   }, []);
 
   const submit = async (extra?: { overrideReason?: string }) => {
-    if (!skill) return;
+    if (!skill || dashboard?.viewerRole !== "owner" || !providerAvailable) return;
     const operation = ++operationGeneration.current;
     const submittedCriterionId = selectedCriterionId;
     const submittedSkillId = skill.id;
@@ -665,6 +664,7 @@ export function SkillEditScreen() {
         }) || submittedDraftIdentity !== onboardingDraftIdentityRef.current
       ) return;
       if (createdCriterionVersion) setOnboardingCriterionVersion(createdCriterionVersion);
+      unsaved.markClean();
       rememberVersion(res.version.id);
       if (recordingOverride && result) setBaseVersion(result.version);
       if (res.state === "queued") {
@@ -727,6 +727,16 @@ export function SkillEditScreen() {
     );
   }
 
+  if (dashboard?.viewerRole === "member") {
+    return (
+      <div className="fadeUp max-w-[760px]">
+        <SectionHead eyebrow={skill.name} title="Only an owner can edit this evaluator"
+          sub={`Only an owner can save a new version. Ask ${skill.ownerName}. You can view the saved evaluator and its history.`} />
+        <Button variant="outline" onClick={() => navigate(criterionHref("/skill"))}>View evaluator</Button>
+      </div>
+    );
+  }
+
   if (phase === "running" && pendingVersion) {
     return (
       <RegressionRunning
@@ -765,6 +775,7 @@ export function SkillEditScreen() {
             navigate("/skill/edit", { replace: true });
             return;
           }
+          unsaved.resetBaseline();
           setBaseVersion(result.version);
           editFromVersion(result.version);
           setPhase("edit");
@@ -797,13 +808,17 @@ export function SkillEditScreen() {
     );
   }
 
+  if (!dashboardReady) {
+    return <div className="fadeUp"><SectionHead eyebrow="Edit skill" title="Loading project permissions" /></div>;
+  }
+
   const promptCompilation = compileJudgePrompt({ rubricMarkdown: rubric, prompt });
   const usesImplicitRubric = promptCompilation.diagnostics.some((diagnostic) => diagnostic.code === "implicit-rubric");
   const unknownPromptVariables = promptCompilation.diagnostics.flatMap((diagnostic) =>
     diagnostic.code === "unknown-variable" ? [diagnostic.variable] : []
   );
   const availableProviderOptions = providerOptions.filter((option) => option.available);
-  const selectedProviderOption = availableProviderOptions.find((option) => option.provider === provider);
+  const selectedProviderOption = providerOptions.find((option) => option.provider === provider);
   // A prompted evaluator needs a key for a prompted provider; TypeSafe runs only typed questions.
   const hasConfiguredRealProvider = availableProviderOptions.some((option) => option.provider !== "mock" && option.provider !== "typesafe");
   const changeInput = draftInput;
@@ -881,10 +896,10 @@ export function SkillEditScreen() {
       goldenSetSize={goldenSetSize}
       evidenceCount={evidenceCount}
       bench={bench}
-      resetToCurrent={resetToCurrent}
+      resetToCurrent={() => { if (unsaved.confirmDiscard()) resetToCurrent(); }}
       appliedStarter={appliedStarter}
       setAppliedStarter={setAppliedStarter}
-      applyStarter={applyStarter}
+      applyStarter={(starter) => { if (unsaved.confirmDiscard()) applyStarter(starter); }}
       rubricMode={rubricMode}
       setRubricMode={setRubricMode}
       rubric={rubric}

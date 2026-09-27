@@ -36,12 +36,11 @@ export function JourneyPipeline({
           ? "Review the starter Check against a recorded Run."
           : "An owner needs to choose the first Check. You can inspect the starter."
         : skillVersionStateLabel(dashboard.skill.currentVersion),
-      action: dashboard.skill.isStarter && dashboard.viewerRole === "member" ? "View Check" : "Review Check",
+      action: dashboard.viewerRole === "owner" ? "Review Check" : "View evaluator",
       // A still-starter Check routes through the guided choice and proposal;
       // anything already configured opens the full editor.
-      path: dashboard.skill.isStarter
-        ? dashboard.viewerRole === "owner" ? firstRunEditorPath() : "/skill"
-        : "/skill/edit"
+      path: dashboard.viewerRole !== "owner" ? "/skill"
+        : dashboard.skill.isStarter ? firstRunEditorPath() : "/skill/edit"
     },
     {
       state: states.judgeRealWork,

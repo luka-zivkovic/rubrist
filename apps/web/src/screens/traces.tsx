@@ -220,8 +220,8 @@ export function TracesScreen() {
             </span>
           }
           cta={
-            <Button size="sm" onClick={() => navigate("/skill/edit")}>
-              Review the rubric
+            <Button size="sm" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
+              {dashboard?.viewerRole === "owner" ? "Review the rubric" : "View evaluator"}
             </Button>
           }
         />

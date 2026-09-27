@@ -97,7 +97,8 @@ export function ReviewScreen() {
           categoryFilter={categoryFilter}
           onBack={() => navigate("/")}
           onQueue={exitToQueue}
-          onSkill={() => navigate("/skill/edit")}
+          canEdit={dashboard?.viewerRole === "owner"}
+          onSkill={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}
           onReopen={reopen}
         />
       )}
@@ -112,6 +113,7 @@ function DoneView({
   onBack,
   onQueue,
   onSkill,
+  canEdit,
   onReopen
 }: {
   decisions: Record<string, TraceDecisionKind>;
@@ -120,6 +122,7 @@ function DoneView({
   onBack: () => void;
   onQueue: () => void;
   onSkill: () => void;
+  canEdit: boolean;
   onReopen: () => void;
 }) {
   const counts = Object.values(decisions).reduce(
@@ -166,7 +169,7 @@ function DoneView({
           the cases together before editing the guide.
           <div className="mt-2 flex gap-2">
             <Button variant="signal" size="sm" onClick={onSkill}>
-              Draft rubric edit from these cases
+              {canEdit ? "Draft rubric edit from these cases" : "View evaluator"}
             </Button>
           </div>
         </MarginNote>

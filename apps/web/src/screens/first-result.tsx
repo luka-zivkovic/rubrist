@@ -331,8 +331,8 @@ export function FirstResultScreen() {
           body={`${run.error ?? `${failed.toLocaleString()} of ${total.toLocaleString()} Check attempts failed before a Result was recorded.`} Fix the provider setup if needed, then save a new Check version to try again.`}
           actions={
             <>
-              <Button size="sm" variant="outline" onClick={() => navigate("/skill/edit")}>
-                Review the Check
+              <Button size="sm" variant="outline" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
+                {dashboard?.viewerRole === "owner" ? "Review the Check" : "View evaluator"}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => navigate("/settings")}>
                 Check provider settings
