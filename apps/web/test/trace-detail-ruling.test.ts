@@ -211,6 +211,75 @@ describe("case-detail human ruling state", () => {
     expect(html).not.toContain("Add to golden set");
   });
 
+  it("renders the complete claim and evidence as text, preserving raw content and escaping source markup", () => {
+    const evidence = Array.from({ length: 700 }, (_, index) => `Source sentence ${index}.`);
+    evidence[0] = '<script>alert("source")</script>';
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, trace: { ...detail.trace,
+        input: { evidence, claim_context_for_reference_resolution_only: "Context is not evidence." },
+        output: { claim: "An unsupported claim <img src=x onerror=alert(1)>" }
+      } }
+    }));
+    expect(html).toContain("Claim to evaluate");
+    expect(html).toContain("Supplied evidence · 700 entries");
+    expect(html).toContain("Source sentence 699.");
+    expect(html).toContain("Context is not evidence.");
+    expect(html).toContain("Raw input and output");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("claim_context_for_reference_resolution_only");
+  });
+
+  it("retains the generic full payload view when extra fields might affect the evaluation", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, trace: { ...detail.trace,
+        input: { evidence: ["source"], important_other_evidence: "Do not omit this." },
+        output: { claim: "Claim" }
+      } }
+    }));
+    expect(html).toContain("Conversation");
+    expect(html).toContain("Do not omit this.");
+    expect(html).not.toContain("Claim to evaluate");
+  });
+
+  it("shows a recorded TypeSafe question, true probability, exact threshold and observed models without inventing an explanation", () => {
+    const question = { type: "noul", instructions: "Is every claim supported?", criteria: { true: "All claims supported.", false: "Any claim unsupported." } };
+    const typed: ExceptionDetail = {
+      ...detail,
+      judgeRun: { ...detail.judgeRun, verdict: "pass", score: 0.63, reasoning: null },
+      exception: { ...detail.exception, verdict: "pass" },
+      rawRequest: { provider: "typesafe", modelName: "jev-1.13.0", prompt: { id: "skillv_1", name: "0.1.4", content: JSON.stringify(question) } },
+      rawResponse: { kind: "typed-question", probability: 0.63, threshold: 0.3, label: "pass", rationaleStatus: "not_provided" },
+      verdictHistory: [
+        { ...judgeBeforeRuling, observed: { model: "claude-sonnet-5", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null }, skillVersionId: "skillv_sonnet" },
+        { ...judgeBeforeRuling, id: "typed", payload: { kind: "binary", pass: true, rationaleStatus: "not_provided" }, observed: { model: "jev-1.13.0", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null } }
+      ]
+    };
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: typed }));
+    expect(html).toContain("Is every claim supported?");
+    expect(html).toContain("Probability answer is true: 63%");
+    expect(html).toContain("True means pass.");
+    expect(html).toContain("probability is at least 0.3");
+    expect(html).toContain("does not provide an explanation");
+    expect(html).toContain("Model: claude-sonnet-5");
+    expect(html).toContain("Model: jev-1.13.0");
+    expect(html).toContain("skillv_sonnet");
+    expect(html).toContain("v0.1.4");
+    expect(html).not.toContain("score 0.63");
+    expect(html).not.toContain("confidence");
+  });
+
+  it("escapes recorded model names and does not infer an absent model from another history item", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, verdictHistory: [{ ...judgeBeforeRuling, observed: { model: "<img src=x onerror=alert(1)>", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null } }, { ...judgeBeforeRuling, id: "missing_model", skillVersionId: "other_version" }] }
+    }));
+    expect(html).toContain("Model: &lt;img");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("Model: not recorded");
+    expect(html).toContain("other_version");
+  });
+
   it("refreshes the shared dashboard after standalone and player decisions", async () => {
     const [traceSource, playerSource] = await Promise.all([
       readFile(new URL("../src/screens/trace.tsx", import.meta.url), "utf8"),
