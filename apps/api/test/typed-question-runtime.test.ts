@@ -10,7 +10,7 @@ import {
 import type { Queue, QueueJob, QueueName, QueueSendOptions } from "@rubrist/queue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
-import { buildAssessmentReceiptV2 } from "../src/lib/assessment-receipt-v2.js";
+import { buildAssessmentReceipt } from "../src/lib/assessment-receipt.js";
 import { contentDigest } from "../src/lib/canonical-json.js";
 import { buildFindings, latestDiscreteVerdictByCase } from "../src/lib/findings.js";
 import {
@@ -243,7 +243,7 @@ describe("a typed-question release receipt", () => {
       observed: { model: "jev-1.13.0", requestId: `req_${index}`, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null },
       evaluatorScore: { value: labels[index] === "pass" ? 0.8 : 0.2, kind: "native_probability" }
     }]));
-    const receipt = buildAssessmentReceiptV2({ run: { ...run, spend: created.spend }, skillVersion: version, verdicts });
+    const receipt = buildAssessmentReceipt({ run: { ...run, spend: created.spend }, skillVersion: version, verdicts });
     expect(receipt.status).toBe("complete");
     expect(receipt.items.map((item) => [item.result, item.evaluatorScore])).toEqual([
       [{ state: "outcome", outcome: "pass" }, { value: 0.8, kind: "native_probability" }],

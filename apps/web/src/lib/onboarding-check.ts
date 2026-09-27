@@ -2,7 +2,7 @@ import type { OnboardingEvidenceInventory, ProjectMode } from "@rubrist/shared";
 import { findStarterSkill, STARTER_SKILLS, type StarterSkill } from "./starter-skills.js";
 
 export interface OnboardingCheckDraft {
-  schemaVersion: 2;
+  schemaVersion: 1;
   requestId: string;
   projectId: string;
   skillId: string;
@@ -84,7 +84,7 @@ export function draftFromStarter(input: {
   decisionReason?: string | null;
 }): OnboardingCheckDraft {
   return {
-    schemaVersion: 2,
+    schemaVersion: 1,
     requestId: newOnboardingCheckRequestId(),
     projectId: input.projectId,
     skillId: input.skillId,
@@ -100,7 +100,7 @@ export function draftFromStarter(input: {
 function isDraft(value: unknown, projectId: string, skillId: string): value is OnboardingCheckDraft {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<OnboardingCheckDraft>;
-  return draft.schemaVersion === 2 &&
+  return draft.schemaVersion === 1 &&
     typeof draft.requestId === "string" && draft.requestId.trim().length > 0 && draft.requestId.length <= 240 &&
     draft.projectId === projectId &&
     draft.skillId === skillId &&

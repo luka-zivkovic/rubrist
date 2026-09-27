@@ -172,7 +172,7 @@ function transportReason(error: unknown): string {
 }
 
 /**
- * Judges one trace with a v2 execution binding in exactly one physical call.
+ * Judges one trace with an execution binding in exactly one physical call.
  * Nothing is retried, dropped, or rewritten after a rejection, and no
  * redirect is followed: a failed call is an EvaluatorCallError with its
  * failure kind (ADR-0014 sections 2 and 6).

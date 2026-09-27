@@ -89,31 +89,31 @@ export function skillDigestInput(identity: EvaluatorIdentity): SkillDigestInput 
 }
 
 /**
- * skillDigest v2 from what a receipt carries: SHA-256 over the canonical
+ * skillDigest from what a receipt carries: SHA-256 over the canonical
  * basis, definition digest, and execution binding. A verifier needs nothing
  * else; it needs the definition only to check the definition digest.
  */
-export function skillDigestV2FromInput(input: SkillDigestInput): string {
+export function skillDigestFromInput(input: SkillDigestInput): string {
   return sha256Digest(parseExactly(SkillDigestInputSchema, input, "skillDigest input"));
 }
 
 /**
- * skillDigest v2 (ADR-0014 section 1) of a whole identity. The resolution
+ * skillDigest (ADR-0014 section 1) of a whole identity. The resolution
  * record is never identity, so it can't enter this digest: the strict schemas
  * refuse any key they don't name, and every unset setting is present as `null`.
  */
-export function skillDigestV2(identity: EvaluatorIdentity): string {
-  return skillDigestV2FromInput(skillDigestInput(identity));
+export function skillDigestOf(identity: EvaluatorIdentity): string {
+  return skillDigestFromInput(skillDigestInput(identity));
 }
 
 /**
  * The output-contract digest calibration and suite manifests bind beside
- * skillDigest. For a prompted definition it is v1's formula over the output
+ * skillDigest. For a prompted definition it is a digest of the output
  * schema, verdict kind, scalar range, and categorical scores; a typed-question
  * definition's output contract is its question type, polarity, and the
  * absence of a rationale (ADR-0014 section 5).
  */
-export function evaluatorOutputContractDigestV2(definition: EvaluatorDefinition): string {
+export function evaluatorOutputContractDigest(definition: EvaluatorDefinition): string {
   const parsed = parseExactly(EvaluatorDefinitionSchema, definition, "evaluator definition");
   return parsed.kind === "prompted"
     ? sha256Digest({

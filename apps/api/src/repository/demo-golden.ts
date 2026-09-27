@@ -8,7 +8,7 @@ import {
   type GoldenSetEntry,
   type GoldenSetHealthSummary,
   type JudgeRun,
-  type SkillFormatV2Example,
+  type SkillFormatExample,
   type VerdictRecord,
   effectiveHumanLabel,
   payloadRationale,
@@ -85,20 +85,20 @@ export class DemoGoldenEvidenceRepository implements GoldenEvidenceRepositoryPor
     projectId: string,
     cap: number,
     criterionVersionId?: string | undefined
-  ): Promise<SkillFormatV2Example[]> {
+  ): Promise<SkillFormatExample[]> {
     const golden = (await this.dependencies.listGoldenSet(projectId, criterionVersionId)).slice(0, cap);
-    const examples: SkillFormatV2Example[] = [];
+    const examples: SkillFormatExample[] = [];
     for (const entry of golden) {
       // Reuse the redacted case-detail trace (demo parity with the PG join).
       const detail = await this.dependencies.getCaseDetail(projectId, entry.caseId, entry.sourceSkillVersionId).catch(() => null);
       examples.push({
         id: entry.id,
         label: entry.agreedLabel,
-        input: (detail?.trace.input ?? null) as SkillFormatV2Example["input"],
-        output: (detail?.trace.output ?? null) as SkillFormatV2Example["output"],
+        input: (detail?.trace.input ?? null) as SkillFormatExample["input"],
+        output: (detail?.trace.output ?? null) as SkillFormatExample["output"],
         reason: entry.reason,
         metadata: detail?.trace.metadata && Object.keys(detail.trace.metadata).length > 0
-          ? detail.trace.metadata as SkillFormatV2Example["metadata"]
+          ? detail.trace.metadata as SkillFormatExample["metadata"]
           : null
       });
     }

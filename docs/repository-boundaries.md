@@ -49,9 +49,9 @@ Eval-run counter terminalization and immutable assessment-receipt minting live
 in `repository.pg/assessment-receipt-commands.ts`. Both commands accept the
 caller-owned client, so cached run creation, item completion and failure,
 historical freeze, consumer comparison, and correction keep receipt creation
-inside their existing transactions. Receipt v2 canonical bytes and the source
+inside their existing transactions. Receipt canonical bytes and the source
 snapshot, which covers each completed item's verdict, come from
-`lib/assessment-receipt-v2.ts`.
+`lib/assessment-receipt.ts`.
 Skill-version numbering, governed reviewer-subject binding, and immutable
 version insertion live in `repository.pg/skill-version-commands.ts`. The three
 commands accept the caller-owned client, so native criterion setup and pending

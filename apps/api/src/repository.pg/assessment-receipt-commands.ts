@@ -2,11 +2,11 @@ import type { EvalRunDetail } from "@rubrist/shared";
 import type { PoolClient } from "pg";
 import {
   RECEIPT_SCHEMA_VERSION,
-  buildAssessmentReceiptV2,
-  canonicalReceiptV2Bytes,
+  buildAssessmentReceipt,
+  canonicalReceiptBytes,
   receiptArtifactDigest,
   receiptSourceSnapshotDigest
-} from "../lib/assessment-receipt-v2.js";
+} from "../lib/assessment-receipt.js";
 import type {
   AssessmentReceiptArtifact,
   AssessmentReceiptArtifactSource
@@ -80,8 +80,8 @@ export async function mintAssessmentReceiptWithClient(
     return [verdict.id, verdict] as const;
   }));
   const source = { run: detail, skillVersion, verdicts };
-  const receipt = buildAssessmentReceiptV2(source);
-  const canonicalBytes = canonicalReceiptV2Bytes(receipt);
+  const receipt = buildAssessmentReceipt(source);
+  const canonicalBytes = canonicalReceiptBytes(receipt);
   const artifactDigest = receiptArtifactDigest(canonicalBytes);
   const artifactId = `rart_${evalRunId}_v${RECEIPT_SCHEMA_VERSION}_r1`;
   await client.query(

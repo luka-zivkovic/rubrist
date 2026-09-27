@@ -97,11 +97,11 @@ agreement is one.
 
 In Postgres mode, an owner launches an explicit single-trial run bound to one
 binary evaluator, criterion version, complete governed sealed-validation
-revision, selection provenance, the evaluator's v2 identity (definition digest
+revision, selection provenance, the evaluator's identity (definition digest
 and execution binding), provider policy, and authorization/completion exposure
 snapshots. The repository acquires a durable revision lease before execution.
 The worker receives one protected payload without truth and runs it through
-the v2 executor, which sends exactly the pinned binding through its verdict
+the executor, which sends exactly the pinned binding through its verdict
 protocol in one physical call, with no retries and no parameter-changing
 fallbacks (ADR-0014). A typed-question evaluator's attempt asks its question
 through typed-question/v1 and records pass or fail on its threshold; it never
@@ -183,10 +183,10 @@ The frozen contract and conformance corpus cover repeated-trial artifacts, but
 the current producer runtime accepts only
 `{ kind: "single", trialsPerItem: 1 }`. Dailies has an independent local
 contract verifier and consumes explicitly configured artifacts through its
-config v6, policy v2, report v6, runner, and CLI. It still verifies
-calibration v1 and moves to v2 evidence with Rubrist's receipt v2 (Dailies
-ADR-0008), so until then it can't consume the v2 artifacts Rubrist mints. It
-does not perform a network or latest-status lookup.
+suite configuration, release policy, suite report, runner, and CLI, and it
+verifies the receipt and calibration artifacts Rubrist mints (Dailies
+ADR-0008 and ADR-0010). It does not perform a network or latest-status
+lookup.
 
 ### Governed Analyze populations and coding studies
 

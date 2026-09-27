@@ -634,8 +634,8 @@ describe("production calibration artifact", () => {
     });
     expect(ProductionCalibrationArtifactSchema.parse(artifact)).toEqual(artifact);
     expect(artifact.contract).toBe(PRODUCTION_CALIBRATION_CONTRACT);
-    expect(artifact.contract).toBe("rubrist/production-calibration/v2");
-    expect(artifact.schemaVersion).toBe(2);
+    expect(artifact.contract).toBe("rubrist/production-calibration/v1");
+    expect(artifact.schemaVersion).toBe(1);
     expect(artifact.generatedAt).toBe("2026-09-20T12:00:00.000Z");
     expect(artifact.window).toEqual({ from: null, to: null });
     expect(artifact.evidence).toEqual({

@@ -6,16 +6,16 @@ import {
   CONVERGENCE_CASE_PAGE_MAX_LIMIT,
   CreateOnboardingCheckInputSchema,
   CreateSkillVersionInputSchema,
-  SKILL_FORMAT_V2_EXAMPLES_CAP,
-  SKILL_FORMAT_V2_OWNER_MAX,
-  isPortableSkillFormatV2Example,
+  SKILL_FORMAT_EXAMPLES_CAP,
+  SKILL_FORMAT_OWNER_MAX,
+  isPortableSkillFormatExample,
   type EvaluatorIdentity,
-  type SkillFormatV2
+  type SkillFormat
 } from "@rubrist/shared";
 import { z } from "zod";
 import { executionBindingInputProblem } from "../lib/execution-binding.js";
 import { evaluatorIdentityFor } from "../lib/evaluator-identity.js";
-import { buildSkillFormatV2 } from "../lib/skill-format-v2.js";
+import { buildSkillFormat } from "../lib/skill-format.js";
 import { sha256Digest } from "../lib/canonical-json.js";
 import { userProjectRole } from "../lib/auth.js";
 import { buildJudgeCard, renderJudgeCardMarkdown } from "../lib/judge-card.js";
@@ -196,7 +196,7 @@ export function registerSkillAdministrationRoutes(
     return c.json(card);
   });
 
-  // Portable skill-format/v2 export (contracts/skill-format-v2.md): the
+  // Portable skill-format/v1 export (contracts/skill-format-v1.md): the
   // evaluator version's full definition and execution binding, with the
   // digests an importer recomputes. Mapping only: everything comes from the
   // skill, the version, and the golden set (examples). Session +
@@ -221,30 +221,30 @@ export function registerSkillAdministrationRoutes(
     }
     const golden = await repository.getSkillFormatExamples(
       projectId,
-      SKILL_FORMAT_V2_EXAMPLES_CAP,
+      SKILL_FORMAT_EXAMPLES_CAP,
       criterionVersion.id
     );
     // An example the format can't carry is left out, never the whole export.
-    const examples = golden.filter(isPortableSkillFormatV2Example);
+    const examples = golden.filter(isPortableSkillFormatExample);
     const notes: string[] = [];
     if (golden.length === 0) {
       notes.push("examples: the golden set is empty; promote reviewed cases to seed few-shot examples.");
-    } else if (golden.length === SKILL_FORMAT_V2_EXAMPLES_CAP) {
-      notes.push(`examples: capped at ${SKILL_FORMAT_V2_EXAMPLES_CAP} of the golden set.`);
+    } else if (golden.length === SKILL_FORMAT_EXAMPLES_CAP) {
+      notes.push(`examples: capped at ${SKILL_FORMAT_EXAMPLES_CAP} of the golden set.`);
     }
     if (examples.length < golden.length) {
       notes.push(`examples: ${golden.length - examples.length} of the golden set left out because the format can't carry them (nested too deep, a __proto__ key, or a lone UTF-16 surrogate).`);
     }
-    const owner = cutToLength(skill.ownerName, SKILL_FORMAT_V2_OWNER_MAX);
-    if (owner !== skill.ownerName) notes.push(`owner: the owner's display name is cut to ${SKILL_FORMAT_V2_OWNER_MAX} characters.`);
+    const owner = cutToLength(skill.ownerName, SKILL_FORMAT_OWNER_MAX);
+    if (owner !== skill.ownerName) notes.push(`owner: the owner's display name is cut to ${SKILL_FORMAT_OWNER_MAX} characters.`);
     if (identity.executionBinding.endpoint.kind === "custom") {
       notes.push("The evaluator calls a custom endpoint named only by its digest; an importer supplies the base URL, which must match that digest.");
     }
     notes.push("This document is a mapping of recorded evaluator and golden-set data; no value is fabricated.");
 
-    let doc: SkillFormatV2;
+    let doc: SkillFormat;
     try {
-      doc = buildSkillFormatV2({
+      doc = buildSkillFormat({
         name: skill.name,
         description: skill.description,
         owner,
@@ -261,7 +261,7 @@ export function registerSkillAdministrationRoutes(
       if (!(error instanceof z.ZodError)) throw error;
       const issue = error.issues[0];
       const where = issue && issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-      return c.json({ error: `This evaluator version can't be exported as skill-format/v2: ${where}${issue?.message ?? "invalid document"}` }, 422);
+      return c.json({ error: `This evaluator version can't be exported as skill-format/v1: ${where}${issue?.message ?? "invalid document"}` }, 422);
     }
 
     if (c.req.query("download") === "1") {

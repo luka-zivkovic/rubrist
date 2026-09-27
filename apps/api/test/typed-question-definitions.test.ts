@@ -6,29 +6,29 @@ import {
   SkillVersionSchema,
   TypedQuestionOutputSchema,
   type ExecutionBinding,
-  type SkillFormatV2,
+  type SkillFormat,
   type SkillVersion
 } from "@rubrist/shared";
 import { createApp } from "../src/app.js";
 import {
   evaluatorDefinitionDigest,
   evaluatorIdentityFor,
-  evaluatorOutputContractDigestV2,
-  skillDigestV2
+  evaluatorOutputContractDigest,
+  skillDigestOf
 } from "../src/lib/evaluator-identity.js";
-import { verifySkillFormatV2 } from "../src/lib/skill-format-v2.js";
+import { verifySkillFormat } from "../src/lib/skill-format.js";
 import { DemoRepository } from "../src/repository.js";
 import { MOCK_BINDING, bindingInput } from "./fixtures/execution-binding.js";
 
 // A typed-question evaluator version (ADR-0014 section 5) holds a question and
 // a decision threshold instead of a rubric and prompt. The portable
-// skill-format/v2 vector is the reference: a saved version with its question,
+// skill-format/v1 vector is the reference: a saved version with its question,
 // threshold, and binding names exactly that vector's evaluator.
 
 const FIXTURE = JSON.parse(readFileSync(
-  new URL("../../../contracts/fixtures/skill-format-v2.typed-question.json", import.meta.url),
+  new URL("../../../contracts/fixtures/skill-format-v1.typed-question.json", import.meta.url),
   "utf8"
-)) as SkillFormatV2;
+)) as SkillFormat;
 const QUESTION = FIXTURE.evaluator.question!;
 const JEV = FIXTURE.evaluator.identity.executionBinding as ExecutionBinding;
 const THRESHOLD = 0.62;
@@ -130,11 +130,11 @@ describe("a saved typed-question version", () => {
     expect(identity).toEqual(FIXTURE.evaluator.identity);
     expect({
       definitionDigest: evaluatorDefinitionDigest(identity.definition),
-      skillDigest: skillDigestV2(identity),
-      outputContractDigest: evaluatorOutputContractDigestV2(identity.definition)
+      skillDigest: skillDigestOf(identity),
+      outputContractDigest: evaluatorOutputContractDigest(identity.definition)
     }).toEqual(FIXTURE.digests);
     // The threshold is identity: another threshold is another evaluator.
-    expect(skillDigestV2(evaluatorIdentityFor({ ...await typedVersion(), decisionThreshold: 0.5 }))).not.toBe(FIXTURE.digests.skillDigest);
+    expect(skillDigestOf(evaluatorIdentityFor({ ...await typedVersion(), decisionThreshold: 0.5 }))).not.toBe(FIXTURE.digests.skillDigest);
   });
 
   it("has no identity when its question and its protocol disagree", async () => {
@@ -144,7 +144,7 @@ describe("a saved typed-question version", () => {
       .toThrow(/exactly when it runs typed-question\/v1/);
   });
 
-  it("exports as skill-format/v2 with its question text, which an importer checks against the digest", async () => {
+  it("exports as skill-format/v1 with its question text, which an importer checks against the digest", async () => {
     const typed = await typedVersion();
     class TypedRepository extends DemoRepository {
       override async getSkillVersion(projectId: string, versionId: string): Promise<SkillVersion | null> {
@@ -153,7 +153,7 @@ describe("a saved typed-question version", () => {
     }
     const response = await createApp(new TypedRepository()).request(`/api/skills/skill_support_quality/versions/${VERSION_ID}/skill-format`);
     expect(response.status).toBe(200);
-    const doc = verifySkillFormatV2(await response.json(), { skillDigest: FIXTURE.digests.skillDigest });
+    const doc = verifySkillFormat(await response.json(), { skillDigest: FIXTURE.digests.skillDigest });
     expect(doc.evaluator).toEqual(FIXTURE.evaluator);
     expect(doc.digests).toEqual(FIXTURE.digests);
   });

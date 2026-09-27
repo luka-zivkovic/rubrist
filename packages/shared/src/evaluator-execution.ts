@@ -3,14 +3,14 @@ import { containsLoneUtf16Surrogate, JudgeProviderCredentialSourceSchema, Unicod
 
 // Model-agnostic evaluator identity (Rubrist ADR-0014). An evaluator version is
 // its definition plus its execution binding; together they are identity and
-// feed skillDigest v2. What Rubrist learned about the binding from provider
+// feed skillDigest. What Rubrist learned about the binding from provider
 // capability data and probe calls is the resolution record, which is never
 // identity and never changes the binding.
 //
 // Every optional setting is present and `null` when it is not sent, so the
 // canonical form never depends on whether a producer omitted a key.
 
-export const EVALUATOR_IDENTITY_BASIS = "rubrist/evaluator-identity/v2" as const;
+export const EVALUATOR_IDENTITY_BASIS = "rubrist/evaluator-identity/v1" as const;
 
 const Sha256DigestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const NonEmptyTextSchema = (max: number) => UnicodeScalarValueSchema.pipe(z.string().min(1).max(max));
@@ -293,7 +293,7 @@ export const SEEDED_DEFAULT_EXECUTION_BINDING: ExecutionBinding = deepFreeze({
  */
 export const EVALUATOR_DEFINITION_TEXT_MAX = 100_000;
 
-// The v1 skill-version invariants (skills.ts), which v2 identity keeps.
+// The skill-version invariants (skills.ts), which the evaluator identity keeps.
 const PromptedDefinitionSchema = z.object({
   kind: z.literal("prompted"),
   rubricMarkdown: z.string().max(EVALUATOR_DEFINITION_TEXT_MAX),
@@ -359,7 +359,7 @@ export type EvaluatorIdentity = z.infer<typeof EvaluatorIdentitySchema>;
 
 /**
  * What evidence carries in place of the definition (ADR-0014 decision 5), and
- * exactly what skillDigest v2 is computed from: the identity basis, the
+ * exactly what skillDigest is computed from: the identity basis, the
  * SHA-256 of the canonical definition, and the execution binding. It never
  * holds rubric, prompt, or question text.
  */
@@ -370,7 +370,7 @@ export const SkillDigestInputSchema = z.object({
 }).strict();
 export type SkillDigestInput = z.infer<typeof SkillDigestInputSchema>;
 
-/** Shared item model for receipt v2, calibration v2, and the ledger v2 (ADR-0014 section 6). */
+/** Shared item model for the receipt, the calibration, and its private ledger (ADR-0014 section 6). */
 export const EvaluatorItemOutcomeSchema = z.enum(["pass", "fail", "abstain"]);
 export type EvaluatorItemOutcome = z.infer<typeof EvaluatorItemOutcomeSchema>;
 

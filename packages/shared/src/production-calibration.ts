@@ -13,16 +13,16 @@ import { containsLoneUtf16Surrogate } from "./judge.js";
 // ordinary finite numbers because this artifact is a report over records, not
 // a digest-pinned commitment.
 //
-// Report v2 adds score (ordinal) calibration and the time window a report
-// covers. No v1 report was ever stored, so v1 has no parser here.
+// The report covers binary and score (ordinal) calibration over a stated time
+// window.
 //
 // The input record shapes are ported field-for-field from jevkit's decision
 // ledger so that one of its JSON Lines entries validates unchanged. The state a
 // decision was made on is never stored: only its digest and length travel.
 
 export const PRODUCTION_DECISION_RECORD_CONTRACT = "rubrist/production-decision-record/v1" as const;
-export const PRODUCTION_CALIBRATION_CONTRACT = "rubrist/production-calibration/v2" as const;
-export const PRODUCTION_CALIBRATION_METRIC_DEFINITION_VERSION = "production-calibration-metrics/v2" as const;
+export const PRODUCTION_CALIBRATION_CONTRACT = "rubrist/production-calibration/v1" as const;
+export const PRODUCTION_CALIBRATION_METRIC_DEFINITION_VERSION = "production-calibration-metrics/v1" as const;
 export const PRODUCTION_CALIBRATION_INTERVAL_DEFINITION_VERSION = "wilson-score/v1" as const;
 export const PRODUCTION_CALIBRATION_CONFIDENCE_BASIS_POINTS = 9_500 as const;
 // Exact binary64 value 3fff5c0331eeff84, pinned by wilson-score/v1.
@@ -184,7 +184,7 @@ export const ProductionDecisionLedgerRecordSchema = z.discriminatedUnion("kind",
 export type ProductionDecisionLedgerRecord = z.infer<typeof ProductionDecisionLedgerRecordSchema>;
 
 // ---------------------------------------------------------------------------
-// Output artifact: rubrist/production-calibration/v2
+// Output artifact: rubrist/production-calibration/v1
 // ---------------------------------------------------------------------------
 
 export const ProductionCalibrationDefinedWilsonRateSchema = z.object({
@@ -565,7 +565,7 @@ export type ProductionCalibrationWindow = z.infer<typeof ProductionCalibrationWi
 
 export const ProductionCalibrationArtifactSchema = z.object({
   contract: z.literal(PRODUCTION_CALIBRATION_CONTRACT),
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(1),
   metricDefinitionVersion: z.literal(PRODUCTION_CALIBRATION_METRIC_DEFINITION_VERSION),
   intervalDefinitionVersion: z.literal(PRODUCTION_CALIBRATION_INTERVAL_DEFINITION_VERSION),
   generatedAt: ProductionCalibrationTimestampSchema,

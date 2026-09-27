@@ -1,7 +1,7 @@
 import type {
-  BinaryCalibrationV2Artifact,
-  BinaryCalibrationV2CompletionEligibilityReason,
-  BinaryCalibrationV2PrivateProviderObservation,
+  BinaryCalibrationArtifact,
+  BinaryCalibrationCompletionEligibilityReason,
+  BinaryCalibrationPrivateProviderObservation,
   CapabilityProbe,
   EvaluatorItemState,
   ExecutionBinding,
@@ -186,17 +186,17 @@ export interface CompleteBinaryCalibrationAttemptInput {
   /** The shared item result (ADR-0014 section 6). */
   result: EvaluatorItemState;
   attemptState: "not_started" | "started" | "terminal";
-  providerObservation: BinaryCalibrationV2PrivateProviderObservation;
+  providerObservation: BinaryCalibrationPrivateProviderObservation;
 }
 
 export interface BinaryCalibrationMintResult {
   run: BinaryCalibrationRunProjection;
-  artifact: BinaryCalibrationV2Artifact;
+  artifact: BinaryCalibrationArtifact;
   artifactCopy: BinaryCalibrationArtifactCopy;
   completion: {
     state: "protected" | "exposed";
     eligibility: "eligible" | "ineligible";
-    reasons: BinaryCalibrationV2CompletionEligibilityReason[];
+    reasons: BinaryCalibrationCompletionEligibilityReason[];
     snapshotDigest: string;
     eventId: string;
     recordedAt: string;

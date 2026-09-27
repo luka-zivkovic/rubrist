@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { describeExecutionBinding, type BinaryCalibrationV2Artifact, type BinaryCalibrationV2WilsonRate } from "@rubrist/shared";
+import { describeExecutionBinding, type BinaryCalibrationArtifact, type BinaryCalibrationWilsonRate } from "@rubrist/shared";
 import { Activity, Download, Play, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -256,7 +256,7 @@ export function RunEvidence({
   );
 }
 
-export function ArtifactEvidence({ artifact }: { artifact: BinaryCalibrationV2Artifact }) {
+export function ArtifactEvidence({ artifact }: { artifact: BinaryCalibrationArtifact }) {
   return (
     <div className="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
       <div className="space-y-3">
@@ -304,8 +304,8 @@ function MetricGrid({
   artifact,
   trial
 }: {
-  artifact: BinaryCalibrationV2Artifact;
-  trial: BinaryCalibrationV2Artifact["trials"][number];
+  artifact: BinaryCalibrationArtifact;
+  trial: BinaryCalibrationArtifact["trials"][number];
 }) {
   const metrics = [
     ["accuracy", rateText(trial.metrics.accuracy)],
@@ -330,12 +330,12 @@ function MetricGrid({
   );
 }
 
-function rateText(rate: BinaryCalibrationV2WilsonRate): string {
+function rateText(rate: BinaryCalibrationWilsonRate): string {
   if (rate.state === "undefined") return `undefined · ${rate.undefinedReason}`;
   return `${rate.numerator}/${rate.denominator} · Wilson 95% bits [${rate.interval.lowerBinary64}, ${rate.interval.upperBinary64}]`;
 }
 
-function exactRateText(rate: BinaryCalibrationV2Artifact["trials"][number]["metrics"]["positiveClassF1"]): string {
+function exactRateText(rate: BinaryCalibrationArtifact["trials"][number]["metrics"]["positiveClassF1"]): string {
   return rate.state === "defined"
     ? `${rate.numerator}/${rate.denominator} · exact fraction`
     : `undefined · ${rate.undefinedReason} · ${rate.numerator}/${rate.denominator}`;

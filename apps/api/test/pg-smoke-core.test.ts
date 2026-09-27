@@ -8,7 +8,7 @@ import { PgRepository } from "../src/repository.pg.js";
 import { dispatchEvalRunOnce } from "../src/workers/gate.js";
 
 import { contentDigest } from "../src/lib/canonical-json.js";
-import { parseCanonicalReceiptV2Bytes } from "../src/lib/assessment-receipt-v2.js";
+import { parseCanonicalReceiptBytes } from "../src/lib/assessment-receipt.js";
 
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { runPgSmoke, seedSkill } from "./pg-smoke-support.js";
@@ -156,7 +156,7 @@ runPgSmoke("PgRepository smoke", () => {
       expect(detail.items.every((item) => item.contentDigest === digest)).toBe(true);
       expect(detail.items.every((item) => item.providerMetadata?.model === "mock-observed-v1")).toBe(true);
       const artifact = await repo.getOrFreezeAssessmentReceipt("proj_test", run.id);
-      const receipt = parseCanonicalReceiptV2Bytes(artifact!.canonicalBytes, { evalRunId: run.id, skillVersionId: "skillv_test" });
+      const receipt = parseCanonicalReceiptBytes(artifact!.canonicalBytes, { evalRunId: run.id, skillVersionId: "skillv_test" });
       expect(receipt.status).toBe("complete");
       expect(receipt.items.map((item) => item.clientItemId)).toEqual(["dailies-a", "dailies-b"]);
       expect(receipt.items.every((item) => item.caseId === imported.caseId)).toBe(true);

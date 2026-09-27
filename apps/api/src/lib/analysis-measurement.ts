@@ -9,7 +9,7 @@ import {
   type AnalysisGovernedDisagreementMeasurement,
   type AnalysisTaxonomyChurn,
   type AnalysisWorkflowMeasurementReport,
-  type BinaryCalibrationV2Artifact
+  type BinaryCalibrationArtifact
 } from "@rubrist/shared";
 import { canonicalGovernedJsonV1 } from "./governed-content-digest.js";
 
@@ -125,7 +125,7 @@ export function exactDurationMilliseconds(start: string, end: string): string {
 }
 
 export function analysisCalibrationTrialMeasurements(
-  artifact: BinaryCalibrationV2Artifact
+  artifact: BinaryCalibrationArtifact
 ): AnalysisCalibrationTrialMeasurement[] {
   return artifact.trials.map((trial) => ({
     trialIndex: trial.trialIndex,

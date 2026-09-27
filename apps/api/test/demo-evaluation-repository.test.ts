@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { demoProject, demoSkill } from "@rubrist/db";
-import { AssessmentReceiptV2Schema } from "@rubrist/shared";
+import { AssessmentReceiptSchema } from "@rubrist/shared";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { contentDigest } from "../src/lib/canonical-json.js";
@@ -500,7 +500,7 @@ describe("Demo evaluation and assessment-receipt repository slice", () => {
       (artifact) => artifact.evalRunId === run.id
     );
     expect(completedArtifact).toMatchObject({ sourceKind: "terminal_mint", artifactRevision: 1 });
-    expect(AssessmentReceiptV2Schema.parse(JSON.parse(completedArtifact!.canonicalBytes.toString("utf8"))))
+    expect(AssessmentReceiptSchema.parse(JSON.parse(completedArtifact!.canonicalBytes.toString("utf8"))))
       .toMatchObject({
         status: "complete",
         run: { status: "completed", passItems: 1, failedItems: 0 },
@@ -529,7 +529,7 @@ describe("Demo evaluation and assessment-receipt repository slice", () => {
       (artifact) => artifact.evalRunId === failedRun.id
     );
     expect(failedArtifact).toMatchObject({ sourceKind: "terminal_mint", artifactRevision: 1 });
-    expect(AssessmentReceiptV2Schema.parse(JSON.parse(failedArtifact!.canonicalBytes.toString("utf8"))))
+    expect(AssessmentReceiptSchema.parse(JSON.parse(failedArtifact!.canonicalBytes.toString("utf8"))))
       .toMatchObject({
         status: "incomplete",
         run: { status: "failed", passItems: 0, failedItems: 1 },

@@ -41,32 +41,32 @@
       "reason": "pnpm shared-contracts -- --write owns this sorted @rubrist/shared public export fixture; CI checks it and never updates it.",
       "revisit": "Never hand-split; regenerate with the shared-contracts tool after an authorized export change."
     },
-    "contracts/assessment-receipt-v2.schema.json": {
+    "contracts/assessment-receipt-v1.schema.json": {
       "classification": "structural_exception",
       "reason": "This is an exact-byte, digest-pinned interoperability contract file.",
       "revisit": "Change only through the versioned contract process; never split for source-file size."
     },
-    "contracts/fixtures/assessment-receipt-v2.conformance.json": {
+    "contracts/fixtures/assessment-receipt-v1.conformance.json": {
       "classification": "structural_exception",
       "reason": "This is an exact-byte, digest-pinned interoperability corpus.",
       "revisit": "Change only through the versioned contract process; never split for source-file size."
     },
-    "contracts/binary-calibration-v2.schema.json": {
+    "contracts/binary-calibration-v1.schema.json": {
       "classification": "structural_exception",
       "reason": "This is an exact-byte, digest-pinned interoperability contract file.",
       "revisit": "Change only through the versioned contract process; never split for source-file size."
     },
-    "contracts/fixtures/binary-calibration-v2.conformance.json": {
+    "contracts/fixtures/binary-calibration-v1.conformance.json": {
       "classification": "structural_exception",
       "reason": "This is an exact-byte, digest-pinned interoperability corpus.",
       "revisit": "Change only through the versioned contract process; never split for source-file size."
     },
-    "apps/api/src/lib/binary-calibration-v2.ts": {
+    "apps/api/src/lib/binary-calibration.ts": {
       "classification": "structural_exception",
       "reason": "One exact canonical artifact pipeline keeps constants and binary64 primitives, private-ledger verification, artifact construction/parsing/verification, and ordered metric, lineage, and bound checks reviewable in execution order.",
       "revisit": "Revisit if a second contract version or independent artifact family enters the file; do not split canonical stages unless exact byte, operation-order, behavior, and root-binding invariants remain reviewable."
     },
-    "contracts/skill-format-v2.schema.json": {
+    "contracts/skill-format-v1.schema.json": {
       "classification": "structural_exception",
       "reason": "This is an exact-byte, digest-pinned interoperability contract file.",
       "revisit": "Change only through the versioned contract process; never split for source-file size."

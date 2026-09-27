@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AssessmentReceiptV2Schema, type AssessmentReceiptV2, type VerdictLabel } from "@rubrist/shared";
+import { AssessmentReceiptSchema, type AssessmentReceipt, type VerdictLabel } from "@rubrist/shared";
 import { createApp } from "../src/app.js";
 import { canonicalJson, contentDigest } from "../src/lib/canonical-json.js";
-import { evidenceDigestForReceiptV2, parseCanonicalReceiptV2Bytes, receiptArtifactDigest } from "../src/lib/assessment-receipt-v2.js";
-import { skillDigestV2FromInput } from "../src/lib/evaluator-identity.js";
+import { evidenceDigestForReceipt, parseCanonicalReceiptBytes, receiptArtifactDigest } from "../src/lib/assessment-receipt.js";
+import { skillDigestFromInput } from "../src/lib/evaluator-identity.js";
 import {
   AssessmentReceiptIntegrityError,
   AssessmentReceiptUnavailableError,
@@ -55,28 +55,28 @@ async function mintKey(app: ReturnType<typeof createApp>): Promise<string> {
 }
 
 /** The receipt changed and signed again, as a consumer or a correction would. */
-function resigned(receipt: AssessmentReceiptV2, change: (draft: AssessmentReceiptV2) => void): AssessmentReceiptV2 {
+function resigned(receipt: AssessmentReceipt, change: (draft: AssessmentReceipt) => void): AssessmentReceipt {
   const draft = structuredClone(receipt);
   change(draft);
   const { evidenceDigest: _old, ...unsigned } = draft;
-  return AssessmentReceiptV2Schema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceiptV2(unsigned) });
+  return AssessmentReceiptSchema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceipt(unsigned) });
 }
 
 /** Its single pass outcome restated as a fail, with consistent counters. */
-function failedInstead(draft: AssessmentReceiptV2): void {
+function failedInstead(draft: AssessmentReceipt): void {
   draft.items[0]!.result = { state: "outcome", outcome: "fail" };
   draft.run.passItems = 0;
   draft.run.failItems = 1;
 }
 
-function correctedReceipt(root: AssessmentReceiptV2): AssessmentReceiptV2 {
+function correctedReceipt(root: AssessmentReceipt): AssessmentReceipt {
   return resigned(root, (draft) => {
     draft.receiptId = `${root.receiptId}_correction_2`;
     failedInstead(draft);
   });
 }
 
-const parsedArtifact = (bytes: Buffer) => AssessmentReceiptV2Schema.parse(JSON.parse(bytes.toString("utf8")));
+const parsedArtifact = (bytes: Buffer) => AssessmentReceiptSchema.parse(JSON.parse(bytes.toString("utf8")));
 
 describe("immutable assessment receipt artifacts", () => {
   it("mints a cached terminal run once and returns defensive exact-byte copies", async () => {
@@ -128,7 +128,7 @@ describe("immutable assessment receipt artifacts", () => {
     const receipt = parsedArtifact(artifact!.canonicalBytes);
     expect(receipt.status).toBe("incomplete");
     expect(receipt.items[0]).toMatchObject({ result: { state: "failure", failureKind: "provider_timeout" }, verdictId: null });
-    expect(artifact).toMatchObject({ id: `rart_${created.id}_v2_r1`, contractVersion: 2 });
+    expect(artifact).toMatchObject({ id: `rart_${created.id}_v1_r1`, contractVersion: 1 });
   });
 
   it("keeps an abstention complete, as an outcome, and rejects a forged incomplete claim", async () => {
@@ -141,7 +141,7 @@ describe("immutable assessment receipt artifacts", () => {
     expect(receipt.items[0]!.result).toEqual({ state: "outcome", outcome: "abstain" });
 
     const forged = resigned(receipt, (draft) => { draft.status = "incomplete"; });
-    expect(() => parseCanonicalReceiptV2Bytes(Buffer.from(canonicalJson(forged), "utf8")))
+    expect(() => parseCanonicalReceiptBytes(Buffer.from(canonicalJson(forged), "utf8")))
       .toThrow(/claims incomplete/);
   });
 
@@ -188,8 +188,8 @@ describe("immutable assessment receipt artifacts", () => {
       createdByUserId: "user_reviewer"
     });
     expect(correction).toMatchObject({
-      id: `rart_${run.id}_v2_r2`,
-      contractVersion: 2,
+      id: `rart_${run.id}_v1_r2`,
+      contractVersion: 1,
       artifactRevision: 2,
       predecessorArtifactId: root!.id,
       sourceKind: "correction",
@@ -221,7 +221,7 @@ describe("immutable assessment receipt artifacts", () => {
     const otherEvaluator = resigned(rootReceipt, (draft) => {
       draft.receiptId = `${rootReceipt.receiptId}_other_evaluator`;
       draft.evaluator.executionBinding.modelId = "another-model";
-      draft.skillDigest = skillDigestV2FromInput(draft.evaluator);
+      draft.skillDigest = skillDigestFromInput(draft.evaluator);
     });
     await expect(repo.createAssessmentReceiptCorrection({
       projectId: PROJECT,

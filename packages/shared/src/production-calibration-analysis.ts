@@ -50,7 +50,7 @@ import type {
 // Pure analysis over arrays of production decision records. Boolean and choice
 // math is ported from jevkit's decision ledger. No I/O and no clock: every
 // function is a deterministic map from records (and explicit options) to the
-// `rubrist/production-calibration/v2` artifact or one of its parts. Every rate
+// `rubrist/production-calibration/v1` artifact or one of its parts. Every rate
 // carries its numerator and denominator and a 95% Wilson interval; a rate
 // with a zero denominator is an explicit "undefined" object, never NaN.
 
@@ -141,7 +141,7 @@ export interface ProductionCalibrationWilsonInterval {
 
 /**
  * Wilson score interval for a binomial proportion. The default z and binary64
- * operation order are pinned by contracts/binary-calibration-v2.md; do not
+ * operation order are pinned by contracts/binary-calibration-v1.md; do not
  * algebraically simplify them. Explicit endpoint bounds avoid rounding away
  * from 0 or 1 and falsely flagging perfectly correct predictions as drift.
  *
@@ -1073,7 +1073,7 @@ export function buildProductionCalibrationArtifact(
 
   return {
     contract: PRODUCTION_CALIBRATION_CONTRACT,
-    schemaVersion: 2,
+    schemaVersion: 1,
     metricDefinitionVersion: PRODUCTION_CALIBRATION_METRIC_DEFINITION_VERSION,
     intervalDefinitionVersion: PRODUCTION_CALIBRATION_INTERVAL_DEFINITION_VERSION,
     generatedAt,
