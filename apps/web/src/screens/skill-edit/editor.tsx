@@ -18,7 +18,9 @@ import type {
   VerdictKind
 } from "@rubrist/shared";
 import { STARTER_SKILLS, type StarterSkill } from "@/lib/starter-skills";
+import type { TypedQuestionDraft } from "../../lib/typed-question-draft.js";
 import { BindingSettings, type useBindingPicker } from "./binding-settings.js";
+import { TypedQuestionCard } from "./typed-question.js";
 import { cn } from "@/lib/utils";
 import { verdictKindDescription } from "@/lib/verdict-kind";
 
@@ -32,7 +34,7 @@ export function SkillVersionEditor({
   navigate, firstRun, v, skill, gateKnownUnarmed, loading, submitting, phase,
   dashboardReady, goldenSetSize, evidenceCount, bench, resetToCurrent,
   appliedStarter, setAppliedStarter, applyStarter, rubricMode, setRubricMode,
-  rubric, setRubric, prompt, setPrompt, showPromptEditor, setShowPromptEditor,
+  rubric, setRubric, typed, typedDraft, setTypedDraft, prompt, setPrompt, showPromptEditor, setShowPromptEditor,
   usesImplicitRubric, unknownPromptVariables, availableProviderOptions,
   provider, setProvider, canCheckModel, selectedProviderOption, baseUrl, setBaseUrl, baseUrlValid,
   modelsLoading, models, modelId, setModelId, modelVersion, setModelVersion,
@@ -60,6 +62,10 @@ export function SkillVersionEditor({
   setRubricMode: Dispatch<SetStateAction<"source" | "preview">>;
   rubric: string;
   setRubric: Dispatch<SetStateAction<string>>;
+  /** Whether the evaluator runs on TypeSafe, so its definition is a typed question. */
+  typed: boolean;
+  typedDraft: TypedQuestionDraft;
+  setTypedDraft: Dispatch<SetStateAction<TypedQuestionDraft>>;
   prompt: string;
   setPrompt: Dispatch<SetStateAction<string>>;
   showPromptEditor: boolean;
@@ -150,141 +156,157 @@ export function SkillVersionEditor({
         />
       ) : null}
 
-      <Card className="mb-5">
-        <CardContent className="flex flex-wrap items-center gap-2 py-3">
-          <Eyebrow>
-            <span className="inline-flex items-center gap-1">
-              <Sparkles className="size-3" /> Start from a template
+      {!typed && v.typedQuestion !== null ? (
+        <MarginNote tone="signal" who={`v${v.version} · typed question`} className="mb-5">
+          v{v.version} is a typed question answered by TypeSafe.{" "}
+          {availableProviderOptions.some((option) => option.provider === "typesafe")
+            ? "With another provider, this draft is a prompted evaluator: write its review guide and judge instructions, or choose TypeSafe to keep the question."
+            : <>TypeSafe has no key, so this draft is a prompted evaluator: write its review guide and judge instructions, or add a TypeSafe key in{" "}
+              <button type="button" className="underline cursor-pointer" onClick={() => navigate("/settings")}>Settings</button> to keep the question.</>}
+        </MarginNote>
+      ) : null}
+
+      {typed ? (
+        <TypedQuestionCard draft={typedDraft} setDraft={setTypedDraft} />
+      ) : (
+        <>
+        <Card className="mb-5">
+          <CardContent className="flex flex-wrap items-center gap-2 py-3">
+            <Eyebrow>
+              <span className="inline-flex items-center gap-1">
+                <Sparkles className="size-3" /> Start from a template
+              </span>
+            </Eyebrow>
+            {STARTER_SKILLS.map((starter) => (
+              <button
+                key={starter.id}
+                type="button"
+                onClick={() => applyStarter(starter)}
+                aria-pressed={appliedStarter?.id === starter.id}
+                title={`${starter.tagline} — ${starter.fit}`}
+                className={cn(
+                  "inline-flex h-7 items-center rounded-sm border px-2.5 text-[11.5px] cursor-pointer",
+                  appliedStarter?.id === starter.id
+                    ? "border-ink bg-ink text-paper"
+                    : "border-rule-soft bg-transparent text-ink-2 hover:bg-paper-3"
+                )}
+              >
+                {starter.name}
+              </button>
+            ))}
+            <div className="flex-1" />
+            <span className="font-mono text-[10.5px] text-ink-3">
+              templates overwrite the form · model binding kept
             </span>
-          </Eyebrow>
-          {STARTER_SKILLS.map((starter) => (
-            <button
-              key={starter.id}
-              type="button"
-              onClick={() => applyStarter(starter)}
-              aria-pressed={appliedStarter?.id === starter.id}
-              title={`${starter.tagline} — ${starter.fit}`}
-              className={cn(
-                "inline-flex h-7 items-center rounded-sm border px-2.5 text-[11.5px] cursor-pointer",
-                appliedStarter?.id === starter.id
-                  ? "border-ink bg-ink text-paper"
-                  : "border-rule-soft bg-transparent text-ink-2 hover:bg-paper-3"
-              )}
-            >
-              {starter.name}
-            </button>
-          ))}
-          <div className="flex-1" />
-          <span className="font-mono text-[10.5px] text-ink-3">
-            templates overwrite the form · model binding kept
-          </span>
-        </CardContent>
-      </Card>
-
-      {appliedStarter ? (
-        <MarginNote tone="neutral" who={`Template · ${appliedStarter.name}`} className="mb-5">
-          Use this template as a starting point. Edit the review guide and prompt for your task,
-          then save. Rubrist checks the new version against the active Golden references.
-        </MarginNote>
-      ) : null}
-
-      <Card className="mb-5">
-        <CardHeader>
-          <div>
-            <CardTitle>Review guide</CardTitle>
-            <CardDescription>
-              Defines what a good result looks like and the evidence the evaluator should use.
-              It is stored as Markdown; Preview renders it without changing the source.
-            </CardDescription>
-          </div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-1" aria-label="Review guide view">
-            <Button
-              type="button"
-              size="xs"
-              variant={rubricMode === "source" ? "default" : "ghost"}
-              aria-pressed={rubricMode === "source"}
-              onClick={() => setRubricMode("source")}
-            >
-              Edit source
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant={rubricMode === "preview" ? "default" : "ghost"}
-              aria-pressed={rubricMode === "preview"}
-              onClick={() => setRubricMode("preview")}
-            >
-              Preview
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {rubricMode === "source" ? (
-            <textarea
-              value={rubric}
-              aria-label="Review guide Markdown source"
-              maxLength={EVALUATOR_DEFINITION_TEXT_MAX}
-              onChange={(e) => {
-                setRubric(e.target.value);
-                if (appliedStarter) setAppliedStarter(null);
-              }}
-              spellCheck={false}
-              className="min-h-[280px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-3 py-2.5 font-mono text-[12px] leading-[1.6] text-ink focus-visible:border-ink"
-            />
-          ) : (
-            <MarkdownPreview markdown={rubric} className="min-h-[280px]" emptyText="Nothing to preview yet." />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mb-5">
-        <CardHeader>
-          <div>
-            <CardTitle>Judge prompt template · advanced</CardTitle>
-            <CardDescription>
-              Builds the exact instructions sent to the judge. Place the review guide with
-              {" {{rubric_markdown}}"}; trace data and the result schema are injected separately
-              at runtime. This stays source text, not Markdown.
-            </CardDescription>
-          </div>
-          <div className="flex-1" />
-          <Button variant="ghost" onClick={() => setShowPromptEditor((v) => !v)}>
-            {showPromptEditor ? "Hide" : "Edit"}
-          </Button>
-        </CardHeader>
-        {showPromptEditor ? (
-          <CardContent>
-            <textarea
-              value={prompt}
-              maxLength={EVALUATOR_DEFINITION_TEXT_MAX}
-              onChange={(e) => {
-                setPrompt(e.target.value);
-                if (appliedStarter) setAppliedStarter(null);
-              }}
-              spellCheck={false}
-              className="min-h-[220px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-3 py-2.5 font-mono text-[12px] leading-[1.6] text-ink focus-visible:border-ink"
-            />
           </CardContent>
+        </Card>
+
+        {appliedStarter ? (
+          <MarginNote tone="neutral" who={`Template · ${appliedStarter.name}`} className="mb-5">
+            Use this template as a starting point. Edit the review guide and prompt for your task,
+            then save. Rubrist checks the new version against the active Golden references.
+          </MarginNote>
         ) : null}
-      </Card>
 
-      {prompt.trim() && usesImplicitRubric ? (
-        <MarginNote tone="signal" who="Judge prompt template" className="mb-5">
-          This prompt does not include {"{{rubric_markdown}}"}, so Rubrist adds the review guide
-          before the prompt. Add {"{{rubric_markdown}}"} where you want the guide to appear in the
-          compiled instructions.
-        </MarginNote>
-      ) : null}
+        <Card className="mb-5">
+          <CardHeader>
+            <div>
+              <CardTitle>Review guide</CardTitle>
+              <CardDescription>
+                Defines what a good result looks like and the evidence the evaluator should use.
+                It is stored as Markdown; Preview renders it without changing the source.
+              </CardDescription>
+            </div>
+            <div className="flex-1" />
+            <div className="flex items-center gap-1" aria-label="Review guide view">
+              <Button
+                type="button"
+                size="xs"
+                variant={rubricMode === "source" ? "default" : "ghost"}
+                aria-pressed={rubricMode === "source"}
+                onClick={() => setRubricMode("source")}
+              >
+                Edit source
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant={rubricMode === "preview" ? "default" : "ghost"}
+                aria-pressed={rubricMode === "preview"}
+                onClick={() => setRubricMode("preview")}
+              >
+                Preview
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {rubricMode === "source" ? (
+              <textarea
+                value={rubric}
+                aria-label="Review guide Markdown source"
+                maxLength={EVALUATOR_DEFINITION_TEXT_MAX}
+                onChange={(e) => {
+                  setRubric(e.target.value);
+                  if (appliedStarter) setAppliedStarter(null);
+                }}
+                spellCheck={false}
+                className="min-h-[280px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-3 py-2.5 font-mono text-[12px] leading-[1.6] text-ink focus-visible:border-ink"
+              />
+            ) : (
+              <MarkdownPreview markdown={rubric} className="min-h-[280px]" emptyText="Nothing to preview yet." />
+            )}
+          </CardContent>
+        </Card>
 
-      {unknownPromptVariables.length > 0 ? (
-        <MarginNote tone="signal" who="Judge prompt template" className="mb-5">
-          Unsupported template {unknownPromptVariables.length === 1 ? "variable" : "variables"}{" "}
-          <span className="font-mono">{unknownPromptVariables.join(", ")}</span> will be sent literally.
-          Only <span className="font-mono">{"{{rubric_markdown}}"}</span> is supported; trace data is
-          injected separately.
-        </MarginNote>
-      ) : null}
+        <Card className="mb-5">
+          <CardHeader>
+            <div>
+              <CardTitle>Judge prompt template · advanced</CardTitle>
+              <CardDescription>
+                Builds the exact instructions sent to the judge. Place the review guide with
+                {" {{rubric_markdown}}"}; trace data and the result schema are injected separately
+                at runtime. This stays source text, not Markdown.
+              </CardDescription>
+            </div>
+            <div className="flex-1" />
+            <Button variant="ghost" onClick={() => setShowPromptEditor((v) => !v)}>
+              {showPromptEditor ? "Hide" : "Edit"}
+            </Button>
+          </CardHeader>
+          {showPromptEditor ? (
+            <CardContent>
+              <textarea
+                value={prompt}
+                maxLength={EVALUATOR_DEFINITION_TEXT_MAX}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  if (appliedStarter) setAppliedStarter(null);
+                }}
+                spellCheck={false}
+                className="min-h-[220px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-3 py-2.5 font-mono text-[12px] leading-[1.6] text-ink focus-visible:border-ink"
+              />
+            </CardContent>
+          ) : null}
+        </Card>
+
+        {prompt.trim() && usesImplicitRubric ? (
+          <MarginNote tone="signal" who="Judge prompt template" className="mb-5">
+            This prompt does not include {"{{rubric_markdown}}"}, so Rubrist adds the review guide
+            before the prompt. Add {"{{rubric_markdown}}"} where you want the guide to appear in the
+            compiled instructions.
+          </MarginNote>
+        ) : null}
+
+        {unknownPromptVariables.length > 0 ? (
+          <MarginNote tone="signal" who="Judge prompt template" className="mb-5">
+            Unsupported template {unknownPromptVariables.length === 1 ? "variable" : "variables"}{" "}
+            <span className="font-mono">{unknownPromptVariables.join(", ")}</span> will be sent literally.
+            Only <span className="font-mono">{"{{rubric_markdown}}"}</span> is supported; trace data is
+            injected separately.
+          </MarginNote>
+        ) : null}
+        </>
+      )}
 
       <Card className="mb-5">
         <CardHeader>
@@ -298,12 +320,13 @@ export function SkillVersionEditor({
             </CardDescription>
           </div>
           <div className="flex-1" />
-          <Chip>verdict · {verdictKind}</Chip>
+          <Chip>verdict · {typed ? "binary" : verdictKind}</Chip>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Provider">
             <select
-              value={provider}
+              aria-label="Provider"
+              value={selectedProviderOption ? provider : ""}
               disabled={availableProviderOptions.length === 0}
               onChange={(event) => {
                 const next = event.target.value as JudgeProviderId;
@@ -315,7 +338,9 @@ export function SkillVersionEditor({
               }}
               className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 text-[12.5px] text-ink focus-visible:border-ink"
             >
-              {availableProviderOptions.length === 0 ? <option value="mock">Configure a provider in Settings</option> : null}
+              {availableProviderOptions.length === 0 ? <option value="">Configure a provider in Settings</option> : null}
+              {/* A version whose provider has no key starts on none, so every listed provider is a real choice. */}
+              {availableProviderOptions.length > 0 && !selectedProviderOption ? <option value="" disabled>Choose a provider</option> : null}
               {availableProviderOptions.map((option) => (
                 <option key={option.provider} value={option.provider}>{option.label}</option>
               ))}
@@ -333,10 +358,10 @@ export function SkillVersionEditor({
 
           {provider === "custom" ? (
             <Field label="OpenAI-compatible base URL">
-              <TextInput value={baseUrl} onChange={(value) => { setBaseUrl(value); picker.modelPicked(); }} placeholder="https://api.example.com/v1" mono />
+              <TextInput label="OpenAI-compatible base URL" value={baseUrl} onChange={(value) => { setBaseUrl(value); picker.modelPicked(); }} placeholder="https://api.example.com/v1" mono />
               {!baseUrlValid ? <span className="text-[11px] text-signal">Enter a full http(s) base URL.</span> : null}
             </Field>
-          ) : (
+          ) : provider === "typesafe" ? null : (
             <Field label="Model">
               <select
                 value={modelId}
@@ -375,18 +400,22 @@ export function SkillVersionEditor({
             </Field>
           )}
 
-          {provider === "custom" ? (
-            <Field label="Custom model ID">
+          {provider === "custom" || provider === "typesafe" ? (
+            <Field label={provider === "typesafe" ? "TypeSafe model ID" : "Custom model ID"}>
               <TextInput
+                label={provider === "typesafe" ? "TypeSafe model ID" : "Custom model ID"}
                 value={modelId}
                 onChange={(value) => {
                   setModelId(value);
                   setModelVersion(value.trim());
                   picker.modelPicked();
                 }}
-                placeholder="provider/model-name"
+                placeholder={provider === "typesafe" ? "jev-1.13.0" : "provider/model-name"}
                 mono
               />
+              {provider === "typesafe" ? (
+                <span className="text-[11px] text-ink-3">Pin a model version, such as jev-1.13.0; TypeSafe lists no catalog.</span>
+              ) : null}
             </Field>
           ) : null}
 
@@ -419,19 +448,30 @@ export function SkillVersionEditor({
           ) : null}
 
           <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2 text-[11.5px] leading-5 text-ink-2 sm:col-span-2">
-            <span className="font-medium text-ink">Result format.</span> Rubrist generates the exact
-            JSON schema from the <span className="font-mono">{verdictKind}</span> result type and
-            validates every judge response against it. {verdictKindDescription(verdictKind, {
-              scalarRange,
-              categoricalChoiceScores: choiceScores
-            })} Changing the requested model creates a new version; a later
-            requested-versus-observed mismatch is recorded evidence, not an automatic regression
-            result.
+            {typed ? (
+              <>
+                <span className="font-medium text-ink">Result format.</span> TypeSafe returns the
+                probability that the answer is true, under the fixed <span className="font-mono">typed-question/v1</span>{" "}
+                contract. The verdict is binary: pass when the probability reaches the threshold,
+                fail otherwise. Changing the requested model creates a new version.
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-ink">Result format.</span> Rubrist generates the exact
+                JSON schema from the <span className="font-mono">{verdictKind}</span> result type and
+                validates every judge response against it. {verdictKindDescription(verdictKind, {
+                  scalarRange,
+                  categoricalChoiceScores: choiceScores
+                })} Changing the requested model creates a new version; a later
+                requested-versus-observed mismatch is recorded evidence, not an automatic regression
+                result.
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {!hasConfiguredRealProvider ? (
+      {!typed && !hasConfiguredRealProvider ? (
         <MarginNote tone="neutral" who="Requested model" className="mb-5">
           {availableProviderOptions.some((option) => option.provider === "mock")
             ? "Only the local mock is available."
@@ -490,10 +530,19 @@ export function SkillVersionEditor({
           base={v}
           rubricMarkdown={rubric}
           prompt={prompt}
+          typedQuestion={changeInput.typedQuestion ?? null}
+          decisionThreshold={changeInput.decisionThreshold ?? null}
           executionBinding={changeInput.executionBinding}
-          verdictKind={verdictKind}
+          verdictKind={changeInput.verdictKind}
           timeScope={timeScope}
         />
+      ) : null}
+
+      {!typed && (rubric.trim() === "" || prompt.trim() === "") ? (
+        <ul className="mb-4 flex list-disc flex-col gap-0.5 pl-4 text-[11.5px] text-ink-3">
+          {rubric.trim() === "" ? <li>Write the review guide.</li> : null}
+          {prompt.trim() === "" ? <li>Write the judge instructions, under Judge prompt template · advanced.</li> : null}
+        </ul>
       ) : null}
 
       {submitError ? <div className="mb-4 text-[12px] text-signal">{submitError}</div> : null}
@@ -527,15 +576,19 @@ function TextInput({
   value,
   onChange,
   placeholder,
-  mono
+  mono,
+  label
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   mono?: boolean;
+  /** The field's accessible name. */
+  label: string;
 }) {
   return (
     <input
+      aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}

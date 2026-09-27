@@ -74,6 +74,7 @@ vi.mock("@/components/markdown-preview", () => ({
   MarkdownPreview: ({ markdown }: Props) => createElement("div", null, markdown as string)
 }));
 vi.mock("@/components/binding-resolution-status", () => ({ BindingResolutionStatus: () => createElement("section") }));
+vi.mock("@/components/typed-question-view", () => ({ TypedQuestionView: () => createElement("section") }));
 vi.mock("@/components/rubrist", async () => {
   const loadError = await import("../src/components/rubrist/load-error.js");
   const gate = await import("../src/components/rubrist/gate.js");
