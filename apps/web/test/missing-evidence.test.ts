@@ -178,7 +178,7 @@ describe("missing evidence never reads as a result", () => {
   it("shows unknown top-bar counts as unknown, never zero", async () => {
     const layout = await readWebSource("components/layout/root-layout.tsx");
 
-    expect(layout).toContain("dashboard?.exceptions.length ?? null");
+    expect(layout).toContain("dashboard?.exceptionsTotal ?? null");
     expect(layout).toContain("dashboard?.project.importedTraceCount ?? null");
     expect(layout).toContain('importedTotal === null ? "—"');
     expect(layout).toContain('exceptionsCount ?? "—"');

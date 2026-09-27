@@ -615,6 +615,10 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
   }
 
   async listExceptionCases(projectId: string, criterionVersionId?: string | undefined): Promise<ExceptionCase[]> {
+    return (await this.getExceptionSummary(projectId, criterionVersionId)).exceptions;
+  }
+
+  async getExceptionSummary(projectId: string, criterionVersionId?: string | undefined): Promise<{ exceptions: ExceptionCase[]; total: number }> {
     // Reduced entirely in SQL, mirroring pinExceptionJudgeRunRows
     // (lib/exception-rows.ts — the unit-tested spec): pinned = the FIRST open
     // non-pass run per case (open = created after the case's latest
@@ -672,7 +676,8 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
          order by jr.case_id, version.criterion_version_id, jr.created_at asc, jr.id asc
        ),
        capped as (
-         select * from pinned order by created_at desc, judge_run_id desc limit $3
+         select *, count(*) over ()::int as exception_total
+         from pinned order by created_at desc, judge_run_id desc limit $3
        ),
        latest as (
          select distinct on (jr.case_id, version.criterion_version_id)
@@ -694,7 +699,7 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
            )
          order by jr.case_id, version.criterion_version_id, jr.created_at desc, jr.id desc
        )
-       select p.judge_run_id, p.case_id, p.skill_version_id, p.criterion_version_id,
+       select p.exception_total, p.judge_run_id, p.case_id, p.skill_version_id, p.criterion_version_id,
               p.verdict, p.reasoning, pjr.raw_response, p.created_at,
               l.latest_judge_run_id, l.latest_verdict, l.latest_reasoning, l.latest_created_at,
               c.normalized_payload,
@@ -709,6 +714,9 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
        order by p.created_at desc, p.judge_run_id desc`,
       [projectId, criterionVersionId ?? null, EXCEPTION_LIST_LIMIT]
     );
-    return result.rows.map(rowToExceptionCase);
+    return {
+      exceptions: result.rows.map(rowToExceptionCase),
+      total: Number(result.rows[0]?.exception_total ?? 0)
+    };
   }
 }

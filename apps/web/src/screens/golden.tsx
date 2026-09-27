@@ -17,7 +17,7 @@ export function GoldenScreen() {
   const criterionVersionId = dashboardCriterionVersionId(dashboard);
   const bench = dashboard ? isBench(dashboard.project) : false;
   const stage: JourneyStage = dashboard ? journeyStage(dashboard) : "production";
-  const waitingExceptions = dashboard?.exceptions.length ?? 0;
+  const waitingExceptions = dashboard?.exceptionsTotal ?? 0;
   const [entries, setEntries] = useState<GoldenSetEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

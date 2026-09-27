@@ -239,7 +239,7 @@ describe("PostgreSQL project repository slice", () => {
       "PgProjectRepositoryDependencies"
     ]);
     expect(analysis.allocations).toEqual([
-      "repository.pg.ts:PgRepository.constructor:new PgProjectRepository(pool, { getCurrentSkill: (projectId) => this.getCurrentSkill(projectId), getCurrentSkillForCriterion: (projectId, criterionId) => this.getCurrentSkillForCriterion(projectId, criterionId), listGoldenSet: (projectId, criterionVersionId) => this.listGoldenSet(projectId, criterionVersionId), listExceptionCases: (projectId, criterionVersionId) => this.listExceptionCases(projectId, criterionVersionId) })"
+      "repository.pg.ts:PgRepository.constructor:new PgProjectRepository(pool, { getCurrentSkill: (projectId) => this.getCurrentSkill(projectId), getCurrentSkillForCriterion: (projectId, criterionId) => this.getCurrentSkillForCriterion(projectId, criterionId), listGoldenSet: (projectId, criterionVersionId) => this.listGoldenSet(projectId, criterionVersionId), getExceptionSummary: (projectId, criterionVersionId) => this.caseEvidenceRepository.getExceptionSummary(projectId, criterionVersionId) })"
     ]);
     expect(analysis.moduleEdges).toEqual([
       'repository.pg.ts:ImportDeclaration:import { PgProjectRepository } from "./repository.pg/project-repository.js";'
@@ -270,7 +270,7 @@ describe("PostgreSQL project repository slice", () => {
       "this.integrationRepository = new PgIntegrationRepository(pool, (projectId, requested, requiredContext) => this.resolveImportSkillVersionId(projectId, requested, requiredContext), (input) => this.authorizeSkillVersionExecution(input));",
       "this.judgeCredentialRepository = new PgJudgeCredentialRepository(pool);",
       "this.judgeFeedbackRepository = new PgJudgeFeedbackRepository(pool, async (projectId) => (await this.getCurrentSkill(projectId)).currentVersion.id, (input) => this.authorizeSkillVersionExecution(input));",
-      "this.projectRepository = new PgProjectRepository(pool, { getCurrentSkill: (projectId) => this.getCurrentSkill(projectId), getCurrentSkillForCriterion: (projectId, criterionId) => this.getCurrentSkillForCriterion(projectId, criterionId), listGoldenSet: (projectId, criterionVersionId) => this.listGoldenSet(projectId, criterionVersionId), listExceptionCases: (projectId, criterionVersionId) => this.listExceptionCases(projectId, criterionVersionId) });",
+      "this.projectRepository = new PgProjectRepository(pool, { getCurrentSkill: (projectId) => this.getCurrentSkill(projectId), getCurrentSkillForCriterion: (projectId, criterionId) => this.getCurrentSkillForCriterion(projectId, criterionId), listGoldenSet: (projectId, criterionVersionId) => this.listGoldenSet(projectId, criterionVersionId), getExceptionSummary: (projectId, criterionVersionId) => this.caseEvidenceRepository.getExceptionSummary(projectId, criterionVersionId) });",
       "this.reviewQueueRepository = new PgReviewQueueRepository(pool, (projectId) => this.getCurrentSkill(projectId));",
       "this.runComparisonRepository = new PgRunComparisonRepository(pool);",
       "this.skillLifecycleRepository = new PgSkillLifecycleRepository(pool, judgeProviderFactory, { assertSingletonCriterion: (projectId) => this.assertSingletonCriterion(projectId), getDatasetRevisionDetail: (projectId, revisionId) => this.getDatasetRevisionDetail(projectId, revisionId), getJudgeProviderCredential: (projectId, provider) => this.getJudgeProviderCredential(projectId, provider) });",
@@ -294,13 +294,13 @@ describe("PostgreSQL project repository slice", () => {
     Reflect.set(repository, "getCurrentSkill", current);
     Reflect.set(repository, "getCurrentSkillForCriterion", currentForCriterion);
     Reflect.set(repository, "listGoldenSet", golden);
-    Reflect.set(repository, "listExceptionCases", exceptions);
+    Reflect.set(Reflect.get(repository, "caseEvidenceRepository"), "getExceptionSummary", exceptions);
 
     const dependencies = Reflect.get(slice, "dependencies") as PgProjectRepositoryDependencies;
     await dependencies.getCurrentSkill("project-1");
     await dependencies.getCurrentSkillForCriterion("project-1", "criterion-1");
     await dependencies.listGoldenSet("project-1", "criterionv-1");
-    await dependencies.listExceptionCases("project-1", "criterionv-1");
+    await dependencies.getExceptionSummary("project-1", "criterionv-1");
     expect(current).toHaveBeenCalledWith("project-1");
     expect(currentForCriterion).toHaveBeenCalledWith("project-1", "criterion-1");
     expect(golden).toHaveBeenCalledWith("project-1", "criterionv-1");
@@ -331,7 +331,7 @@ describe("PostgreSQL project repository slice", () => {
       getCurrentSkill: vi.fn(),
       getCurrentSkillForCriterion: vi.fn(),
       listGoldenSet: vi.fn(),
-      listExceptionCases: vi.fn()
+      getExceptionSummary: vi.fn()
     } as unknown as PgProjectRepositoryDependencies;
     const repository = new PgProjectRepository(pool, dependencies);
 
@@ -408,7 +408,7 @@ describe("PostgreSQL project repository slice", () => {
       getCurrentSkill: vi.fn(async () => skill),
       getCurrentSkillForCriterion: vi.fn(async () => skill),
       listGoldenSet: vi.fn(async () => [{ id: "golden-1" }]),
-      listExceptionCases: vi.fn(async () => [])
+      getExceptionSummary: vi.fn(async () => ({ exceptions: [], total: 57 }))
     } as unknown as PgProjectRepositoryDependencies;
     const repository = new PgProjectRepository(pool, dependencies);
 
@@ -417,6 +417,7 @@ describe("PostgreSQL project repository slice", () => {
       currentVersionResultCount: 2,
       verdictDistribution: { pass: 2, fail: 0, ambiguous: 0 },
       exceptions: [],
+      exceptionsTotal: 57,
       topCapabilityGaps: [],
       goldenSetSize: 1,
       viewerRole: "owner"
@@ -424,7 +425,7 @@ describe("PostgreSQL project repository slice", () => {
     expect(dependencies.getCurrentSkill).not.toHaveBeenCalled();
     expect(dependencies.getCurrentSkillForCriterion).toHaveBeenCalledWith("project-1", "criterion-1");
     expect(dependencies.listGoldenSet).toHaveBeenCalledWith("project-1", "criterionv-1");
-    expect(dependencies.listExceptionCases).toHaveBeenCalledWith("project-1", "criterionv-1");
+    expect(dependencies.getExceptionSummary).toHaveBeenCalledWith("project-1", "criterionv-1");
     expect(calls[1]?.sql).toContain("select distinct on (jr.case_id)");
     expect(calls[1]?.sql).toContain("c.case_type not in ('gate_candidate', 'release_evidence')");
     expect(calls[1]?.values).toEqual(["project-1", "criterionv-1"]);

@@ -140,6 +140,7 @@ export class DemoProjectRepository implements ProjectRepositoryPort {
           ? summary.verdictDistribution
           : { pass: 0, fail: 0, ambiguous: 0 },
         exceptions,
+        exceptionsTotal: exceptions.length,
         topCapabilityGaps,
         goldenSetSize
       };
@@ -161,6 +162,7 @@ export class DemoProjectRepository implements ProjectRepositoryPort {
       skill,
       currentVersionResultCount,
       exceptions,
+      exceptionsTotal: exceptions.length,
       topCapabilityGaps,
       goldenSetSize,
       project: {
