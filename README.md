@@ -610,7 +610,7 @@ over HTTP without MCP.
 - [Typed-question evaluators](docs/typed-question-evaluators.md) — when a TypeSafe yes-or-no evaluator fits, and how to author one.
 - [Guided onboarding](docs/beginner-onboarding-journey.md), [Analyze](docs/analyze-journey.md), and [trace-to-test](docs/trace-to-test-journey.md) — detailed workflows.
 - [Product charter](PRODUCT.md), [glossary](docs/glossary.md), and [architecture decisions](docs/decisions/README.md) — product scope and terminology.
-- [Roadmap](docs/roadmap.md) — open work: what's known and not done, and what each item is waiting on.
+- [Roadmap](docs/roadmap.md) — open work and what each item is waiting on (not product authority).
 
 This README describes the current implementation. The product charter and
 accepted architecture decisions define intended scope; the
