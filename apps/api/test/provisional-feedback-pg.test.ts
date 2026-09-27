@@ -85,6 +85,10 @@ runPgSmoke("provisional feedback delivery", () => {
       expect(await repo.listSignedOffFeedbackSyncJobs(100)).toEqual([]);
       await processFeedbackSyncJob(repo, job, writer);
       expect(write).toHaveBeenCalledTimes(2);
+      // A worker that read the unsigned version before sign-off may arrive
+      // late to park it after another delivery already recorded success.
+      await repo.markFeedbackSyncBlocked(job, new Error(PROVISIONAL_FEEDBACK_HOLD));
+      expect(await repo.listSignedOffFeedbackSyncJobs(100)).toEqual([]);
       expect((await pool.query("select count(*)::int as count from judge_runs where project_id='proj_test'")).rows[0].count).toBe(1);
       expect(await repo.listFeedbackSyncJobs({ projectId: "proj_test", limit: 10 })).toMatchObject([{ status: "synced", attempts: 1 }]);
       expect((await repo.getDashboardSummary("proj_test")).project.syncBackCoverage).toBe(1);
