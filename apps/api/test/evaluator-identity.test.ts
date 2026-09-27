@@ -9,10 +9,12 @@ import {
   ExecutionBindingSchema,
   ResolutionRecordSchema,
   SkillDigestInputSchema,
+  temperatureSupportWith,
   verdictProtocolsFor,
   type CapabilityProbe,
   type EvaluatorIdentity,
   type ExecutionBinding,
+  type ReasoningSettings,
   type TypedQuestion
 } from "@rubrist/shared";
 import {
@@ -455,5 +457,93 @@ describe("resolution record (ADR-0014 section 4)", () => {
     expect(recordIssues({ temperatureSupport: "parameter_rejected" })).toContain("temperatureSupport");
     const { ignoredTemperatureVersion: _version, ...unversioned } = record;
     expect(ResolutionRecordSchema.safeParse(unversioned).success).toBe(false);
+  });
+});
+
+// Probe lists the server never sends in this order still classify by outcome
+// alone, and only for the reasoning, topP, and protocol they were sent with
+// (ADR-0014 decision 12).
+describe("temperature classification over unusual probe lists", () => {
+  const ADAPTIVE: ReasoningSettings = { family: "anthropic", thinking: { type: "adaptive" }, effort: "medium" };
+  const DISABLED: ReasoningSettings = { family: "anthropic", thinking: { type: "disabled" }, effort: null };
+  const STRUCTURED = "anthropic.structured-output/v1" as const;
+  const NO_REASONING = { reasoning: null, topP: null };
+  const probe = (patch: {
+    stage?: CapabilityProbe["stage"]; purpose: CapabilityProbe["purpose"]; verdictProtocol?: CapabilityProbe["verdictProtocol"];
+    temperature?: number; topP?: number; reasoning?: ReasoningSettings;
+    outcome: CapabilityProbe["outcome"]; failureKind?: CapabilityProbe["failureKind"];
+  }): CapabilityProbe => {
+    const rejected = patch.outcome === "rejected";
+    return {
+      stage: patch.stage ?? "capability_check", purpose: patch.purpose, verdictProtocol: patch.verdictProtocol ?? STRUCTURED,
+      sent: { temperature: patch.temperature ?? null, topP: patch.topP ?? null, reasoning: patch.reasoning ?? null, outputTokenLimit: 1200 },
+      outcome: patch.outcome, rejection: rejected ? "unattributed" : null, rejectedParameter: null,
+      failureKind: patch.outcome === "accepted" ? null : patch.failureKind ?? (rejected ? "provider_rejected_request" : "provider_unavailable"),
+      providerMessage: null, usage: null, costMicroUsd: null
+    };
+  };
+  const parses = (probes: CapabilityProbe[], temperatureSupport: "adjustable" | "not_adjustable", status: "resolved" | "unresolved" = "unresolved") =>
+    ResolutionRecordSchema.safeParse({
+      status, capabilitySnapshotDigest: null, reasoningDefaultsVersion: null,
+      ignoredTemperatureVersion: "rubrist-ignored-temperature/v1", ignoredTemperatureEntry: null,
+      credentialSource: "project", temperatureSupport, reasoningSupport: null, probes, checkedAt: null
+    }).success;
+  const accepted = probe({ purpose: "protocol", outcome: "accepted" });
+
+  it("reads 0.5 accepted as adjustable, even with no rejected 0 before it", () => {
+    const probes = [accepted, probe({ purpose: "temperature", temperature: 0.5, outcome: "accepted" })];
+    expect(temperatureSupportWith(probes, NO_REASONING)).toBe("adjustable");
+    expect(parses(probes, "adjustable")).toBe(true);
+  });
+
+  it("reads 0 and 0.5 rejected across the check and resolution as not adjustable", () => {
+    const probes = [
+      accepted,
+      probe({ purpose: "temperature", temperature: 0.5, outcome: "rejected" }),
+      probe({ stage: "resolution", purpose: "confirm", outcome: "accepted" }),
+      probe({ stage: "resolution", purpose: "temperature", temperature: 0, outcome: "rejected" })
+    ];
+    expect(temperatureSupportWith(probes, NO_REASONING)).toBe("not_adjustable");
+    expect(parses(probes, "not_adjustable", "resolved")).toBe(true);
+  });
+
+  it("classifies nothing from a baseline on another protocol, a rejected baseline, or a stated temperature", () => {
+    const otherProtocol = [
+      accepted,
+      probe({ purpose: "temperature", verdictProtocol: "anthropic.forced-tool/v1", temperature: 0, outcome: "rejected" }),
+      probe({ purpose: "temperature", verdictProtocol: "anthropic.forced-tool/v1", temperature: 0.5, outcome: "rejected" })
+    ];
+    expect(temperatureSupportWith(otherProtocol, NO_REASONING)).toBeNull();
+    expect(parses(otherProtocol, "not_adjustable")).toBe(false);
+    const rejectedBaseline = [
+      probe({ purpose: "reasoning", reasoning: ADAPTIVE, outcome: "rejected" }),
+      probe({ purpose: "temperature", reasoning: ADAPTIVE, temperature: 0, outcome: "rejected" }),
+      probe({ purpose: "temperature", reasoning: ADAPTIVE, temperature: 0.5, outcome: "rejected" })
+    ];
+    expect(temperatureSupportWith(rejectedBaseline, { reasoning: ADAPTIVE, topP: null })).toBeNull();
+    // A confirming probe that stated temperature 1 is no temperature probe.
+    const stated = [probe({ stage: "resolution", purpose: "confirm", temperature: 1, reasoning: ADAPTIVE, outcome: "accepted" })];
+    expect(temperatureSupportWith(stated, { reasoning: ADAPTIVE, topP: null })).toBeNull();
+    expect(parses(stated, "adjustable", "resolved")).toBe(false);
+  });
+
+  it("doesn't let probes with other reasoning or topP answer for the saved ones", () => {
+    const checked = [
+      probe({ purpose: "reasoning", reasoning: ADAPTIVE, outcome: "accepted" }),
+      probe({ purpose: "temperature", reasoning: ADAPTIVE, temperature: 0, outcome: "rejected" }),
+      probe({ purpose: "temperature", reasoning: ADAPTIVE, temperature: 0.5, outcome: "rejected" })
+    ];
+    expect(parses([...checked, probe({ stage: "resolution", purpose: "confirm", reasoning: DISABLED, outcome: "accepted" })], "not_adjustable", "resolved")).toBe(false);
+    expect(parses([...checked, probe({ stage: "resolution", purpose: "confirm", reasoning: ADAPTIVE, topP: 0.9, outcome: "accepted" })], "not_adjustable", "resolved")).toBe(false);
+    expect(parses([...checked, probe({ stage: "resolution", purpose: "confirm", reasoning: ADAPTIVE, outcome: "accepted" })], "not_adjustable", "resolved")).toBe(true);
+  });
+
+  it("needs both 0 and 0.5 rejected, reads an error as unknown, and a protocol-breaking answer as accepted", () => {
+    const twiceZero = [accepted, probe({ purpose: "temperature", temperature: 0, outcome: "rejected" }), probe({ purpose: "temperature", temperature: 0, outcome: "rejected" })];
+    expect(temperatureSupportWith(twiceZero, NO_REASONING)).toBeNull();
+    const halfErrored = [accepted, probe({ purpose: "temperature", temperature: 0, outcome: "rejected" }), probe({ purpose: "temperature", temperature: 0.5, outcome: "error" })];
+    expect(temperatureSupportWith(halfErrored, NO_REASONING)).toBeNull();
+    const broken = [accepted, probe({ purpose: "temperature", temperature: 0, outcome: "rejected", failureKind: "provider_protocol" })];
+    expect(temperatureSupportWith(broken, NO_REASONING)).toBe("adjustable");
   });
 });

@@ -329,10 +329,12 @@ describe("temperature classification for newly selected reasoning (ADR-0014 deci
     expect(full.sent.map((binding) => binding.sampling.temperature)).toEqual([null, 0, 0.5]);
     expect(full.sent.every((binding) => binding.sampling.topP === null && binding.verdictProtocol === "openai.structured-output/v1")).toBe(true);
 
+    // A baseline the caller vouches for isn't one this call saw, so its report classifies nothing.
     const known = gptLike();
     const skipped = await classify(known, HIGH, { baselineAccepted: true });
     expect(known.sent.map((binding) => binding.sampling.temperature)).toEqual([0, 0.5]);
-    expect(skipped.temperatureSupport).toBe("not_adjustable");
+    expect(skipped.probes.map((probe) => probe.purpose)).toEqual(["temperature", "temperature"]);
+    expect(skipped.temperatureSupport).toBeNull();
 
     // With no reasoning fields, the baseline is a protocol probe's request.
     const unset = gptLike();

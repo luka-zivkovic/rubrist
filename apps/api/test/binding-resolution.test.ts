@@ -681,10 +681,11 @@ describe("temperature classification for newly selected reasoning, through the c
     expect(notAdjustable.temperatureSupport).toBe("not_adjustable");
   });
 
-  it("skips the reasoning call the check already saw accepted", async () => {
+  it("skips the reasoning call the check already saw accepted, and then classifies nothing it didn't see", async () => {
     const { sent, check } = gptLike();
-    await checkBindingCapabilities(check, "project", { ...gpt, classifyTemperature: { reasoning: NONE, verdictProtocol: "openai.structured-output/v1", baselineAccepted: true } });
+    const report = await checkBindingCapabilities(check, "project", { ...gpt, classifyTemperature: { reasoning: NONE, verdictProtocol: "openai.structured-output/v1", baselineAccepted: true } });
     expect(sent.map((body) => body.temperature)).toEqual([0]);
+    expect(report).toMatchObject({ temperatureSupport: null, probes: [{ purpose: "temperature", outcome: "accepted" }] });
   });
 
   it("refuses a classification no binding could need", () => {

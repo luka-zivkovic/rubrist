@@ -311,7 +311,10 @@ export async function runCapabilityCheck(input: {
  * calls: that reasoning without temperature, unless the check already saw
  * that request accepted (`baselineAccepted`), then the temperature probes
  * once it is accepted. A combination the ignored-temperature table lists is
- * sent nothing. It is reported as a check of that reasoning.
+ * sent nothing. It is reported as a check of that reasoning, classified only
+ * from what this call saw: where the caller vouched for the baseline, the
+ * report says nothing about temperature, and the picker reads these probes
+ * together with the check's.
  */
 export async function classifyTemperatureFor(input: {
   base: CapabilityCheckBase;
@@ -336,23 +339,23 @@ export async function classifyTemperatureFor(input: {
     if (probe !== null) probes.push(probe);
     return probe;
   };
-  // Temperature probes are sent only after an accepted baseline, so they classify by themselves.
-  const result = (temperature: CapabilityProbe[]): CapabilityCheckResult => ({
+  const result = (): CapabilityCheckResult => ({
     base: input.base,
     credentialSource: input.credentialSource,
     protocol: input.verdictProtocol,
     probes,
-    temperatureSupport: temperatureOutcome(temperature),
+    temperatureSupport: temperatureSupportWith(probes, { reasoning: input.reasoning, topP: null }),
     reasoningSupport: summarizeReasoning(probes),
     probedReasoning: input.reasoning
   });
-  if (!takesSamplingSettings(input.base.provider) || input.temperatureIgnored) return result([]);
+  if (!takesSamplingSettings(input.base.provider) || input.temperatureIgnored) return result();
   if (!input.baselineAccepted) {
     // With no reasoning fields, the baseline is the protocol probe's request.
     const probe = await send(input.reasoning === null ? "protocol" : "reasoning", baseline);
-    if (probe === null || !probeRequestAccepted(probe)) return result([]);
+    if (probe === null || !probeRequestAccepted(probe)) return result();
   }
-  return result(await sendTemperatureProbes((binding) => send("temperature", binding), baseline));
+  await sendTemperatureProbes((binding) => send("temperature", binding), baseline);
+  return result();
 }
 
 function checkDescribes(check: CapabilityCheckResult, binding: ExecutionBinding, credentialSource: JudgeProviderCredentialSource | null): boolean {
