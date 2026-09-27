@@ -24,7 +24,7 @@ import type {
   EvalRunItem,
   EvaluatorExecutionContext,
   EvaluatorSuite,
-  EvaluatorSuiteManifestV2,
+  EvaluatorSuiteManifest,
   ExceptionDetail,
   FeedbackSyncJob,
   GateCheck,
@@ -70,7 +70,7 @@ import type {
   RunComparison,
   SelfConsistencyReport,
   Skill,
-  SkillFormatV2Example,
+  SkillFormatExample,
   SkillVersion,
   TraceTestDetail,
   TraceTestSummary,
@@ -178,9 +178,9 @@ export interface CriterionSuiteRepositoryPort {
     projectId: string,
     input: CreateEvaluatorSuiteManifestInput,
     context: { actorUserId?: string | undefined }
-  ): Promise<EvaluatorSuiteManifestV2>;
-  listEvaluatorSuiteManifests(projectId: string, suiteId?: string | undefined): Promise<EvaluatorSuiteManifestV2[]>;
-  getEvaluatorSuiteManifest(projectId: string, manifestId: string): Promise<EvaluatorSuiteManifestV2 | null>;
+  ): Promise<EvaluatorSuiteManifest>;
+  listEvaluatorSuiteManifests(projectId: string, suiteId?: string | undefined): Promise<EvaluatorSuiteManifest[]>;
+  getEvaluatorSuiteManifest(projectId: string, manifestId: string): Promise<EvaluatorSuiteManifest | null>;
 }
 
 export interface SkillLifecycleRepositoryPort {
@@ -252,7 +252,7 @@ export interface GoldenEvidenceRepositoryPort {
     projectId: string,
     cap: number,
     criterionVersionId?: string | undefined
-  ): Promise<SkillFormatV2Example[]>;
+  ): Promise<SkillFormatExample[]>;
   getGoldenSetHealth(projectId: string, criterionVersionId?: string | undefined): Promise<GoldenSetHealthSummary>;
   getExceptionDetail(projectId: string, caseId: string, skillVersionId?: string | undefined): Promise<ExceptionDetail>;
   // generic case detail (any verdict). Null when the case has no judge

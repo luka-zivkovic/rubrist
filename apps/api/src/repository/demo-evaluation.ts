@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { AssessmentReceiptV2, EvalRun, EvalRunDetail, EvalRunItem, SkillVersion, VerdictRecord } from "@rubrist/shared";
+import type { AssessmentReceipt, EvalRun, EvalRunDetail, EvalRunItem, SkillVersion, VerdictRecord } from "@rubrist/shared";
 import {
-  buildAssessmentReceiptV2,
-  canonicalReceiptV2Bytes,
-  parseCanonicalReceiptV2Bytes,
+  buildAssessmentReceipt,
+  canonicalReceiptBytes,
+  parseCanonicalReceiptBytes,
   receiptArtifactDigest,
   receiptSourceSnapshotDigest
-} from "../lib/assessment-receipt-v2.js";
+} from "../lib/assessment-receipt.js";
 import type {
   AssessmentReceiptArtifactSource,
   AssessmentReceiptArtifact,
@@ -87,8 +87,8 @@ export class DemoEvaluationRepository implements
       .filter((verdict) => verdict.projectId === run.projectId && verdictIds.has(verdict.id))
       .map((verdict) => [verdict.id, structuredClone(verdict)]));
     const source = { run, skillVersion, verdicts };
-    const receipt = buildAssessmentReceiptV2(source);
-    const canonicalBytes = canonicalReceiptV2Bytes(receipt);
+    const receipt = buildAssessmentReceipt(source);
+    const canonicalBytes = canonicalReceiptBytes(receipt);
     return {
       id: `rart_${run.id}_v${receipt.schemaVersion}_r1`,
       projectId: run.projectId,
@@ -709,13 +709,13 @@ export class DemoEvaluationRepository implements
   async compareAssessmentReceiptCopy(input: CompareAssessmentReceiptCopyInput): Promise<AssessmentReceiptComparison> {
     const root = await this.dependencies.getOrFreezeAssessmentReceipt(input.projectId, input.evalRunId);
     if (!root) throw new AssessmentReceiptUnavailableError("missing_source", "Eval run not found");
-    let consumerReceipt: AssessmentReceiptV2;
+    let consumerReceipt: AssessmentReceipt;
     try {
-      consumerReceipt = parseCanonicalReceiptV2Bytes(input.consumerCanonicalBytes);
+      consumerReceipt = parseCanonicalReceiptBytes(input.consumerCanonicalBytes);
     } catch (error) {
       throw new AssessmentReceiptIntegrityError(error instanceof Error ? error.message : String(error));
     }
-    const rootReceipt = parseCanonicalReceiptV2Bytes(root.canonicalBytes);
+    const rootReceipt = parseCanonicalReceiptBytes(root.canonicalBytes);
     if (
       consumerReceipt.projectId !== input.projectId ||
       consumerReceipt.evalRunId !== input.evalRunId ||
@@ -750,11 +750,11 @@ export class DemoEvaluationRepository implements
     if (!reason) throw new AssessmentReceiptIntegrityError("Assessment receipt correction reason is required");
     const root = await this.dependencies.getOrFreezeAssessmentReceipt(input.projectId, input.evalRunId);
     if (!root) throw new AssessmentReceiptUnavailableError("missing_source", "Eval run not found");
-    let receipt: AssessmentReceiptV2;
+    let receipt: AssessmentReceipt;
     let canonicalBytes: Buffer;
     try {
-      canonicalBytes = canonicalReceiptV2Bytes(input.receipt);
-      receipt = parseCanonicalReceiptV2Bytes(canonicalBytes);
+      canonicalBytes = canonicalReceiptBytes(input.receipt);
+      receipt = parseCanonicalReceiptBytes(canonicalBytes);
     } catch (error) {
       throw new AssessmentReceiptIntegrityError(error instanceof Error ? error.message : String(error));
     }
@@ -774,7 +774,7 @@ export class DemoEvaluationRepository implements
       }
       throw new AssessmentReceiptIntegrityError("Correction receiptId is already in use");
     }
-    const rootReceipt = parseCanonicalReceiptV2Bytes(root.canonicalBytes);
+    const rootReceipt = parseCanonicalReceiptBytes(root.canonicalBytes);
     if (
       receipt.schemaVersion !== rootReceipt.schemaVersion ||
       receipt.skillId !== rootReceipt.skillId ||

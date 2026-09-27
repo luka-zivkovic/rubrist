@@ -165,7 +165,7 @@ content-type: application/json
 - **Sealed calibration** records pass or fail for each answered attempt. A
   typed-question trial never abstains; a failed provider call is recorded as
   a failure.
-- **skill-format/v2 exports** carry the question's text beside the identity,
+- **skill-format/v1 exports** carry the question's text beside the identity,
   which names the question only by its digest.
 - **Feedback sync** sends the label and score, never a rationale. LangSmith
   and Ironside get no comment; Langfuse's comment is the label alone.

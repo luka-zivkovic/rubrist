@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { JudgeCardSchema, type SkillFormatV2Example } from "@rubrist/shared";
-import { verifySkillFormatV2 } from "../src/lib/skill-format-v2.js";
-import { evaluatorIdentityFor, skillDigestV2 } from "../src/lib/evaluator-identity.js";
+import { JudgeCardSchema, type SkillFormatExample } from "@rubrist/shared";
+import { verifySkillFormat } from "../src/lib/skill-format.js";
+import { evaluatorIdentityFor, skillDigestOf } from "../src/lib/evaluator-identity.js";
 import { createApp } from "../src/app.js";
 import { DemoRepository } from "../src/repository.js";
 import { createRequestServices, type AppVariables } from "../src/request-services/index.js";
@@ -341,7 +341,7 @@ describe("Judge Card (M1 E5)", () => {
   });
 });
 
-describe("skill-format/v2 export", () => {
+describe("skill-format/v1 export", () => {
   it("exports a version as a verified document with its identity and real golden examples (redacted input/output)", async () => {
     const repository = new DemoRepository(undefined, { seedVerdicts: true });
     const localApp = createApp(repository);
@@ -349,10 +349,10 @@ describe("skill-format/v2 export", () => {
     expect(response.status).toBe(200);
     const version = (await repository.getSkillVersion("proj_langsmith_support", "skillv_1_2_0"))!;
     // An importer recomputes every digest and can require the identity it expected.
-    const doc = verifySkillFormatV2(await response.json(), { skillDigest: skillDigestV2(evaluatorIdentityFor(version)) });
+    const doc = verifySkillFormat(await response.json(), { skillDigest: skillDigestOf(evaluatorIdentityFor(version)) });
 
     // Every top-level field sourced from the skill and version (never fabricated).
-    expect(doc.formatVersion).toBe("skill-format/v2");
+    expect(doc.formatVersion).toBe("skill-format/v1");
     expect(doc.name.length).toBeGreaterThan(0);
     expect(doc.owner.length).toBeGreaterThan(0);
     expect(doc.version).toBe("1.2.0");
@@ -372,16 +372,16 @@ describe("skill-format/v2 export", () => {
 
   it("notes an empty golden set and the example cap, and leaves out only the examples the format can't carry", async () => {
     class ExamplesRepository extends DemoRepository {
-      constructor(private readonly examples: SkillFormatV2Example[]) { super(); }
-      override async getSkillFormatExamples(): Promise<SkillFormatV2Example[]> { return this.examples; }
+      constructor(private readonly examples: SkillFormatExample[]) { super(); }
+      override async getSkillFormatExamples(): Promise<SkillFormatExample[]> { return this.examples; }
     }
-    const exportWith = async (examples: SkillFormatV2Example[]) => {
+    const exportWith = async (examples: SkillFormatExample[]) => {
       const response = await createApp(new ExamplesRepository(examples)).request("/api/skills/skill_support_quality/versions/skillv_1_2_0/skill-format");
       expect(response.status).toBe(200);
-      return verifySkillFormatV2(await response.json());
+      return verifySkillFormat(await response.json());
     };
-    const example = (id: string, input: unknown = { question: id }): SkillFormatV2Example =>
-      ({ id, label: "pass", input: input as SkillFormatV2Example["input"], output: { answer: id }, reason: "grounded", metadata: null });
+    const example = (id: string, input: unknown = { question: id }): SkillFormatExample =>
+      ({ id, label: "pass", input: input as SkillFormatExample["input"], output: { answer: id }, reason: "grounded", metadata: null });
     // An example's input sits three levels below the document root, which nests at most 64 deep.
     const nested = (levels: number): unknown => Array.from({ length: levels }).reduce<unknown>((inner) => ({ inner }), "leaf");
 
@@ -415,7 +415,7 @@ describe("skill-format/v2 export", () => {
     }
     const response = await createApp(new LongOwnerRepository()).request("/api/skills/skill_support_quality/versions/skillv_1_2_0/skill-format");
     expect(response.status).toBe(200);
-    const doc = verifySkillFormatV2(await response.json());
+    const doc = verifySkillFormat(await response.json());
     expect(doc.owner).toBe("a".repeat(199));
     expect(doc.notes).toContain("owner: the owner's display name is cut to 200 characters.");
   });
@@ -438,7 +438,7 @@ describe("skill-format/v2 export", () => {
     const refused = await createApp(new LoneSurrogateRepository()).request("/api/skills/skill_support_quality/versions/skillv_1_2_0/skill-format");
     expect(refused.status).toBe(422);
     expect(await refused.json()).toEqual({
-      error: "This evaluator version can't be exported as skill-format/v2: skill-format documents must not contain lone UTF-16 surrogates"
+      error: "This evaluator version can't be exported as skill-format/v1: skill-format documents must not contain lone UTF-16 surrogates"
     });
   });
 
@@ -483,9 +483,9 @@ describe("skill-format/v2 export", () => {
     const versionId = (await created.json() as { version: { id: string } }).version.id;
     const body = await (await localApp.request(`/api/skills/skill_support_quality/versions/${versionId}/skill-format`)).text();
     expect(body).not.toContain(url);
-    const doc = verifySkillFormatV2(JSON.parse(body), { endpointBaseUrl: url });
+    const doc = verifySkillFormat(JSON.parse(body), { endpointBaseUrl: url });
     expect(doc.notes.some((note) => note.includes("custom endpoint named only by its digest"))).toBe(true);
-    expect(() => verifySkillFormatV2(JSON.parse(body), { endpointBaseUrl: "https://other.example/v1" })).toThrow();
+    expect(() => verifySkillFormat(JSON.parse(body), { endpointBaseUrl: "https://other.example/v1" })).toThrow();
   });
 
   it("?download=1 attaches a static-stem json file; 404s for a missing version", async () => {

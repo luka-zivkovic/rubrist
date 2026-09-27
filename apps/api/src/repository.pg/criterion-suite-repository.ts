@@ -9,18 +9,18 @@ import type {
   CreatedCriterion,
   CreateEvaluatorSuiteManifestInput,
   EvaluatorSuite,
-  EvaluatorSuiteManifestV2,
+  EvaluatorSuiteManifest,
   SkillVersion
 } from "@rubrist/shared";
 import type { Pool } from "pg";
 import {
-  buildEvaluatorSuiteManifestV2,
-  canonicalEvaluatorSuiteManifestV2Bytes,
+  buildEvaluatorSuiteManifest,
+  canonicalEvaluatorSuiteManifestBytes,
   evaluatorSuiteArtifactDigest,
   evaluatorSuiteCreateRequestDigest,
-  parseCanonicalEvaluatorSuiteManifestV2Bytes,
+  parseCanonicalEvaluatorSuiteManifestBytes,
   suiteMemberEvaluator
-} from "../lib/evaluator-suite-manifest-v2.js";
+} from "../lib/evaluator-suite-manifest.js";
 import { criterionVersionDigest } from "../lib/criterion-digest.js";
 import {
   CriterionStableKeyConflictError,
@@ -242,7 +242,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
     projectId: string,
     input: CreateEvaluatorSuiteManifestInput,
     context: { actorUserId?: string | undefined }
-  ): Promise<EvaluatorSuiteManifestV2> {
+  ): Promise<EvaluatorSuiteManifest> {
     if (
       new Set(input.members.map((member) => member.criterionVersionId)).size !== input.members.length ||
       new Set(input.members.map((member) => member.skillVersionId)).size !== input.members.length
@@ -260,7 +260,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
         [projectId, input.idempotencyKey]
       )).rows[0];
       if (priorAttempt) {
-        const existing = parseCanonicalEvaluatorSuiteManifestV2Bytes(
+        const existing = parseCanonicalEvaluatorSuiteManifestBytes(
           Buffer.from(priorAttempt.canonical_bytes as Uint8Array)
         );
         if (String(priorAttempt.request_digest) !== evaluatorSuiteCreateRequestDigest(input)) {
@@ -315,7 +315,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
         }
         const evaluator = suiteMemberEvaluator(rowToSkillVersion(row));
         if (evaluator === null) {
-          throw new EvaluatorSuiteBindingError(`Suite member ${position} binds an evaluator version without a valid v2 identity.`);
+          throw new EvaluatorSuiteBindingError(`Suite member ${position} binds an evaluator version without a valid evaluator identity.`);
         }
         memberInputs.push({
           criterionId: String(row.criterion_id),
@@ -336,7 +336,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
          from evaluator_suite_manifests where project_id = $1 and suite_id = $2`,
         [projectId, suiteId]
       )).rows[0]?.revision ?? 1);
-      const manifest = buildEvaluatorSuiteManifestV2({
+      const manifest = buildEvaluatorSuiteManifest({
         manifestId: `manifest_${randomUUID()}`,
         suiteId,
         projectId,
@@ -344,7 +344,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
         members: memberInputs,
         trialPlan: input.trialPlan
       });
-      const canonicalBytes = canonicalEvaluatorSuiteManifestV2Bytes(manifest);
+      const canonicalBytes = canonicalEvaluatorSuiteManifestBytes(manifest);
       const artifactDigest = evaluatorSuiteArtifactDigest(canonicalBytes);
       await client.query(
         `insert into evaluator_suite_manifests
@@ -407,7 +407,7 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
   async listEvaluatorSuiteManifests(
     projectId: string,
     suiteId?: string | undefined
-  ): Promise<EvaluatorSuiteManifestV2[]> {
+  ): Promise<EvaluatorSuiteManifest[]> {
     const result = await this.pool.query(
       `select canonical_bytes from evaluator_suite_manifests
        where project_id = $1 ${suiteId ? "and suite_id = $2" : ""}
@@ -415,20 +415,20 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
       suiteId ? [projectId, suiteId] : [projectId]
     );
     return result.rows.map((row) =>
-      parseCanonicalEvaluatorSuiteManifestV2Bytes(Buffer.from(row.canonical_bytes as Uint8Array))
+      parseCanonicalEvaluatorSuiteManifestBytes(Buffer.from(row.canonical_bytes as Uint8Array))
     );
   }
 
   async getEvaluatorSuiteManifest(
     projectId: string,
     manifestId: string
-  ): Promise<EvaluatorSuiteManifestV2 | null> {
+  ): Promise<EvaluatorSuiteManifest | null> {
     const row = (await this.pool.query(
       `select canonical_bytes from evaluator_suite_manifests where project_id = $1 and id = $2`,
       [projectId, manifestId]
     )).rows[0];
     return row
-      ? parseCanonicalEvaluatorSuiteManifestV2Bytes(Buffer.from(row.canonical_bytes as Uint8Array))
+      ? parseCanonicalEvaluatorSuiteManifestBytes(Buffer.from(row.canonical_bytes as Uint8Array))
       : null;
   }
 }

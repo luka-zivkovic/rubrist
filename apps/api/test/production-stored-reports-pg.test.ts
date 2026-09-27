@@ -125,7 +125,7 @@ run("stored production reports and snapshots", () => {
       recordCount: loaded.records.length, recordSetDigest: loaded.recordSetDigest
     });
     expect(saved).toMatchObject({
-      reportContract: "rubrist/production-calibration/v2",
+      reportContract: "rubrist/production-calibration/v1",
       window: { from: day(1), to: day(10) },
       recordCount: loaded.records.length,
       recordSetDigest: loaded.recordSetDigest,
@@ -156,12 +156,12 @@ run("stored production reports and snapshots", () => {
           parameters, record_count, record_set_digest, built_at, created_by_user_id)
        values ($1,$2,$3,$4,coalesce($5, 'sha256:' || encode(sha256($4), 'hex')),$6,null,'{}'::jsonb,0,$7,$8,'user_member')`,
       [
-        `pcs_tamper_${Math.random()}`, PROJECT_ID, values.contract ?? "rubrist/production-calibration/v2", bytes,
+        `pcs_tamper_${Math.random()}`, PROJECT_ID, values.contract ?? "rubrist/production-calibration/v1", bytes,
         values.digest ?? null, values.windowFrom ?? null, digest("c"), values.builtAt ?? now.toISOString()
       ]
     );
     await expect(insert({ digest: digest("d") })).rejects.toMatchObject({ code: "23514" });
-    await expect(insert({ contract: "rubrist/production-calibration/v1" })).rejects.toMatchObject({ code: "23514" });
+    await expect(insert({ contract: "rubrist/production-calibration/v2" })).rejects.toMatchObject({ code: "23514" });
     await expect(insert({ windowFrom: day(1) })).rejects.toMatchObject({ code: "23514" });
     await expect(insert({ builtAt: day(1) })).rejects.toMatchObject({ code: "23514" });
     await expect(insert({})).resolves.toMatchObject({ rowCount: 1 });

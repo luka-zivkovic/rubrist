@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AssessmentReceiptV2Schema, type AssessmentReceiptV2, type EvalRunDetail, type VerdictRecord } from "@rubrist/shared";
+import { AssessmentReceiptSchema, type AssessmentReceipt, type EvalRunDetail, type VerdictRecord } from "@rubrist/shared";
 import { createApp } from "../src/app.js";
 import { canonicalJson, contentDigest, sha256Digest } from "../src/lib/canonical-json.js";
 import {
-  buildAssessmentReceiptV2,
-  evidenceDigestForReceiptV2,
-  verifyAssessmentReceiptV2
-} from "../src/lib/assessment-receipt-v2.js";
-import { evaluatorIdentityFor, skillDigestInput, skillDigestV2 } from "../src/lib/evaluator-identity.js";
+  buildAssessmentReceipt,
+  evidenceDigestForReceipt,
+  verifyAssessmentReceipt
+} from "../src/lib/assessment-receipt.js";
+import { evaluatorIdentityFor, skillDigestInput, skillDigestOf } from "../src/lib/evaluator-identity.js";
 import { CaseNotFoundError, DemoRepository } from "../src/repository.js";
 import { MOCK_BINDING, SEEDED_BINDING, bindingInput } from "./fixtures/execution-binding.js";
 
-// Assessment receipt v2 (ADR-0014 sections 6 and 7): built from a terminal
+// Assessment receipt (ADR-0014 sections 6 and 7): built from a terminal
 // release-evidence run, each outcome carrying its verdict's score and what its
 // call observed.
 
@@ -92,7 +92,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("assessment receipt v2 evidence", () => {
+describe("assessment receipt evidence", () => {
   it("canonicalizes object keys recursively while retaining array order", () => {
     expect(canonicalJson({ z: 1, a: { y: 2, b: 1 }, list: [{ d: 4, c: 3 }, 2, 1] }))
       .toBe('{"a":{"b":1,"y":2},"list":[{"c":3,"d":4},2,1],"z":1}');
@@ -104,13 +104,13 @@ describe("assessment receipt v2 evidence", () => {
     const version = (await repo.getSkillVersion(PROJECT, VERSION))!;
     const run = finished(await pendingRun(repo, ["c", "a", "b"]), ["pass", "fail", "ambiguous"]);
     const verdicts = verdictsFor(run);
-    const receipt = buildAssessmentReceiptV2({ run, skillVersion: version, verdicts });
+    const receipt = buildAssessmentReceipt({ run, skillVersion: version, verdicts });
 
-    expect(AssessmentReceiptV2Schema.parse(receipt)).toEqual(receipt);
-    expect(() => verifyAssessmentReceiptV2(receipt, { evalRunId: run.id, skillVersionId: VERSION, skillDigest: skillDigestV2(evaluatorIdentityFor(version)) })).not.toThrow();
+    expect(AssessmentReceiptSchema.parse(receipt)).toEqual(receipt);
+    expect(() => verifyAssessmentReceipt(receipt, { evalRunId: run.id, skillVersionId: VERSION, skillDigest: skillDigestOf(evaluatorIdentityFor(version)) })).not.toThrow();
     expect(receipt).toMatchObject({
-      contract: "rubrist/assessment-receipt/v2",
-      schemaVersion: 2,
+      contract: "rubrist/assessment-receipt/v1",
+      schemaVersion: 1,
       receiptId: `receipt_${run.id}`,
       status: "complete",
       evaluator: skillDigestInput(evaluatorIdentityFor(version)),
@@ -129,7 +129,7 @@ describe("assessment receipt v2 evidence", () => {
       observed: { ...NOTHING, model: "claude-sonnet-4-6", requestId: "req_verdict_a" }
     });
     expect(receipt.datasetDigest).toBe(sha256Digest(receipt.items.map(({ clientItemId, contentDigest }) => ({ clientItemId, contentDigest }))));
-    expect(buildAssessmentReceiptV2({ run, skillVersion: version, verdicts })).toEqual(receipt);
+    expect(buildAssessmentReceipt({ run, skillVersion: version, verdicts })).toEqual(receipt);
   });
 
   it("states a failure's kind and observation and each item never attempted, which leave it incomplete", async () => {
@@ -147,7 +147,7 @@ describe("assessment receipt v2 evidence", () => {
         return item;
       })
     };
-    const receipt = buildAssessmentReceiptV2({ run: ended, skillVersion: version, verdicts: verdictsFor(ended) });
+    const receipt = buildAssessmentReceipt({ run: ended, skillVersion: version, verdicts: verdictsFor(ended) });
     expect(receipt.status).toBe("incomplete");
     expect(receipt.run).toMatchObject({ status: "canceled", totalItems: 4, passItems: 1, failedItems: 1, notAttemptedItems: 2 });
     expect(Object.fromEntries(receipt.items.map((item) => [item.clientItemId, [item.result, item.observed, item.verdictId]]))).toEqual({
@@ -163,16 +163,16 @@ describe("assessment receipt v2 evidence", () => {
     const version = (await repo.getSkillVersion(PROJECT, VERSION))!;
     const run = finished(await pendingRun(repo, ["a"]), ["pass"]);
     const unobserved = new Map([["verdict_a", verdict("verdict_a", { observed: null, evaluatorScore: null })]]);
-    expect(() => buildAssessmentReceiptV2({ run, skillVersion: version, verdicts: unobserved })).toThrow(/recorded no call observation/);
-    expect(() => buildAssessmentReceiptV2({ run, skillVersion: version, verdicts: new Map() })).toThrow(/has no recorded verdict/);
+    expect(() => buildAssessmentReceipt({ run, skillVersion: version, verdicts: unobserved })).toThrow(/recorded no call observation/);
+    expect(() => buildAssessmentReceipt({ run, skillVersion: version, verdicts: new Map() })).toThrow(/has no recorded verdict/);
   });
 
   it("changes the evidence digest for every evidence class and exposes no release-policy decision field", async () => {
     const repo = new DemoRepository();
     const version = (await repo.getSkillVersion(PROJECT, VERSION))!;
     const run = finished(await pendingRun(repo, ["a"]), ["pass"]);
-    const receipt = buildAssessmentReceiptV2({ run, skillVersion: version, verdicts: verdictsFor(run) });
-    const mutations: Array<[string, (candidate: AssessmentReceiptV2) => void]> = [
+    const receipt = buildAssessmentReceipt({ run, skillVersion: version, verdicts: verdictsFor(run) });
+    const mutations: Array<[string, (candidate: AssessmentReceipt) => void]> = [
       ["receipt identity", (candidate) => { candidate.receiptId = "receipt_tampered"; }],
       ["run counters", (candidate) => { candidate.run.passItems = 0; }],
       ["execution binding", (candidate) => { candidate.evaluator.executionBinding.modelId = "other-model"; }],
@@ -186,7 +186,7 @@ describe("assessment receipt v2 evidence", () => {
     for (const [name, mutate] of mutations) {
       const candidate = structuredClone(receipt);
       mutate(candidate);
-      expect(evidenceDigestForReceiptV2(candidate), name).not.toBe(receipt.evidenceDigest);
+      expect(evidenceDigestForReceipt(candidate), name).not.toBe(receipt.evidenceDigest);
     }
 
     const forbidden = new Set(["threshold", "decision", "ship", "hold", "deploy", "rolloutPolicy", "maxDisagreements"]);
@@ -232,7 +232,7 @@ describe("release_evidence batch and receipt routes", () => {
     });
     expect(accepted.status).toBe(202);
     const acceptedId = (await accepted.json() as { evalRunId: string }).evalRunId;
-    const receipt = AssessmentReceiptV2Schema.parse(await (await app.request(
+    const receipt = AssessmentReceiptSchema.parse(await (await app.request(
       `/api/v1/eval-runs/${acceptedId}/assessment-receipt`,
       { headers: { authorization: `Bearer ${key}` } }
     )).json());
@@ -265,9 +265,9 @@ describe("release_evidence batch and receipt routes", () => {
       headers: { authorization: `Bearer ${key}` }
     });
     expect(response.status).toBe(200);
-    const receipt = AssessmentReceiptV2Schema.parse(await response.json());
+    const receipt = AssessmentReceiptSchema.parse(await response.json());
     const version = (await repo.getSkillVersion(PROJECT, versionId))!;
-    expect(() => verifyAssessmentReceiptV2(receipt, { evalRunId, skillVersionId: versionId, skillDigest: skillDigestV2(evaluatorIdentityFor(version)) }))
+    expect(() => verifyAssessmentReceipt(receipt, { evalRunId, skillVersionId: versionId, skillDigest: skillDigestOf(evaluatorIdentityFor(version)) }))
       .not.toThrow();
     expect(receipt.status).toBe("complete");
     expect(receipt.evaluator.executionBinding).toEqual(MOCK_BINDING);
@@ -297,7 +297,7 @@ describe("release_evidence batch and receipt routes", () => {
       body: JSON.stringify({ purpose: "release_evidence", items: [{ clientItemId: "one", input: { q: 1 }, output: { a: 1 }, metadata: {} }] })
     });
     const { evalRunId } = await submitted.json() as { evalRunId: string };
-    const receipt = AssessmentReceiptV2Schema.parse(await (await app.request(
+    const receipt = AssessmentReceiptSchema.parse(await (await app.request(
       `/api/v1/eval-runs/${evalRunId}/assessment-receipt`,
       { headers: { authorization: `Bearer ${key}` } }
     )).json());
@@ -328,7 +328,7 @@ describe("release_evidence batch and receipt routes", () => {
     });
     const rejudged = await submit();
     expect(rejudged.cachedItems).toBe(0);
-    const receipt = AssessmentReceiptV2Schema.parse(await (await app.request(
+    const receipt = AssessmentReceiptSchema.parse(await (await app.request(
       `/api/v1/eval-runs/${rejudged.evalRunId}/assessment-receipt`,
       { headers: { authorization: `Bearer ${key}` } }
     )).json());
@@ -385,7 +385,7 @@ describe("release_evidence batch and receipt routes", () => {
     expect(calls).toBe(2);
     const response = await app.request(`/api/v1/eval-runs/${evalRunId}/assessment-receipt`, { headers: { authorization: `Bearer ${key}` } });
     expect(response.status).toBe(200);
-    const receipt = AssessmentReceiptV2Schema.parse(await response.json());
+    const receipt = AssessmentReceiptSchema.parse(await response.json());
     expect(receipt.status).toBe("incomplete");
     expect(receipt.items.map((item) => [item.clientItemId, item.result, item.observed?.upstreamProvider ?? null])).toEqual([
       ["first", { state: "failure", failureKind: "provider_rejected_request" }, null],

@@ -10106,7 +10106,7 @@ CREATE TABLE binary_calibration_artifacts (
     CONSTRAINT binary_calibration_artifacts_artifact_revision_check CHECK ((artifact_revision > 0)),
     CONSTRAINT binary_calibration_artifacts_canonical_bytes_check CHECK (((octet_length(canonical_bytes) >= 2) AND (octet_length(canonical_bytes) <= 16777216))),
     CONSTRAINT binary_calibration_artifacts_check CHECK ((((artifact_revision = 1) AND (predecessor_artifact_id IS NULL) AND (correction_reason IS NULL)) OR ((artifact_revision > 1) AND (predecessor_artifact_id IS NOT NULL) AND (correction_reason IS NOT NULL)))),
-    CONSTRAINT binary_calibration_artifacts_contract_check CHECK ((contract = 'rubrist/binary-calibration/v2'::text)),
+    CONSTRAINT binary_calibration_artifacts_contract_check CHECK ((contract = 'rubrist/binary-calibration/v1'::text)),
     CONSTRAINT binary_calibration_artifacts_evidence_digest_check CHECK ((evidence_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT binary_calibration_artifacts_status_check CHECK ((status = ANY (ARRAY['complete'::text, 'incomplete'::text])))
 );
@@ -10201,7 +10201,7 @@ CREATE TABLE binary_calibration_private_ledgers (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT binary_calibration_private_ledgers_canonical_bytes_check CHECK (((octet_length(canonical_bytes) >= 2) AND (octet_length(canonical_bytes) <= 16777216))),
     CONSTRAINT binary_calibration_private_ledgers_commitment_digest_check CHECK ((commitment_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT binary_calibration_private_ledgers_contract_check CHECK ((contract = 'rubrist/binary-calibration-private-ledger/v2'::text))
+    CONSTRAINT binary_calibration_private_ledgers_contract_check CHECK ((contract = 'rubrist/binary-calibration-private-ledger/v1'::text))
 );
 
 
@@ -10767,13 +10767,13 @@ CREATE TABLE evaluator_suite_manifests (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT evaluator_suite_manifests_artifact_digest_check CHECK ((artifact_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_canonical_bytes_check CHECK ((octet_length(canonical_bytes) > 0)),
-    CONSTRAINT evaluator_suite_manifests_contract_check CHECK ((contract = 'rubrist/evaluator-suite-manifest/v2'::text)),
+    CONSTRAINT evaluator_suite_manifests_contract_check CHECK ((contract = 'rubrist/evaluator-suite-manifest/v1'::text)),
     CONSTRAINT evaluator_suite_manifests_idempotency_key_check CHECK ((length(idempotency_key) BETWEEN 1 AND 200) AND (idempotency_key = TRIM(BOTH FROM idempotency_key))),
     CONSTRAINT evaluator_suite_manifests_manifest_digest_check CHECK ((manifest_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_member_count_check CHECK ((member_count > 0)),
     CONSTRAINT evaluator_suite_manifests_request_digest_check CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT evaluator_suite_manifests_revision_check CHECK ((revision > 0)),
-    CONSTRAINT evaluator_suite_manifests_schema_version_check CHECK ((schema_version = 2)),
+    CONSTRAINT evaluator_suite_manifests_schema_version_check CHECK ((schema_version = 1)),
     CONSTRAINT evaluator_suite_manifests_trial_plan_check CHECK (((trial_plan = 'null'::jsonb) OR ((jsonb_typeof(trial_plan) = 'object'::text) AND ((trial_plan ->> 'kind'::text) = 'independent_repetitions'::text) AND (jsonb_typeof((trial_plan -> 'trialsPerItem'::text)) = 'number'::text) AND ((((trial_plan ->> 'trialsPerItem'::text))::integer >= 2) AND (((trial_plan ->> 'trialsPerItem'::text))::integer <= 10)) AND (trial_plan = jsonb_build_object('kind', 'independent_repetitions', 'trialsPerItem', ((trial_plan ->> 'trialsPerItem'::text))::integer)))))
 );
 
@@ -11678,7 +11678,7 @@ CREATE TABLE production_calibration_snapshots (
     CONSTRAINT production_calibration_snapshots_parameters_check CHECK (((jsonb_typeof(parameters) = 'object'::text) AND (octet_length((parameters)::text) <= 65536))),
     CONSTRAINT production_calibration_snapshots_record_count_check CHECK ((record_count >= 0)),
     CONSTRAINT production_calibration_snapshots_record_set_digest_check CHECK ((record_set_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
-    CONSTRAINT production_calibration_snapshots_report_contract_check CHECK ((report_contract = 'rubrist/production-calibration/v2'::text))
+    CONSTRAINT production_calibration_snapshots_report_contract_check CHECK ((report_contract = 'rubrist/production-calibration/v1'::text))
 );
 
 

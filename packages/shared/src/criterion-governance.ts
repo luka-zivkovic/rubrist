@@ -28,7 +28,7 @@ import { EVALUATOR_DEFINITION_TEXT_MAX, ExecutionBindingInputSchema } from "./ev
 import { SkillSchema } from "./skills.js";
 
 // Evaluator suites are separate, policy-free artifacts (the manifest schema is
-// in evaluator-suite-manifest-v2.ts). A suite binds immutable criterion
+// in evaluator-suite-manifest.ts). A suite binds immutable criterion
 // definitions to exact evaluator versions while leaving every criterion's
 // assessment in its own receipt. Keep all nested objects strict: release
 // roles, thresholds, weights, compensation, and composite decisions are

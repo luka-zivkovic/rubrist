@@ -5,7 +5,7 @@ import { processFeedbackSyncJob } from "../src/workers/feedback-sync.js";
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { runPgSmoke, seedSkill } from "./pg-smoke-support.js";
 
-// Per-item provenance for evidence v2 (ADR-0014 section 6), as stored: an
+// Per-item provenance for evidence (ADR-0014 section 6), as stored: an
 // evaluator verdict's observation and score, and a failed item's
 // classification, which the database requires.
 

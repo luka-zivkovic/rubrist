@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { AssessmentReceiptV2 } from "@rubrist/shared";
+import type { AssessmentReceipt } from "@rubrist/shared";
 import type { Pool } from "pg";
 import {
   RECEIPT_SCHEMA_VERSION,
-  canonicalReceiptV2Bytes,
-  parseCanonicalReceiptV2Bytes,
+  canonicalReceiptBytes,
+  parseCanonicalReceiptBytes,
   receiptArtifactDigest
-} from "../lib/assessment-receipt-v2.js";
+} from "../lib/assessment-receipt.js";
 import type {
   AssessmentReceiptArtifact,
   AssessmentReceiptComparison,
@@ -71,9 +71,9 @@ export class PgAssessmentReceiptRepository implements AssessmentReceiptRepositor
   }
 
   async compareAssessmentReceiptCopy(input: CompareAssessmentReceiptCopyInput): Promise<AssessmentReceiptComparison> {
-    let consumerReceipt: AssessmentReceiptV2;
+    let consumerReceipt: AssessmentReceipt;
     try {
-      consumerReceipt = parseCanonicalReceiptV2Bytes(input.consumerCanonicalBytes);
+      consumerReceipt = parseCanonicalReceiptBytes(input.consumerCanonicalBytes);
     } catch (error) {
       throw new AssessmentReceiptIntegrityError(error instanceof Error ? error.message : String(error));
     }
@@ -87,7 +87,7 @@ export class PgAssessmentReceiptRepository implements AssessmentReceiptRepositor
         "historical_freeze"
       );
       if (!root) throw new AssessmentReceiptUnavailableError("missing_source", "Eval run not found");
-      const rootReceipt = parseCanonicalReceiptV2Bytes(root.canonicalBytes);
+      const rootReceipt = parseCanonicalReceiptBytes(root.canonicalBytes);
       if (
         consumerReceipt.projectId !== input.projectId ||
         consumerReceipt.evalRunId !== input.evalRunId ||
@@ -145,11 +145,11 @@ export class PgAssessmentReceiptRepository implements AssessmentReceiptRepositor
   ): Promise<AssessmentReceiptArtifact> {
     const reason = input.reason.trim();
     if (!reason) throw new AssessmentReceiptIntegrityError("Assessment receipt correction reason is required");
-    let receipt: AssessmentReceiptV2;
+    let receipt: AssessmentReceipt;
     let canonicalBytes: Buffer;
     try {
-      canonicalBytes = canonicalReceiptV2Bytes(input.receipt);
-      receipt = parseCanonicalReceiptV2Bytes(canonicalBytes);
+      canonicalBytes = canonicalReceiptBytes(input.receipt);
+      receipt = parseCanonicalReceiptBytes(canonicalBytes);
     } catch (error) {
       throw new AssessmentReceiptIntegrityError(error instanceof Error ? error.message : String(error));
     }
@@ -183,7 +183,7 @@ export class PgAssessmentReceiptRepository implements AssessmentReceiptRepositor
         }
         throw new AssessmentReceiptIntegrityError("Correction receiptId is already in use");
       }
-      const rootReceipt = parseCanonicalReceiptV2Bytes(root.canonicalBytes);
+      const rootReceipt = parseCanonicalReceiptBytes(root.canonicalBytes);
       if (
         receipt.schemaVersion !== rootReceipt.schemaVersion ||
         receipt.skillId !== rootReceipt.skillId ||

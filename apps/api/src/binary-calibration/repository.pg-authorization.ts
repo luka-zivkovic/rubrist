@@ -5,16 +5,16 @@ import {
   MUTABLE_MODEL_ALIAS_RULE_VERSION,
   mutableModelAlias,
   VerdictKindSchema,
-  type BinaryCalibrationV2CompletionEligibilityReason,
+  type BinaryCalibrationCompletionEligibilityReason,
   type EvaluatorIdentity
 } from "@rubrist/shared";
 
 import { canonicalJson, sha256Digest } from "../lib/canonical-json.js";
 import {
   evaluatorIdentityFor,
-  evaluatorOutputContractDigestV2,
+  evaluatorOutputContractDigest,
   skillDigestInput,
-  skillDigestV2
+  skillDigestOf
 } from "../lib/evaluator-identity.js";
 import { governedContentV1Digest } from "../lib/governed-content-digest.js";
 import { governedGateRefusal } from "../lib/binding-resolution.js";
@@ -104,7 +104,7 @@ export async function deriveRunIdentity(
   try {
     identity = evaluatorIdentityFor(skillVersion);
   } catch (error) {
-    throw repoError("unsupported", `sealed calibration requires an evaluator version with a valid v2 identity (${identityProblem(error)})`);
+    throw repoError("unsupported", `sealed calibration requires an evaluator version with a valid evaluator identity (${identityProblem(error)})`);
   }
   if (mutableModelAlias(binding.modelId) !== null) {
     throw repoError(
@@ -121,8 +121,8 @@ export async function deriveRunIdentity(
   }
   const evaluatorDigests = {
     definitionDigest: skillDigestInput(identity).definitionDigest,
-    skillDigest: skillDigestV2(identity),
-    outputContractDigest: evaluatorOutputContractDigestV2(identity.definition),
+    skillDigest: skillDigestOf(identity),
+    outputContractDigest: evaluatorOutputContractDigest(identity.definition),
     requestedBindingDigest: sha256Digest(identity.executionBinding)
   };
   const { policy: providerPolicy, canonicalBytes: providerPolicyBytes } = providerPolicyFor(identity.executionBinding);
@@ -297,7 +297,7 @@ export async function evaluateEligibility(
     evaluatorReuse: reuse
   };
   const comparableFactsDigest = sha256Digest(comparableFacts);
-  const reasons: BinaryCalibrationV2CompletionEligibilityReason[] = [];
+  const reasons: BinaryCalibrationCompletionEligibilityReason[] = [];
   if (exposureDetected || capabilityChecks.some((check) => check.excludedCapabilities.length > 0)) {
     reasons.push("development_exposure_detected");
   }
@@ -322,7 +322,7 @@ export async function evaluateEligibility(
       }
     }
   }
-  const sortedReasons = [...new Set(reasons)].sort() as BinaryCalibrationV2CompletionEligibilityReason[];
+  const sortedReasons = [...new Set(reasons)].sort() as BinaryCalibrationCompletionEligibilityReason[];
   const snapshot = {
     contract: "rubrist/binary-calibration-exposure-snapshot/v1",
     schemaVersion: 1,
@@ -579,7 +579,7 @@ export function snapshotRecord(
   phase: "authorization" | "completion",
   exposureState: "protected" | "exposed",
   eligibility: "eligible" | "ineligible",
-  reasons: BinaryCalibrationV2CompletionEligibilityReason[],
+  reasons: BinaryCalibrationCompletionEligibilityReason[],
   snapshot: Record<string, unknown>,
   recordedAt: string
 ) {

@@ -4,10 +4,10 @@ import { runMigrations } from "@rubrist/db";
 import { CreateSkillVersionInputSchema, TypedQuestionOutputSchema, type ExecutionBinding } from "@rubrist/shared";
 import { canonicalJson, sha256Digest } from "../src/lib/canonical-json.js";
 import {
-  parseCanonicalBinaryCalibrationV2ArtifactBytes,
-  verifyBinaryCalibrationV2PrivateLedgerForArtifact
-} from "../src/lib/binary-calibration-v2.js";
-import { evaluatorIdentityFor, skillDigestV2 } from "../src/lib/evaluator-identity.js";
+  parseCanonicalBinaryCalibrationArtifactBytes,
+  verifyBinaryCalibrationPrivateLedgerForArtifact
+} from "../src/lib/binary-calibration.js";
+import { evaluatorIdentityFor, skillDigestOf } from "../src/lib/evaluator-identity.js";
 import {
   type BinaryCalibrationActor
 } from "../src/binary-calibration/repository.js";
@@ -294,8 +294,8 @@ run("PgBinaryCalibrationRepository", () => {
     }
     const created = await repository.createRun(OWNER, input);
     expect(created).toMatchObject({ state: "queued", plannedObservations: 2, accountedObservations: 0 });
-    // The run pins the evaluator's v2 identity: the binding exactly as stored,
-    // its digest, and skillDigest v2.
+    // The run pins the evaluator's identity: the binding exactly as stored,
+    // its digest, and skillDigest.
     const pinned = (await pool.query(
       `select run.execution_binding,run.requested_binding_digest,run.skill_digest,run.definition_digest,run.requested_provider,
               version.rubric_markdown,version.prompt,version.verdict_kind,version.output_schema,version.execution_binding as version_binding
@@ -310,7 +310,7 @@ run("PgBinaryCalibrationRepository", () => {
     expect(pinned).toMatchObject({
       requested_provider: "anthropic",
       requested_binding_digest: sha256Digest(SEEDED_BINDING),
-      skill_digest: skillDigestV2(identity)
+      skill_digest: skillDigestOf(identity)
     });
     expect(await repository.createRun(OWNER, input)).toEqual(created);
     await expect(repository.createRun(OWNER, { ...input, positiveClass: "fail" }))
@@ -392,9 +392,9 @@ run("PgBinaryCalibrationRepository", () => {
       trials: [{ outcomes: { planned: 2, classified: 1, errored: 1, providerCalls: 2 } }]
     });
     const copy = await repository.getArtifact({ projectId: PROJECT_ID }, minted.artifact.artifactId);
-    expect(parseCanonicalBinaryCalibrationV2ArtifactBytes(copy.canonicalBytes)).toEqual(minted.artifact);
+    expect(parseCanonicalBinaryCalibrationArtifactBytes(copy.canonicalBytes)).toEqual(minted.artifact);
     expect(minted.artifact.evaluator).toMatchObject({
-      identity: { basis: "rubrist/evaluator-identity/v2", executionBinding: SEEDED_BINDING },
+      identity: { basis: "rubrist/evaluator-identity/v1", executionBinding: SEEDED_BINDING },
       requestedBindingDigest: sha256Digest(SEEDED_BINDING)
     });
     const privateBytes = (await pool.query(
@@ -402,7 +402,7 @@ run("PgBinaryCalibrationRepository", () => {
       [runProjection.runId]
     )).rows[0].canonical_bytes as Buffer;
     const ledger = JSON.parse(privateBytes.toString("utf8"));
-    expect(verifyBinaryCalibrationV2PrivateLedgerForArtifact(ledger, minted.artifact).ledger.records)
+    expect(verifyBinaryCalibrationPrivateLedgerForArtifact(ledger, minted.artifact).ledger.records)
       .toEqual(expect.arrayContaining([expect.objectContaining({ result: { state: "failure", failureKind: "outcome_unknown" } })]));
     expect(await repository.getArtifactStatus({ projectId: PROJECT_ID }, minted.artifact.artifactId))
       .toMatchObject({ currentAdmissibility: "admissible", reasons: [] });

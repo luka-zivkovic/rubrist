@@ -7,7 +7,7 @@ import { PgBinaryCalibrationRepository } from "../src/binary-calibration/reposit
 import { processBinaryCalibrationRun } from "../src/binary-calibration/worker.js";
 import { saveResolutionRecord } from "../src/evaluator-lifecycle/resolution.pg.js";
 import { PgGovernedReviewRepository, type GovernedReviewActor } from "../src/governed-review/index.js";
-import { verifyBinaryCalibrationV2PrivateLedgerForArtifact } from "../src/lib/binary-calibration-v2.js";
+import { verifyBinaryCalibrationPrivateLedgerForArtifact } from "../src/lib/binary-calibration.js";
 import { PgRepository } from "../src/repository.pg.js";
 import { MOCK_BINDING, bindingInput, resolvedRecordFor } from "./fixtures/execution-binding.js";
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
@@ -149,7 +149,7 @@ runPgSmoke("typed-question sealed calibration", () => {
       const ledger = JSON.parse(((await pool.query(
         `select canonical_bytes from binary_calibration_private_ledgers where run_id=$1`, [created.runId]
       )).rows[0].canonical_bytes as Buffer).toString("utf8"));
-      const records = verifyBinaryCalibrationV2PrivateLedgerForArtifact(ledger, minted!.artifact).ledger.records;
+      const records = verifyBinaryCalibrationPrivateLedgerForArtifact(ledger, minted!.artifact).ledger.records;
       expect(records.map((record: { result: unknown }) => record.result)).toEqual(expect.arrayContaining([
         { state: "outcome", outcome: "pass" }, { state: "outcome", outcome: "fail" }
       ]));

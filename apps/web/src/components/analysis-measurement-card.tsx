@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { AnalysisWorkflowMeasurementReport, BinaryCalibrationV2WilsonRate } from "@rubrist/shared";
+import type { AnalysisWorkflowMeasurementReport, BinaryCalibrationWilsonRate } from "@rubrist/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchAnalysisWorkflowMeasurement } from "@/lib/analysis-measurement-api";
 
@@ -168,7 +168,7 @@ function duration(value: NonNullable<AnalysisWorkflowMeasurementReport["evaluato
   return value.state === "missing" ? "missing" : `${value.durationMilliseconds} ms`;
 }
 
-function rate(value: BinaryCalibrationV2WilsonRate): string {
+function rate(value: BinaryCalibrationWilsonRate): string {
   return value.state === "undefined"
     ? "undefined (zero denominator)"
     : `${value.numerator}/${value.denominator} · Wilson95 ${value.interval.lowerBinary64}–${value.interval.upperBinary64}`;

@@ -51,7 +51,7 @@ export function containsLoneUtf16Surrogate(value: unknown): boolean {
 
 // A strict object parse assigns an own `__proto__` key as the prototype
 // instead of reporting it, so a parsed evidence document would silently
-// differ from its raw bytes. v2 evidence contracts refuse the key anywhere.
+// differ from its raw bytes. Evidence contracts refuse the key anywhere.
 // Internal to sibling shared modules; omitted from the package root. Both
 // helpers are iterative, so hostile nesting fails validation instead of the stack.
 export function containsOwnProtoKey(value: unknown): boolean {
@@ -65,11 +65,11 @@ export function containsOwnProtoKey(value: unknown): boolean {
   return false;
 }
 
-/** v2 evidence documents nest no deeper than this; the root is depth 0. */
-export const V2_EVIDENCE_MAX_JSON_DEPTH = 64;
+/** Evidence documents nest no deeper than this; the root is depth 0. */
+export const EVIDENCE_MAX_JSON_DEPTH = 64;
 
 /** Whether any array or object sits at a depth greater than `maxDepth`, counting the root as 0. */
-export function exceedsJsonDepth(value: unknown, maxDepth: number = V2_EVIDENCE_MAX_JSON_DEPTH): boolean {
+export function exceedsJsonDepth(value: unknown, maxDepth: number = EVIDENCE_MAX_JSON_DEPTH): boolean {
   const stack: Array<{ entry: unknown; depth: number }> = [{ entry: value, depth: 0 }];
   while (stack.length > 0) {
     const { entry, depth } = stack.pop()!;
@@ -169,12 +169,12 @@ export function isTypedQuestionOutputSchema(value: unknown): boolean {
 }
 
 /**
- * How deep a saved output schema may nest: skill-format/v2 carries it four
+ * How deep a saved output schema may nest: skill-format/v1 carries it four
  * levels below the document root (evaluator.identity.definition.outputSchema).
  */
-const OUTPUT_SCHEMA_MAX_JSON_DEPTH = V2_EVIDENCE_MAX_JSON_DEPTH - 4;
+const OUTPUT_SCHEMA_MAX_JSON_DEPTH = EVIDENCE_MAX_JSON_DEPTH - 4;
 
-// A version's output schema follows skill-format/v2's rules at save, so every
+// A version's output schema follows skill-format/v1's rules at save, so every
 // saved version can be exported (ADR-0014 section 7). The raw input is checked
 // first, because a record parse drops an own `__proto__` key without a word.
 export const JsonSchemaSchema = z.unknown().superRefine((raw, ctx) => {

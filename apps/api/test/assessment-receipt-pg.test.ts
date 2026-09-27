@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { runMigrations } from "@rubrist/db";
-import { AssessmentReceiptV2Schema, MinimumVerdictOutputSchema, type AssessmentReceiptV2 } from "@rubrist/shared";
+import { AssessmentReceiptSchema, MinimumVerdictOutputSchema, type AssessmentReceipt } from "@rubrist/shared";
 import { PgRepository } from "../src/repository.pg.js";
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { canonicalJson, contentDigest } from "../src/lib/canonical-json.js";
-import { evidenceDigestForReceiptV2, receiptArtifactDigest } from "../src/lib/assessment-receipt-v2.js";
+import { evidenceDigestForReceipt, receiptArtifactDigest } from "../src/lib/assessment-receipt.js";
 import { MOCK_BINDING } from "./fixtures/execution-binding.js";
 
 const databaseUrl = process.env.PG_SMOKE_DATABASE_URL;
@@ -73,15 +73,15 @@ async function verdict(pool: Pool, caseId: string, id: string): Promise<void> {
 }
 
 /** The receipt changed and signed again, as a consumer or a correction would. */
-function resigned(receipt: AssessmentReceiptV2, change: (draft: AssessmentReceiptV2) => void): AssessmentReceiptV2 {
+function resigned(receipt: AssessmentReceipt, change: (draft: AssessmentReceipt) => void): AssessmentReceipt {
   const draft = structuredClone(receipt);
   change(draft);
   const { evidenceDigest: _old, ...unsigned } = draft;
-  return AssessmentReceiptV2Schema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceiptV2(unsigned) });
+  return AssessmentReceiptSchema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceipt(unsigned) });
 }
 
 /** Its single pass outcome restated as a fail, with consistent counters. */
-function failedInstead(draft: AssessmentReceiptV2): void {
+function failedInstead(draft: AssessmentReceipt): void {
   draft.items[0]!.result = { state: "outcome", outcome: "fail" };
   draft.run.passItems = 0;
   draft.run.failItems = 1;
@@ -220,8 +220,8 @@ run("immutable assessment receipt PostgreSQL storage", () => {
       const artifacts = await repo.listAssessmentReceiptArtifacts("proj_receipt", created.id);
       expect(artifacts).toHaveLength(1);
       expect(artifacts[0]).toMatchObject({ sourceKind: "terminal_mint", artifactRevision: 1 });
-      const receipt = AssessmentReceiptV2Schema.parse(JSON.parse(artifacts[0]!.canonicalBytes.toString("utf8")));
-      expect(artifacts[0]).toMatchObject({ id: `rart_${created.id}_v2_r1`, contractVersion: 2 });
+      const receipt = AssessmentReceiptSchema.parse(JSON.parse(artifacts[0]!.canonicalBytes.toString("utf8")));
+      expect(artifacts[0]).toMatchObject({ id: `rart_${created.id}_v1_r1`, contractVersion: 1 });
       expect(receipt).toMatchObject({
         status: "incomplete",
         run: { status: "failed", passItems: 0, failedItems: 1 },
@@ -263,7 +263,7 @@ run("immutable assessment receipt PostgreSQL storage", () => {
         consumerCanonicalBytes: first!.canonicalBytes
       });
       expect(match.comparisonStatus).toBe("match");
-      const rootReceipt = AssessmentReceiptV2Schema.parse(JSON.parse(first!.canonicalBytes.toString("utf8")));
+      const rootReceipt = AssessmentReceiptSchema.parse(JSON.parse(first!.canonicalBytes.toString("utf8")));
       expect(rootReceipt.items[0]).toMatchObject({ verdictId: "verdict_historical", observed: { requestId: "req_verdict_historical" } });
       const divergent = resigned(rootReceipt, failedInstead);
       const divergence = await repo.compareAssessmentReceiptCopy({
@@ -287,7 +287,7 @@ run("immutable assessment receipt PostgreSQL storage", () => {
         receipt: correctionReceipt,
         reason: "Historical correction test."
       });
-      expect(correction).toMatchObject({ id: "rart_evr_historical_v2_r2", contractVersion: 2, artifactRevision: 2, predecessorArtifactId: first!.id });
+      expect(correction).toMatchObject({ id: "rart_evr_historical_v1_r2", contractVersion: 1, artifactRevision: 2, predecessorArtifactId: first!.id });
       expect((await repo.getOrFreezeAssessmentReceipt("proj_receipt", "evr_historical"))?.id).toBe(first!.id);
 
       await repo.deleteProject("proj_receipt", { confirmProjectName: "Receipt Project" });
@@ -326,7 +326,7 @@ run("immutable assessment receipt PostgreSQL storage", () => {
          (id, project_id, eval_run_id, receipt_id, contract_version, artifact_revision,
           canonical_bytes, artifact_digest, evidence_digest, source_snapshot_digest,
           source_kind, predecessor_artifact_id, correction_reason)
-         values ('rart_skipped_revision','proj_receipt',$1,'receipt_skipped_revision',2,3,$2,$3,$4,$3,
+         values ('rart_skipped_revision','proj_receipt',$1,'receipt_skipped_revision',1,3,$2,$3,$4,$3,
                  'correction',$5,'invalid skipped revision')`,
         [created.id, root!.canonicalBytes, root!.artifactDigest, root!.evidenceDigest, root!.id]
       )).rejects.toMatchObject({ code: "23514" });
@@ -336,7 +336,7 @@ run("immutable assessment receipt PostgreSQL storage", () => {
          (id, project_id, eval_run_id, receipt_id, contract_version, artifact_revision,
           canonical_bytes, artifact_digest, evidence_digest, source_snapshot_digest,
           source_kind, predecessor_artifact_id, correction_reason)
-         values ('rart_tampered','proj_receipt',$1,'receipt_tampered',2,2,$2,$3,$4,$3,
+         values ('rart_tampered','proj_receipt',$1,'receipt_tampered',1,2,$2,$3,$4,$3,
                  'correction',$5,'tamper fixture')`,
         [
           created.id,
@@ -378,7 +378,7 @@ run("immutable assessment receipt PostgreSQL storage", () => {
         consumerCanonicalBytes: root!.canonicalBytes
       })).rejects.toThrow(/consumer receipt bytes failed validation/);
 
-      const rootReceipt = AssessmentReceiptV2Schema.parse(JSON.parse(root!.canonicalBytes.toString("utf8")));
+      const rootReceipt = AssessmentReceiptSchema.parse(JSON.parse(root!.canonicalBytes.toString("utf8")));
       const divergentReceipt = resigned(rootReceipt, failedInstead);
       const divergentBytes = Buffer.from(canonicalJson(divergentReceipt), "utf8");
       const divergentDigest = receiptArtifactDigest(divergentBytes);

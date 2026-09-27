@@ -4,10 +4,10 @@ import {
   documentedReasoningDefault
 } from "@rubrist/shared";
 import { describe, expect, it } from "vitest";
-import { BINDINGS } from "./fixtures/evaluator-v2-vectors.js";
+import { BINDINGS } from "./fixtures/evaluator-vectors.js";
 
 describe("seeded default execution binding", () => {
-  it("is the binding ADR-0014 section 2 states, which the v2 vectors pin", () => {
+  it("is the binding ADR-0014 section 2 states, which the contract vectors pin", () => {
     expect(ExecutionBindingSchema.parse(SEEDED_DEFAULT_EXECUTION_BINDING)).toEqual(SEEDED_DEFAULT_EXECUTION_BINDING);
     expect(SEEDED_DEFAULT_EXECUTION_BINDING).toEqual(BINDINGS.sonnet);
   });

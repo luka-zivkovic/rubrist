@@ -176,7 +176,7 @@ feedback under accepted
 production-ingest capability, and owners importing a ledger, append
 `rubrist/production-decision-record/v1` records to an append-only project store
 that rejects conflicting decisions and future-dated records. Members build
-`rubrist/production-calibration/v2` reports for boolean, choice, and score
+`rubrist/production-calibration/v1` reports for boolean, choice, and score
 questions over a stated window of stored records (either bound may be open)
 and save them as digest-bound snapshots; a compute-only preview of a pasted
 ledger remains. A scheduled sweep deletes records by Rubrist's receive time
@@ -238,6 +238,6 @@ binary-calibration artifact. Rubrist currently executes and persists one sealed
 binary trial, exposes owner-only artifact and admissibility reads, and records
 later revocation without rewriting historical bytes. Dailies currently
 verifies explicitly configured local artifacts and applies customer policy
-through its config v6, policy v2, report v6, runner, and CLI; it performs no
-network or latest-artifact lookup. This does not reopen product boundaries or
-change receipt v1 candidate provenance.
+through its suite configuration, release policy, suite report, runner, and
+CLI; it performs no network or latest-artifact lookup. This does not reopen
+product boundaries or change receipt v1 candidate provenance.

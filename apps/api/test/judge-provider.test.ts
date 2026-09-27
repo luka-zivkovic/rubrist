@@ -48,7 +48,7 @@ describe("judge provider registry", () => {
     expect([custom.name, custom.modelName]).toEqual(["custom", "local-judge"]);
   });
 
-  it("judges through the v2 executor, sending exactly the binding to the endpoint it names", async () => {
+  it("judges through the executor, sending exactly the binding to the endpoint it names", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     vi.stubGlobal("fetch", async (url: string, init: { body: string }) => {
       requests.push({ url, body: JSON.parse(init.body) as Record<string, unknown> });

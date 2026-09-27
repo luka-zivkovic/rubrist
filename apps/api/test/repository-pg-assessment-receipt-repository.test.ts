@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AssessmentReceiptV2Schema,
-  type AssessmentReceiptV2
+  AssessmentReceiptSchema,
+  type AssessmentReceipt
 } from "@rubrist/shared";
 import type { Pool, PoolClient } from "pg";
 import ts from "typescript";
@@ -15,10 +15,10 @@ import {
   vi
 } from "vitest";
 import {
-  canonicalReceiptV2Bytes,
-  evidenceDigestForReceiptV2,
+  canonicalReceiptBytes,
+  evidenceDigestForReceipt,
   receiptArtifactDigest
-} from "../src/lib/assessment-receipt-v2.js";
+} from "../src/lib/assessment-receipt.js";
 import type { AssessmentReceiptArtifact } from "../src/repository.js";
 
 const receiptCommandMocks = vi.hoisted(() => ({
@@ -51,11 +51,11 @@ const ASSESSMENT_RECEIPT_REPOSITORY_PATH = path.join(
   "repository.pg/assessment-receipt-repository.ts"
 );
 const fixture = JSON.parse(fs.readFileSync(
-  fileURLToPath(new URL("../../../contracts/fixtures/assessment-receipt-v2.complete.json", import.meta.url)),
+  fileURLToPath(new URL("../../../contracts/fixtures/assessment-receipt-v1.complete.json", import.meta.url)),
   "utf8"
 )) as { receipt: unknown };
-const ROOT_RECEIPT = AssessmentReceiptV2Schema.parse(fixture.receipt);
-const ROOT_BYTES = canonicalReceiptV2Bytes(ROOT_RECEIPT);
+const ROOT_RECEIPT = AssessmentReceiptSchema.parse(fixture.receipt);
+const ROOT_BYTES = canonicalReceiptBytes(ROOT_RECEIPT);
 
 function sourceFile(filePath: string): ts.SourceFile {
   return ts.createSourceFile(
@@ -202,10 +202,10 @@ function assessmentReceiptRepositoryAnalysis(program: ts.Program) {
   };
 }
 
-function rootArtifact(receipt: AssessmentReceiptV2 = ROOT_RECEIPT): AssessmentReceiptArtifact {
-  const canonicalBytes = canonicalReceiptV2Bytes(receipt);
+function rootArtifact(receipt: AssessmentReceipt = ROOT_RECEIPT): AssessmentReceiptArtifact {
+  const canonicalBytes = canonicalReceiptBytes(receipt);
   return {
-    id: "rart-contract-v2-run-1-v2-r1",
+    id: "rart-contract-run-1-v1-r1",
     projectId: receipt.projectId,
     evalRunId: receipt.evalRunId,
     receiptId: receipt.receiptId,
@@ -244,14 +244,14 @@ function artifactRow(artifact: AssessmentReceiptArtifact): Record<string, unknow
 }
 
 /** The fixture's first item, a pass, corrected to a fail, with consistent counters. */
-function correctedReceipt(root: AssessmentReceiptV2): AssessmentReceiptV2 {
+function correctedReceipt(root: AssessmentReceipt): AssessmentReceipt {
   const draft = structuredClone(root);
   draft.receiptId = `${root.receiptId}-correction-2`;
   draft.items[0]!.result = { state: "outcome", outcome: "fail" };
   draft.run.passItems -= 1;
   draft.run.failItems += 1;
   const { evidenceDigest: _old, ...unsigned } = draft;
-  return AssessmentReceiptV2Schema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceiptV2(unsigned) });
+  return AssessmentReceiptSchema.parse({ ...unsigned, evidenceDigest: evidenceDigestForReceipt(unsigned) });
 }
 
 beforeEach(() => {
@@ -371,7 +371,7 @@ describe("PostgreSQL assessment-receipt repository slice", () => {
     const successorReceipt = correctedReceipt(ROOT_RECEIPT);
     const successor = {
       ...rootArtifact(successorReceipt),
-      id: "rart-contract-v2-run-1-v2-r2",
+      id: "rart-contract-run-1-v1-r2",
       artifactRevision: 2,
       sourceKind: "correction" as const,
       predecessorArtifactId: root.id,
@@ -529,10 +529,10 @@ describe("PostgreSQL assessment-receipt repository slice", () => {
   it("appends a canonical correction after the exact predecessor and commits once", async () => {
     const root = rootArtifact();
     const receipt = correctedReceipt(ROOT_RECEIPT);
-    const canonicalBytes = canonicalReceiptV2Bytes(receipt);
+    const canonicalBytes = canonicalReceiptBytes(receipt);
     const correction: AssessmentReceiptArtifact = {
       ...rootArtifact(receipt),
-      id: "rart_contract-v2-run-1_v2_r2",
+      id: "rart_contract-run-1_v1_r2",
       artifactRevision: 2,
       sourceKind: "correction",
       predecessorArtifactId: root.id,
@@ -580,9 +580,9 @@ describe("PostgreSQL assessment-receipt repository slice", () => {
       "release"
     ]);
     expect(queries[0]?.values).toEqual([root.projectId, receipt.receiptId]);
-    expect(queries[1]?.values).toEqual([root.projectId, root.evalRunId, 2]);
+    expect(queries[1]?.values).toEqual([root.projectId, root.evalRunId, 1]);
     expect(queries[2]?.values).toEqual([
-      "rart_contract-v2-run-1_v2_r2",
+      "rart_contract-run-1_v1_r2",
       root.projectId,
       root.evalRunId,
       receipt.receiptId,
@@ -593,7 +593,7 @@ describe("PostgreSQL assessment-receipt repository slice", () => {
       root.id,
       "Correct first label",
       "user-1",
-      2
+      1
     ]);
 
     const replayEvents: string[] = [];

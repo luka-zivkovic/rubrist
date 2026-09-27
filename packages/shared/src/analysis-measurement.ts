@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BinaryCalibrationV2WilsonRateSchema } from "./binary-calibration-v2.js";
+import { BinaryCalibrationWilsonRateSchema } from "./binary-calibration.js";
 import {
   AnalysisStudyStateSchema,
   AnalysisTaxonomyCoverageSchema
@@ -102,9 +102,9 @@ export const AnalysisCalibrationTrialMeasurementSchema = z.object({
   falsePass: AnalysisMeasurementCountSchema,
   falseFail: AnalysisMeasurementCountSchema,
   classifiedCoverage: z.object({
-    overall: BinaryCalibrationV2WilsonRateSchema,
-    truthPass: BinaryCalibrationV2WilsonRateSchema,
-    truthFail: BinaryCalibrationV2WilsonRateSchema
+    overall: BinaryCalibrationWilsonRateSchema,
+    truthPass: BinaryCalibrationWilsonRateSchema,
+    truthFail: BinaryCalibrationWilsonRateSchema
   }).strict()
 }).strict().superRefine((value, context) => {
   if (value.classified + value.abstained + value.errored + value.notAttempted !== value.planned ||

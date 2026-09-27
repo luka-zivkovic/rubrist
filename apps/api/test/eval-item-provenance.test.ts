@@ -15,7 +15,7 @@ import {
 import { evaluatorScoreFor } from "../src/workers/judge.js";
 import { MOCK_BINDING, runtimeVersion } from "./fixtures/execution-binding.js";
 
-// Per-item provenance for evidence v2 (ADR-0014 section 6): an evaluator's
+// Per-item provenance for evidence (ADR-0014 section 6): an evaluator's
 // verdict records what its call observed and its own score, and a failed item
 // records its failure kind or that it was never attempted.
 

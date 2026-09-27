@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { runMigrations } from "@rubrist/db";
-import { TypedQuestionOutputSchema, type SkillFormatV2 } from "@rubrist/shared";
-import { endpointBaseUrlDigest, evaluatorIdentityFor, skillDigestV2 } from "../src/lib/evaluator-identity.js";
+import { TypedQuestionOutputSchema, type SkillFormat } from "@rubrist/shared";
+import { endpointBaseUrlDigest, evaluatorIdentityFor, skillDigestOf } from "../src/lib/evaluator-identity.js";
 import { PgRepository } from "../src/repository.pg.js";
 import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { runPgSmoke, seedSkill } from "./pg-smoke-support.js";
@@ -14,9 +14,9 @@ import { MOCK_BINDING, SEEDED_BINDING } from "./fixtures/execution-binding.js";
 // holds each version to exactly one definition kind (section 5).
 
 const TYPED_FIXTURE = JSON.parse(readFileSync(
-  new URL("../../../contracts/fixtures/skill-format-v2.typed-question.json", import.meta.url),
+  new URL("../../../contracts/fixtures/skill-format-v1.typed-question.json", import.meta.url),
   "utf8"
-)) as SkillFormatV2;
+)) as SkillFormat;
 
 runPgSmoke("execution binding storage", () => {
   it("keeps a custom endpoint URL beside its binding only while the URL matches the digest", async () => {
@@ -96,7 +96,7 @@ runPgSmoke("execution binding storage", () => {
       });
       // The saved version names the portable vector's evaluator exactly.
       expect(evaluatorIdentityFor(stored!)).toEqual(identity);
-      expect(skillDigestV2(evaluatorIdentityFor(stored!))).toBe(TYPED_FIXTURE.digests.skillDigest);
+      expect(skillDigestOf(evaluatorIdentityFor(stored!))).toBe(TYPED_FIXTURE.digests.skillDigest);
       // The contract is compared as JSON, so its key order doesn't matter.
       const { properties, ...rest } = TypedQuestionOutputSchema;
       await store({ ...typed, outputSchema: { properties, ...rest } });

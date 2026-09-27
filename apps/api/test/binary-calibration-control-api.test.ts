@@ -32,7 +32,7 @@ const API_KEY_HEADERS = {
 const CREATED_AT = "2026-08-23T00:00:00.000Z";
 
 const fixtureBytes = readFileSync(new URL(
-  "../../../contracts/fixtures/binary-calibration-v2.complete.json",
+  "../../../contracts/fixtures/binary-calibration-v1.complete.json",
   import.meta.url
 ));
 const fixtureArtifact = JSON.parse(fixtureBytes.toString("utf8")) as {
@@ -58,7 +58,7 @@ function runProjection(): BinaryCalibrationRunProjection {
     plannedObservations: 3,
     accountedObservations: 3,
     artifactId: fixtureArtifact.artifactId,
-    artifactDigest: "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7",
+    artifactDigest: "sha256:58bacf44a44f9beb990856b879be5cc0cb4e6063aefafb6a05abc4f79da2d14b",
     evidenceDigest: fixtureArtifact.evidenceDigest,
     createdAt: CREATED_AT,
     startedAt: CREATED_AT,
@@ -100,7 +100,7 @@ class FakeCalibrationRepository implements BinaryCalibrationControlRepository {
       artifactId,
       calibrationRunId: fixtureArtifact.calibrationRunId,
       canonicalBytes: fixtureBytes,
-      artifactDigest: "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7",
+      artifactDigest: "sha256:58bacf44a44f9beb990856b879be5cc0cb4e6063aefafb6a05abc4f79da2d14b",
       evidenceDigest: fixtureArtifact.evidenceDigest,
       createdAt: CREATED_AT,
       ...this.artifactOverride
@@ -281,7 +281,7 @@ describe("binary calibration control API", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(response.headers.get("x-rubrist-artifact-digest")).toBe(
-      "sha256:32a29cd8debe0d20a67c23d23e4586ffad39a1f4df547d76843637c20cda3cd7"
+      "sha256:58bacf44a44f9beb990856b879be5cc0cb4e6063aefafb6a05abc4f79da2d14b"
     );
     expect(response.headers.get("x-rubrist-evidence-digest")).toBe(fixtureArtifact.evidenceDigest);
     expect(response.headers.get("x-rubrist-canonicalization")).toBe("rubrist-canonical-json/v1");
