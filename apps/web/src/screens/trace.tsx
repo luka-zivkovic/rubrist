@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FileCheck2, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { fetchCaseDetail, fetchTraceTests } from "@/lib/api";
 import { intentForVerdict, type TraceTestIntent } from "@/lib/trace-test-flow";
 import { dismissTraceTestPrompt, traceTestPromptDismissed } from "@/lib/trace-test-pilot";
 import { useDashboard } from "@/lib/dashboard-context";
-import { dashboardSkillVersionId } from "@/lib/criterion-scope";
+import { dashboardCriterionVersionId } from "@/lib/criterion-scope";
 import { type ExceptionDetail, type TraceTestSummary } from "@rubrist/shared";
 
 interface TraceScreenProps {
@@ -303,10 +303,20 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
 export function CaseScreen() {
   const location = useLocation();
   const { dashboard } = useDashboard();
-  const skillVersionId = dashboardSkillVersionId(dashboard);
+  const [searchParams] = useSearchParams();
+  // Explicit evaluator links remain exact. Ordinary case links read recorded
+  // evidence for the selected definition, even after its evaluator changes.
+  const skillVersionId = searchParams.get("skillVersionId") || undefined;
+  const criterionVersionId = searchParams.get("criterionVersionId")
+    || (skillVersionId ? undefined : dashboardCriterionVersionId(dashboard) ?? undefined);
   const fetcher = useCallback(
-    (caseId: string) => fetchCaseDetail(caseId, skillVersionId ?? undefined),
-    [skillVersionId],
+    (caseId: string) => {
+      if (!skillVersionId && !criterionVersionId) {
+        return Promise.reject(new Error("Select a criterion to view this case's recorded evaluation."));
+      }
+      return fetchCaseDetail(caseId, skillVersionId, criterionVersionId);
+    },
+    [skillVersionId, criterionVersionId],
   );
   const state = (location.state ?? {}) as { backTo?: string; backLabel?: string };
   return (

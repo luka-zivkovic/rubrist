@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, fetchSkillVersionRegression, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
+import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchCaseDetail, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, fetchSkillVersionRegression, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
 
 const createdKey = {
   id: "apikey_first",
@@ -14,6 +14,16 @@ const createdKey = {
 };
 
 describe("web API helpers", () => {
+  it("sends the exact criterion selector for a historical case read", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ error: "No recorded result" }, 404));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchCaseDetail("case_old", undefined, "criterionv_frozen")).rejects.toThrow("No recorded result");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/cases/case_old?criterionVersionId=criterionv_frozen",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   it("creates a verified native Ironside connection", async () => {
     const integration = {
       id: "int_ironside",

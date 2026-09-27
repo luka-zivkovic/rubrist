@@ -47,8 +47,11 @@ export function ReviewScreen() {
   const [decisions, setDecisions] = useState<Record<string, TraceDecisionKind>>({});
 
   const items = useMemo(
-    () => caseIds.map((id) => ({ key: id, caseId: id, completed: Boolean(decisions[id]) })),
-    [caseIds, decisions]
+    () => caseIds.map((id) => {
+      const criterionVersionId = dashboard?.exceptions.find((exception) => exception.id === id)?.criterionVersionId;
+      return { key: id, caseId: id, ...(criterionVersionId ? { criterionVersionId } : {}), completed: Boolean(decisions[id]) };
+    }),
+    [caseIds, decisions, dashboard]
   );
 
   if (loading && !dashboard && caseIds.length === 0) {
