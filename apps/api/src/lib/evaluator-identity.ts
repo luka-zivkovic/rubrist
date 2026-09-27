@@ -108,7 +108,7 @@ export function skillDigestOf(identity: EvaluatorIdentity): string {
 
 /**
  * The output-contract digest calibration and suite manifests bind beside
- * skillDigest. For a prompted definition it is v1's formula over the output
+ * skillDigest. For a prompted definition it is a digest of the output
  * schema, verdict kind, scalar range, and categorical scores; a typed-question
  * definition's output contract is its question type, polarity, and the
  * absence of a rationale (ADR-0014 section 5).

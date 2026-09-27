@@ -19,11 +19,10 @@ import { canonicalJson } from "./canonical-json.js";
 import { skillDigestFromInput } from "./evaluator-identity.js";
 
 // Binary calibration (Rubrist ADR-0014 section 7;
-// contracts/binary-calibration-v1.md). It keeps every v1 rule except what
-// ADR-0014 names: the evaluator is the execution binding and definition
-// digest, failures use the shared taxonomy, never-attempted items are
-// `notAttempted`, ledger records carry the shared item result, and provider
-// groups record the OpenRouter upstream.
+// contracts/binary-calibration-v1.md): the evaluator is the execution binding
+// and definition digest, failures use the shared taxonomy, never-attempted
+// items are `notAttempted`, ledger records carry the shared item result, and
+// provider groups record the OpenRouter upstream.
 
 // Public contract constants and artifact-construction inputs.
 export const BINARY_CALIBRATION_CONTRACT = "rubrist/binary-calibration/v1" as const;

@@ -59,7 +59,7 @@ interface ConformanceCorpus {
 const contractRoot = new URL("../../../contracts/", import.meta.url);
 const pinnedFileDigests = {
   schema: "c427a1f142a8f10efacdf8ccb061ee7e2772d3ce01d098c6598cbbcdf6b26a8e",
-  specification: "ec1eba56078161fbeba98788de517241f82b24cf419ca33178b5c63a34dea695",
+  specification: "e746ede31c475111f2097f44260d988ccdeb85326184ff4dfd26f3923ab7d876",
   completeFixture: "58bacf44a44f9beb990856b879be5cc0cb4e6063aefafb6a05abc4f79da2d14b",
   repeatedFixture: "d44084f8777901fd3c87519848d1dd8e20cbb2a4d32e903bc751a40ab5c56b8d",
   incompleteFixture: "93eef8f7e35e66ed7a2f426064fcd14bd11ad72a580f57fe156e7e71dbb31513",
@@ -348,7 +348,7 @@ describe("binary calibration artifact contract (ADR-0014 section 7)", () => {
     expect(new Set(cases.map(([name]) => fixture(name).evaluator.skillVersionId)).size).toBe(cases.length);
   });
 
-  it("keeps v1's output-contract formula for prompted definitions and defines one for typed questions", () => {
+  it("digests a prompted definition's output schema and verdict shape, and a typed question's type and polarity", () => {
     const prompted = DEFINITIONS.prompted;
     expect(evaluatorOutputContractDigest(prompted)).toBe(sha256Digest({
       outputSchema: prompted.outputSchema,

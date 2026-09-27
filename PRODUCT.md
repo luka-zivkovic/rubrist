@@ -239,6 +239,5 @@ binary trial, exposes owner-only artifact and admissibility reads, and records
 later revocation without rewriting historical bytes. Dailies currently
 verifies explicitly configured local artifacts and applies customer policy
 through its suite configuration, release policy, suite report, runner, and
-CLI; it performs no
-network or latest-artifact lookup. This does not reopen product boundaries or
-change receipt v1 candidate provenance.
+CLI; it performs no network or latest-artifact lookup. This does not reopen
+product boundaries or change receipt v1 candidate provenance.

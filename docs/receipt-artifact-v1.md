@@ -4,8 +4,7 @@ Status: **accepted Batch 1A storage contract**
 
 The receipt body is the closed
 [`rubrist/assessment-receipt/v1`](../contracts/assessment-receipt-v1.md) wire
-contract, which replaced receipt v1 in Batch 8D (Rubrist ADR-0014). This
-document specifies how Rubrist preserves and serves those exact bytes; it does
+contract (Rubrist ADR-0014). This document specifies how Rubrist preserves and serves those exact bytes; it does
 not add fields to the receipt.
 
 ## Stored artifact

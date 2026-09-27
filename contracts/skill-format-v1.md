@@ -22,8 +22,8 @@ care as the evaluator itself.
 - `evaluator.identity`: the evaluator identity of ADR-0014 section 1, with
   `basis` `rubrist/evaluator-identity/v1`, the full `definition`, and the
   `executionBinding`. Every setting in the binding is present, and `null`
-  means not sent. The definition and binding rules are the assessment receipt's and
-  ADR-0014 section 5's:
+  means not sent. The definition and binding rules are the assessment
+  receipt's and ADR-0014 section 5's:
   - a prompted definition holds the rubric, prompt, verdict kind, output
     schema, and, exactly for its verdict kind, an ascending scalar range or
     non-empty categorical scores in `[0,1]`;
