@@ -9,6 +9,7 @@ import {
 } from "../repository.js";
 import { LangSmithClient, type LangSmithFeedbackWriter } from "../lib/langsmith.js";
 import { LangfuseClient } from "../lib/langfuse.js";
+import { PROVISIONAL_FEEDBACK_HOLD } from "../lib/provisional-feedback.js";
 import { IronsideClient } from "../lib/ironside.js";
 
 export type FeedbackWriterFactory = (context: FeedbackSyncContext) => LangSmithFeedbackWriter;
@@ -34,6 +35,37 @@ export async function registerFeedbackSyncWorker(
       throw error;
     }
   });
+  // The durable blocked row is the outbox: leave it blocked until the worker
+  // delivers it. A crash or failed queue send cannot lose the sign-off resume.
+  let resuming = false;
+  const resume = async () => {
+    if (resuming) return;
+    resuming = true;
+    try { await resumeSignedOffFeedback(repository, queue); }
+    catch (error) { console.error("feedback.sync sign-off recovery failed:", error); }
+    finally { resuming = false; }
+  };
+  await resume();
+  const timer = setInterval(() => { void resume(); }, 30_000);
+  timer.unref();
+}
+
+export async function resumeSignedOffFeedback(repository: RubristRepository, queue: Queue): Promise<number> {
+  const jobs = await repository.listSignedOffFeedbackSyncJobs(100);
+  let queued = 0;
+  for (const job of jobs) {
+    try {
+      const id = await queue.send("feedback.sync", job, {
+        retryLimit: 5, retryBackoff: true,
+        singletonKey: `signoff:${job.feedbackSyncJobId}`, singletonSeconds: 30
+      });
+      if (id) queued++;
+    } catch (error) {
+      // Keep this and every other held row recoverable on the next tick.
+      console.error("feedback.sync sign-off dispatch failed:", error);
+    }
+  }
+  return queued;
 }
 
 export async function processFeedbackSyncJob(
@@ -43,7 +75,14 @@ export async function processFeedbackSyncJob(
 ): Promise<void> {
   const parsed = FeedbackSyncJobSchema.parse(job);
   const context = await repository.loadFeedbackSyncContext(parsed);
+  if (context.status === "synced") return;
   try {
+    const version = await repository.getSkillVersion(context.projectId, context.judgeRun.skillVersionId);
+    if (!version) throw new Error("Evaluator version unavailable for feedback delivery");
+    if (version.status === "draft" && version.approvedAt === null) {
+      await repository.markFeedbackSyncBlocked(parsed, new Error(PROVISIONAL_FEEDBACK_HOLD));
+      return;
+    }
     if (
       context.provider === "ironside" &&
       "revalidationRequired" in context.integration &&

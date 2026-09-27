@@ -1,3 +1,4 @@
+import { PROVISIONAL_FEEDBACK_HOLD } from "../lib/provisional-feedback.js";
 import { randomUUID } from "node:crypto";
 import {
   ExecutionBindingSchema,
@@ -215,7 +216,7 @@ export class PgJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort {
 
   async loadFeedbackSyncContext(job: FeedbackSyncJob): Promise<FeedbackSyncContext> {
     const result = await this.pool.query(
-      `select fsj.id as feedback_sync_job_id,
+      `select fsj.id as feedback_sync_job_id, fsj.status,
               fsj.project_id,
               fsj.provider,
               jr.id as judge_run_id,
@@ -273,6 +274,7 @@ export class PgJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort {
     )) throw new FeedbackSyncCredentialsMissingError(job.feedbackSyncJobId);
     return {
       id: String(row.feedback_sync_job_id),
+      status: toFeedbackSyncStatus(row.status),
       projectId: String(row.project_id),
       provider,
       sourceTraceId: String(row.source_trace_id),
@@ -423,6 +425,21 @@ export class PgJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort {
       projectId,
       feedbackSyncJobId: String(row.id)
     }));
+  }
+
+  async listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]> {
+    const result = await this.pool.query(
+      `select fsj.id, fsj.project_id
+       from feedback_sync_jobs fsj
+       join judge_runs jr on jr.id = fsj.judge_run_id and jr.project_id = fsj.project_id
+       join skill_versions sv on sv.id = jr.skill_version_id and sv.project_id = fsj.project_id
+       where fsj.status = 'blocked' and fsj.last_error = $1
+         and sv.approved_at is not null
+       order by fsj.created_at, fsj.id
+       limit $2`,
+      [PROVISIONAL_FEEDBACK_HOLD, limit]
+    );
+    return result.rows.map((row) => ({ projectId: String(row.project_id), feedbackSyncJobId: String(row.id) }));
   }
 
   private async refreshSyncBackCoverage(projectId: string): Promise<void> {

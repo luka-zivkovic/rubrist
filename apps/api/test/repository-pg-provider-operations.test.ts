@@ -50,7 +50,8 @@ const FEEDBACK_METHODS = [
   "markFeedbackSyncFailed",
   "markFeedbackSyncBlocked",
   "markFeedbackSyncPending",
-  "listBlockedIronsideFeedbackSyncJobs"
+  "listBlockedIronsideFeedbackSyncJobs",
+  "listSignedOffFeedbackSyncJobs"
 ] as const;
 
 const API_DIRECTORY = fileURLToPath(new URL("../", import.meta.url));

@@ -327,6 +327,7 @@ export interface JudgeFeedbackRepositoryPort {
   markFeedbackSyncBlocked(job: FeedbackSyncJob, error: unknown): Promise<void>;
   markFeedbackSyncPending(job: FeedbackSyncJob): Promise<void>;
   listBlockedIronsideFeedbackSyncJobs(projectId: string, integrationId: string): Promise<FeedbackSyncJob[]>;
+  listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]>;
 }
 
 export interface CaseEvidenceRepositoryPort {

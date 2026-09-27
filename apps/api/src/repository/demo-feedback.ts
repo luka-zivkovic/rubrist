@@ -1,3 +1,4 @@
+import { PROVISIONAL_FEEDBACK_HOLD } from "../lib/provisional-feedback.js";
 import { randomUUID } from "node:crypto";
 import type { Trace } from "@rubrist/audit/runtime";
 import { demoProject, demoSkill } from "@rubrist/db";
@@ -175,4 +176,15 @@ export class DemoJudgeFeedbackRepository implements JudgeFeedbackRepositoryPort 
       )
       .map((job) => ({ projectId: job.projectId, feedbackSyncJobId: job.id }));
   }
+  async listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]> {
+    const versions = this.store.skillVersions ?? [demoSkill.currentVersion];
+    return [...this.store.feedbackJobs.values()]
+      .filter((job) => job.status === "blocked" &&
+        this.store.feedbackJobLastError.get(job.id) === PROVISIONAL_FEEDBACK_HOLD &&
+        versions.some((version) => version.id === job.judgeRun.skillVersionId && version.approvedAt !== null))
+      .slice(0, limit)
+      .map((job) => ({ projectId: job.projectId, feedbackSyncJobId: job.id }));
+  }
+
+
 }

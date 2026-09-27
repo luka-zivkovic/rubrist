@@ -936,6 +936,10 @@ export class DemoRepository implements RubristRepository {
     return this.judgeFeedbackRepository.listBlockedIronsideFeedbackSyncJobs(projectId, integrationId);
   }
 
+  async listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]> {
+    return this.judgeFeedbackRepository.listSignedOffFeedbackSyncJobs(limit);
+  }
+
   async createSkillVersion(skillId: string, input: CreateSkillVersionInput, context: CreateSkillVersionContext): Promise<{
     version: SkillVersion;
     regressionRun: RegressionRunResult;

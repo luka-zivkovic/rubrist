@@ -31,6 +31,9 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
   const owner = dashboard.viewerRole === "owner";
 
   async function signOffAsIs() {
+    if (!window.confirm(
+      `Sign off Check v${version.version} as-is? Existing results held for this exact version will be sent to their connected tracing provider after sign-off (normally within 30 seconds while the worker is running). This does not re-run evaluation or calibrate the Check. Results from other unsigned versions stay held.`
+    )) return;
     setSigningOff(true);
     setSignOffError(null);
     try {
