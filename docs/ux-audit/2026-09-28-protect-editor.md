@@ -13,7 +13,10 @@ not accept ADR-0015 or complete O12/O14, which still depend on G1.
   Router navigation, reset, and template replacement ask before discarding
   changes. Reload/close uses the browser's unload warning. Failed saves retain
   the draft and protection; a successful recorded save clears it before
-  navigating to its exact version. Reverting every changed field is clean.
+  navigating to its exact version. The whole editor is disabled during the
+  create request so later typing cannot be discarded by an earlier receipt.
+  Returning from a recorded result to its clean editor does not ask to discard.
+  Reverting every changed field is clean.
 - Members get a read-only entry point on all six previously ungated surfaces.
   A direct editor URL explains that an owner must save and links to the saved
   evaluator. It does not offer editable fields, capability checks, or overrides.
@@ -24,7 +27,8 @@ not accept ADR-0015 or complete O12/O14, which still depend on G1.
 Rendered interaction tests exercise the editor state with a real data router:
 missing credentials, custom endpoint preservation, changed/empty/failed catalogs,
 explicit model selection, member access, canceled and confirmed discards,
-invalid draft reload warnings, reverting edits, and failed/successful saves.
+invalid draft reload warnings, reverting edits, failed/successful saves, a
+deferred save with controls disabled, and blocked-result return to editing.
 Provider calls are mocked; these tests do not consume model requests.
 
 Discard confirmation currently uses the native browser confirmation dialog.
