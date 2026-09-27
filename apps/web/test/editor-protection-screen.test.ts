@@ -85,7 +85,7 @@ const picker = vi.hoisted(() => ({
 vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({ useBindingPicker: () => picker }));
 vi.mock("../src/screens/skill-edit/regression.js", () => ({
   GovernedEvaluatorEditBoundary: () => createElement("section"),
-  RegressionResult: () => createElement("section"),
+  RegressionResult: ({ onBackToEdit }: { onBackToEdit: () => void }) => createElement("button", { onClick: onBackToEdit }, "Back to edit"),
   RegressionRunning: () => createElement("section")
 }));
 
@@ -151,6 +151,7 @@ beforeEach(() => {
   api.fetchLatestSkill.mockResolvedValue(skillWith(version("v1", "1.0.1")));
   api.fetchJudgeProviders.mockResolvedValue({ providers: [{ provider: "mock", available: true, label: "Mock" }] });
   api.fetchJudgeModels.mockResolvedValue({ models: [{ id: "mock", version: "mock" }] });
+  api.fetchDatasetRevisionMetadata.mockResolvedValue({ itemCount: 1 });
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); router.dispose(); vi.restoreAllMocks(); });
 afterAll(() => vi.unstubAllGlobals());
@@ -176,6 +177,55 @@ const change = async (field: string, value: unknown) => {
 };
 
 describe("editor protects author choices and work", () => {
+  it("freezes the entire draft while save is pending, including template actions", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor();
+    await change("setRubric", "Submitted guide");
+    let finishSave: (result: unknown) => void = () => undefined;
+    api.createSkillVersion.mockReturnValueOnce(new Promise((resolve) => { finishSave = resolve; }));
+    await click("Save");
+    expect(lastEditor.submitting).toBe(true);
+    expect(container.querySelector("textarea")?.matches(":disabled")).toBe(true);
+    const template = [...container.querySelectorAll("button")].find((button) => button.textContent === "Template")!;
+    expect(template.matches(":disabled")).toBe(true);
+    await act(async () => template.click());
+    expect(lastEditor.rubric).toBe("Submitted guide");
+    // App-level navigation still protects the unsaved request while it waits.
+    await act(async () => { await router.navigate("/skill/versions"); });
+    expect(router.state.location.pathname).toBe("/skill/edit");
+    expect(confirm).toHaveBeenCalledTimes(1);
+    confirm.mockClear();
+    const saved = version("v2", "1.0.2", { rubricMarkdown: "Submitted guide" });
+    const run = { status: "passed", compared: 0 };
+    api.fetchSkillVersions.mockResolvedValue([saved, version("v1", "1.0.1")]);
+    api.fetchSkillVersionRegression.mockResolvedValue(run);
+    await act(async () => finishSave({ state: "complete", version: saved, regressionRun: run, blocked: false }));
+    await settle();
+    expect(router.state.location.search).toContain("version=v2");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("returns from a recorded blocked result to editing without a false discard prompt", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor();
+    await change("setRubric", "Blocked guide");
+    const saved = version("v2", "1.0.2", { rubricMarkdown: "Blocked guide" });
+    const run = { status: "blocked", compared: 1 };
+    api.fetchLatestSkill.mockResolvedValue(skillWith(saved));
+    api.createSkillVersion.mockResolvedValueOnce({ state: "complete", version: saved, regressionRun: run, blocked: true });
+    api.fetchSkillVersions.mockResolvedValue([saved, version("v1", "1.0.1")]);
+    api.fetchSkillVersionRegression.mockResolvedValue(run);
+    await click("Save");
+    await click("Back to edit");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(router.state.location.search).not.toContain("version=");
+    expect(lastEditor.rubric).toBe("Blocked guide");
+    expect(container.querySelector("textarea")?.matches(":disabled")).toBe(false);
+    await click("History");
+    expect(router.state.location.pathname).toBe("/skill/versions");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it("keeps a failed save dirty and only clears the warning after a recorded save", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderEditor();

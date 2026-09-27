@@ -10,7 +10,9 @@ export function useEditorUnsavedChanges(snapshot: string, enabled: boolean) {
   current.current = snapshot;
   const active = useRef(enabled);
   active.current = enabled;
-  const dirty = () => active.current && opened.current !== current.current;
+  // Resetting after a recorded result prepares a clean form for the next
+  // render; URL bookkeeping in the same event must not look like an edit.
+  const dirty = () => active.current && opened.current !== null && opened.current !== current.current;
   const confirmDiscard = () => !dirty() || window.confirm("Discard your unsaved evaluator changes?");
 
   // Read the refs at navigation time: a successful save marks the draft clean

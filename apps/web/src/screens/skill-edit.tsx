@@ -882,7 +882,11 @@ export function SkillEditScreen() {
     );
   }
 
+  // Keep the submitted draft fixed until its receipt arrives. Otherwise a
+  // later edit could be mistaken for the version that the server recorded.
+  // Navigation outside this editor still uses the unsaved-work guard.
   return (
+    <fieldset disabled={submitting} className="m-0 min-w-0 border-0 p-0" aria-label="Evaluator draft">
     <SkillVersionEditor
       navigate={navigate}
       firstRun={firstRun}
@@ -944,5 +948,6 @@ export function SkillEditScreen() {
       canSave={canSave}
       submit={submit}
     />
+    </fieldset>
   );
 }
