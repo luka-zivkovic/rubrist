@@ -43,7 +43,7 @@ const EXPECTED_PORT_METHODS = {
   JudgeFeedbackRepositoryPort: [
     "loadJudgeRunContext", "recordJudgeRun", "createFeedbackSyncJob", "loadFeedbackSyncContext",
     "listFeedbackSyncJobs", "markFeedbackSyncSucceeded", "markFeedbackSyncFailed",
-    "markFeedbackSyncBlocked", "markFeedbackSyncPending", "listBlockedIronsideFeedbackSyncJobs"
+    "markFeedbackSyncBlocked", "markFeedbackSyncPending", "listBlockedIronsideFeedbackSyncJobs", "listSignedOffFeedbackSyncJobs"
   ],
   CaseEvidenceRepositoryPort: [
     "listCaseIdsForProject", "listCases", "recordVerdict", "listVerdicts",

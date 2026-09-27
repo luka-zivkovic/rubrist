@@ -143,6 +143,7 @@ runPgSmoke("eval item provenance storage", () => {
       await pool.query(`insert into organizations (id, name) values ('org_test', 'Test Org')`);
       await pool.query(`insert into projects (id, organization_id, name, trace_provider) values ('proj_test', 'org_test', 'Test Project', 'langsmith')`);
       await seedSkill(pool);
+      await repo.signOffSkillVersion("proj_test", "skill_test", "skillv_test", {});
       const integration = await repo.createLangSmithIntegration("proj_test", { apiKey: "ls_test_key", projectName: "Support Agent" });
       const { caseId } = await repo.importTrace("proj_test", "langsmith", {
         sourceTraceId: "ls_run_typed", input: { q: "Refund?" }, output: { a: "yes" }, metadata: {}
