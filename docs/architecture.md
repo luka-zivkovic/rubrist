@@ -142,6 +142,13 @@ probes after save (CURRENT). A check against a custom endpoint reaches the
 URL the owner names, as the saved binding's calls would; restricting which
 hosts a custom endpoint may name is not yet enforced (CURRENT).
 
+ADR-0014 decision 12 (2026-09-27) is TARGET, not yet implemented: temperature
+may stay unset wherever the model doesn't let the author choose it, classified
+by probing 0 and then 0.5; a stated temperature is refused where the
+ignored-temperature table lists the combination; the check sends up to 7
+probes, resolution after save up to 3, gate resolution up to 4, and the
+re-check one to four. The counts and rules above are CURRENT.
+
 The author sees a version's resolution on its version page and in the
 evaluator lifecycle panel (`GET /api/evaluator-lifecycles/:id/resolution`):
 the status, what the model showed about each setting the binding leaves
