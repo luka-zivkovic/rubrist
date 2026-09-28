@@ -405,7 +405,7 @@ export function RegressionResult({
           <div className="text-ink-3">Version</div>
           <div className="font-mono">{result.version.version}</div>
           <div className="text-ink-3">Model</div>
-          <div className="font-mono">
+          <div className="min-w-0 break-all font-mono">
             {describeExecutionBinding(result.version.executionBinding)}
           </div>
           <div className="text-ink-3">Known-failure agreement</div>
@@ -461,13 +461,14 @@ export function RegressionResult({
               placeholder="Why is this regression acceptable? (e.g. the regressed cases reflect an old tone policy we're intentionally changing — they'll be retired this week.)"
               className="min-h-[120px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-signal"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" onClick={onBackToEdit} disabled={submitting}>
                 <ArrowLeft /> Back to edit
               </Button>
               <div className="flex-1" />
               <Button
                 variant="signal"
+                className="h-auto min-h-8 max-w-full whitespace-normal"
                 onClick={onPublishOverride}
                 disabled={submitting || overrideReason.trim().length < 8}
               >
@@ -477,7 +478,7 @@ export function RegressionResult({
           </CardContent>
         </Card>
       ) : failed ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" onClick={onBackToEdit}>
             <ArrowLeft /> Back to edit
           </Button>
@@ -486,7 +487,7 @@ export function RegressionResult({
           </Button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {overridden ? (
             <MarginNote tone="signal" who="Override on file" className="flex-1">
               {run.overrideReason ?? overrideReason ?? "—"}

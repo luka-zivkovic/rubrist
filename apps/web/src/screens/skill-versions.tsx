@@ -154,7 +154,7 @@ export function SkillVersionsScreen() {
         title="Evaluator versions"
         sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a guide and prompt, or a typed question), result format, and evidence attached to it."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCcw /> Refresh
             </Button>
@@ -168,28 +168,28 @@ export function SkillVersionsScreen() {
       />
 
       <Card className="mb-6">
-        <Table>
-          <thead>
-            <tr>
-              <th style={{ width: 110 }}>Version</th>
-              <th style={{ width: 140 }}>Status</th>
-              <th>Changes / model</th>
-              <th style={{ width: 120 }} className="text-right">
+        <Table className="ledger-stacked" role="table" aria-label="Evaluator versions">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader" style={{ width: 110 }}>Version</th>
+              <th scope="col" role="columnheader" style={{ width: 140 }}>Status</th>
+              <th scope="col" role="columnheader">Changes / model</th>
+              <th scope="col" role="columnheader" style={{ width: 120 }} className="text-right">
                 Golden agree
               </th>
-              <th style={{ width: 80 }} className="text-right">
+              <th scope="col" role="columnheader" style={{ width: 80 }} className="text-right">
                 Strict
               </th>
-              <th style={{ width: 80 }} className="text-right">
+              <th scope="col" role="columnheader" style={{ width: 80 }} className="text-right">
                 Lenient
               </th>
-              <th style={{ width: 150 }}>Recorded</th>
-              <th style={{ width: 30 }}></th>
+              <th scope="col" role="columnheader" style={{ width: 150 }}>Recorded</th>
+              <th scope="col" role="columnheader" style={{ width: 30 }}></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {versions.length === 0 ? (
-              <tr>
+              <tr role="row">
                 <td colSpan={8} className="text-center text-ink-3">
                   No versions recorded yet.
                 </td>
@@ -204,23 +204,24 @@ export function SkillVersionsScreen() {
               const receiptAt = regressionRun?.createdAt ?? v.approvedAt;
               return (
                 <tr
+                  role="row"
                   key={v.id}
                   className="row-link"
                   onClick={() => navigate(`/skill/versions/${v.id}`)}
                 >
-                  <td>
+                  <td role="cell" data-label="Version">
                     <RowLink to={`/skill/versions/${v.id}`} className="font-mono text-ink">
                       v{v.version}
                     </RowLink>
                   </td>
-                  <td>
+                  <td role="cell" data-label="Status">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusChip status={v.status} run={regressionRun ?? null} />
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
                       <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
                   </td>
-                  <td>
+                  <td role="cell" data-label="Changes / model">
                     <div className="text-[13px] text-ink-2">
                       {changes.join(" · ")}
                     </div>
@@ -233,7 +234,7 @@ export function SkillVersionsScreen() {
                       </div>
                     ) : null}
                   </td>
-                  <td className="text-right font-mono tabular-nums">
+                  <td role="cell" data-label="Golden agree" className="text-left font-mono md:text-right tabular-nums">
                     {agreementPct == null ? "—" : (
                       <>
                         {agreementPct}
@@ -241,9 +242,9 @@ export function SkillVersionsScreen() {
                       </>
                     )}
                   </td>
-                  <td className="text-right font-mono tabular-nums">{measuredCount(v, v.tooStrictCount)}</td>
-                  <td className="text-right font-mono tabular-nums">{measuredCount(v, v.tooLenientCount)}</td>
-                  <td className="font-mono text-ink-3">
+                  <td role="cell" data-label="Strict" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooStrictCount)}</td>
+                  <td role="cell" data-label="Lenient" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooLenientCount)}</td>
+                  <td role="cell" data-label="Recorded" className="font-mono text-ink-3">
                     <div title={v.createdAt}>
                       {new Date(v.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
                     </div>
@@ -253,7 +254,7 @@ export function SkillVersionsScreen() {
                         : receiptLabel}
                     </div>
                   </td>
-                  <td>
+                  <td role="cell" aria-hidden="true" className="hidden md:table-cell">
                     <ChevronRight className="size-3 text-ink-3" />
                   </td>
                 </tr>
@@ -419,7 +420,7 @@ export function SkillVersionDetailScreen() {
           ? `Starter · unvalidated · runnable does not mean calibrated · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`
           : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "—"} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusChip status={v.status} run={regressionRun} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
             <GateChip

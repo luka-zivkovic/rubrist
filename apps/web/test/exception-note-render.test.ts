@@ -1,4 +1,6 @@
-import { cloneElement, createElement } from "react";
+import { act, cloneElement, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ExceptionCase } from "@rubrist/shared";
@@ -35,6 +37,44 @@ function render(value: ExceptionCase) {
   )));
 }
 describe("exception note controls", () => {
+  it("keeps the full case record and one working set of actions in the stacked row", async () => {
+    const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
+    vi.stubGlobal("window", dom.window);
+    vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+    const onOpen = vi.fn();
+    const reason = "A complete explanation that remains available alongside the verdict.";
+    try {
+      await act(async () => root.render(createElement("table", null, createElement("tbody", null,
+        createElement(ExceptionQueueRow, {
+          exception: { ...exception, reason }, provisional: false, onOpen, search: "?criterionId=criterion_1", onCategory: () => {}
+        })
+      ))));
+      const cells = [...container.querySelectorAll("td")];
+      expect(cells.map((cell) => cell.dataset.label)).toEqual(["Case", "Judge category", "Evaluator", "Judge note", "Actions"]);
+      expect(cells[2]?.textContent).toContain("fail");
+      expect(cells[3]?.textContent).toContain(reason);
+      const buttons = [...container.querySelectorAll("button")];
+      expect(buttons).toHaveLength(1);
+      const note = buttons.find((button) => button.textContent === "Full note")!;
+      const review = container.querySelector<HTMLAnchorElement>('a[aria-label^="Review "]')!;
+      expect(review.getAttribute("href")).toBe("/review?criterionId=criterion_1&criterionVersionId=criterionv_1&caseId=case_1");
+      review.addEventListener("click", (event) => event.preventDefault());
+      await act(async () => note.click());
+      expect(note.getAttribute("aria-expanded")).toBe("true");
+      expect(dom.window.document.getElementById(note.getAttribute("aria-controls")!)?.textContent).toContain(reason);
+      expect(onOpen).not.toHaveBeenCalled();
+      await act(async () => review.click());
+      expect(onOpen).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+      dom.window.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not offer an empty note expansion while keeping review available", () => {
     const html = render(exception);
     expect(html).toContain("No explanation recorded.");
