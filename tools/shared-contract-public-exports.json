@@ -852,6 +852,8 @@
     "ProjectSchema",
     "ProjectSettings",
     "ProjectSettingsSchema",
+    "ProjectSettingsView",
+    "ProjectSettingsViewSchema",
     "PromoteGoldenSetInput",
     "PromoteGoldenSetInputSchema",
     "ProviderResponseMetadata",

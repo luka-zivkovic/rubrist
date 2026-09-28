@@ -1,3 +1,4 @@
+import { confirmProjectSwitch } from "../../lib/project-switch.js";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -214,6 +215,7 @@ function ProjectSwitcher({ projectName, projectSource }: { projectName: string; 
   }, [open]);
 
   function pick(project: Project) {
+    if (!confirmProjectSwitch()) return;
     selectProject(project.id);
     window.location.assign("/");
   }

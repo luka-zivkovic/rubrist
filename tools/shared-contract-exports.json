@@ -466,6 +466,7 @@
     "ProjectModeSchema",
     "ProjectSchema",
     "ProjectSettingsSchema",
+    "ProjectSettingsViewSchema",
     "PromoteGoldenSetInputSchema",
     "ProviderResponseMetadataSchema",
     "REASONING_DEFAULTS_VERSION",

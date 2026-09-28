@@ -53,6 +53,8 @@ import {
   LangSmithIntegrationSchema,
   type ProjectMode,
   type ProjectSettings,
+  type ProjectSettingsView,
+  ProjectSettingsViewSchema,
   ProjectSettingsSchema,
   type RetentionPruneResult,
   RetentionPruneResultSchema,
@@ -80,10 +82,10 @@ export async function fetchSetupState(): Promise<{ setupRequired: boolean; authE
   return response.json();
 }
 
-export async function fetchProjectSettings(): Promise<ProjectSettings> {
+export async function fetchProjectSettings(): Promise<ProjectSettingsView> {
   const response = await apiFetch(`${API_BASE}/api/project/settings`, { credentials: "include" });
   if (!response.ok) throw await apiErrorFromResponse(response, "Project settings request failed");
-  return ProjectSettingsSchema.parse(await response.json());
+  return ProjectSettingsViewSchema.parse(await response.json());
 }
 
 export async function fetchLangSmithIntegrations(): Promise<LangSmithIntegration[]> {

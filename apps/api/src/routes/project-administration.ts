@@ -278,7 +278,16 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.get("/api/project/settings", async (c) => {
-    return c.json(await repository.getProjectSettings(c.get("projectId")));
+    c.header("cache-control", "no-store");
+    let viewerRole: "owner" | "member" = "owner";
+    if (pool) {
+      const user = c.get("user");
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+      const role = await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") });
+      if (role !== "owner" && role !== "member") return c.json({ error: "Project membership required" }, 403);
+      viewerRole = role;
+    }
+    return c.json({ ...await repository.getProjectSettings(c.get("projectId")), viewerRole });
   });
 
   app.patch("/api/project/settings", async (c) => {

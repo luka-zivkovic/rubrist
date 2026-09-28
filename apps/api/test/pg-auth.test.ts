@@ -502,6 +502,13 @@ run("Postgres auth flow", () => {
       });
       expect(memberPromotion.status).toBe(403);
 
+      for (const [cookie, role] of [[ownerCookie, "owner"], [memberCookie, "member"]]) {
+        const response = await app.request("/api/project/settings", { headers: { cookie: cookie! } });
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        await expect(response.json()).resolves.toMatchObject({ viewerRole: role });
+      }
+
       const memberSettingsUpdate = await app.request("/api/project/settings", {
         method: "PATCH",
         headers: { "content-type": "application/json", cookie: memberCookie },
