@@ -120,7 +120,8 @@ export class PgProjectRepository implements ProjectRepositoryPort {
           deletedCases: 0,
           deletedRawTraces: 0,
           skippedActiveGoldenCases: 0,
-          skippedImmutableRevisionCases: 0
+          skippedImmutableRevisionCases: 0,
+          skippedReviewCases: 0
         };
       }
 
@@ -139,7 +140,8 @@ export class PgProjectRepository implements ProjectRepositoryPort {
           deletedCases: 0,
           deletedRawTraces: 0,
           skippedActiveGoldenCases: 0,
-          skippedImmutableRevisionCases: 0
+          skippedImmutableRevisionCases: 0,
+          skippedReviewCases: 0
         };
       }
 
@@ -179,6 +181,25 @@ export class PgProjectRepository implements ProjectRepositoryPort {
            )`,
         [projectId, cutoff.toISOString()]
       );
+      // Both unreviewed pins and attributed reviews of older unpinned tasks
+      // retain their case/run evidence. Keep skip categories disjoint.
+      const skippedReviewResult = await client.query(
+        `select count(*)::int as count
+         from cases c join raw_traces rt on rt.id = c.raw_trace_id
+         where c.project_id = $1 and rt.created_at < $2
+           and c.case_type <> 'release_evidence'
+           and (
+             exists (select 1 from review_queue_items item
+                     where item.case_id = c.id and item.judge_run_id is not null)
+             or exists (select 1 from verdicts review
+                        where review.case_id = c.id and review.review_queue_item_id is not null)
+           )
+           and not exists (select 1 from dataset_revision_items revision_item
+                           where revision_item.project_id = $1 and revision_item.source_case_id = c.id)
+           and not exists (select 1 from golden_set_entries gse
+                           where gse.project_id = $1 and gse.case_id = c.id and gse.retired_at is null)`,
+        [projectId, cutoff.toISOString()]
+      );
       const deletedCases = await client.query(
         `delete from cases c
          using raw_traces rt
@@ -189,6 +210,12 @@ export class PgProjectRepository implements ProjectRepositoryPort {
            -- A receipt is stable evidence, so its source case must outlive
            -- customer-traffic retention pruning.
            and c.case_type <> 'release_evidence'
+           and not (
+             exists (select 1 from review_queue_items item
+                     where item.case_id = c.id and item.judge_run_id is not null)
+             or exists (select 1 from verdicts review
+                        where review.case_id = c.id and review.review_queue_item_id is not null)
+           )
            -- Immutable revisions remain executable evidence. The revision
            -- carries a redacted payload snapshot, while the retained case id
            -- keeps the existing append-only verdict/judge ledgers usable.
@@ -227,13 +254,15 @@ export class PgProjectRepository implements ProjectRepositoryPort {
         deletedCases: deletedCases.rowCount ?? 0,
         deletedRawTraces: deletedRawTraces.rowCount ?? 0,
         skippedActiveGoldenCases: Number(skippedResult.rows[0]?.count ?? 0),
-        skippedImmutableRevisionCases: Number(skippedRevisionResult.rows[0]?.count ?? 0)
+        skippedImmutableRevisionCases: Number(skippedRevisionResult.rows[0]?.count ?? 0),
+        skippedReviewCases: Number(skippedReviewResult.rows[0]?.count ?? 0)
       };
       if (
         result.deletedCases > 0 ||
         result.deletedRawTraces > 0 ||
         result.skippedActiveGoldenCases > 0 ||
-        result.skippedImmutableRevisionCases > 0
+        result.skippedImmutableRevisionCases > 0 ||
+        result.skippedReviewCases > 0
       ) {
         await client.query(
           `insert into audit_logs (id, project_id, actor_user_id, action, target_type, target_id, metadata)

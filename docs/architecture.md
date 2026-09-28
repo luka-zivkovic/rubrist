@@ -107,7 +107,9 @@ their historical records. Account erasure anonymizes historical actors and
 unassigns pending tasks; those tasks still require a new explicit human review.
 An internal stable assignment key prevents anonymization from colliding with an
 existing unassigned task. The additive migration preserves the hosted benchmark
-under the narrow exception recorded in ADR-0011.
+under the narrow exception recorded in ADR-0011. Retention skips cases with
+pinned tasks or task-attributed human reviews and reports them separately, while
+continuing to prune unrelated expired traces.
 
 ### Sealed binary calibration
 

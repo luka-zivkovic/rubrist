@@ -7,7 +7,9 @@ import { rowToVerdictRecord } from "./mappers.js";
 export async function recordQueueReview(client: PoolClient, input: RecordVerdictInput) {
   const context = input.reviewContext!;
   if (input.source !== "human") throw new DatasetRevisionConflictError("Only human reviews can complete a review task");
-  // Use the same queue → task → run lock order as queue appends.
+  // Use the same project → queue → task → run lock order as queue appends.
+  // Retention owns the project FOR UPDATE, so it cannot miss an in-flight review.
+  await client.query(`select id from projects where id=$1 for key share`, [input.projectId]);
   await client.query(`select queue.id from review_queues queue join review_queue_items item on item.queue_id=queue.id
     where item.id=$1 and queue.project_id=$2 for update of queue`, [context.queueItemId, input.projectId]);
   const binding = await client.query(

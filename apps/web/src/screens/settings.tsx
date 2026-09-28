@@ -231,6 +231,9 @@ export function SettingsScreen() {
                   {pruneResult.skippedImmutableRevisionCases > 0
                     ? `, skipped ${pruneResult.skippedImmutableRevisionCases} immutable evidence`
                     : ""}
+                  {pruneResult.skippedReviewCases > 0
+                    ? `, skipped ${pruneResult.skippedReviewCases} saved review evidence`
+                    : ""}
                 </div>
               </>
             ) : (

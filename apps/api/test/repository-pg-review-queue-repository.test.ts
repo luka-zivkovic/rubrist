@@ -524,6 +524,7 @@ describe("PostgreSQL review-queue repository slice", () => {
     ]);
     expect(clientCalls.map((call) => call.sql)).toEqual([
       "begin",
+      expect.stringContaining("from projects where id=$1 for key share"),
       expect.stringContaining("for update"),
       expect.stringContaining("max(position)"),
       expect.stringContaining("insert into review_queue_items"),
@@ -562,6 +563,7 @@ describe("PostgreSQL review-queue repository slice", () => {
     })).rejects.toThrow("item insert failed");
     expect(failureEvents).toEqual([
       "begin",
+      expect.stringContaining("from projects where id=$1 for key share"),
       expect.stringContaining("for update"),
       expect.stringContaining("max(position)"),
       expect.stringContaining("insert into review_queue_items"),

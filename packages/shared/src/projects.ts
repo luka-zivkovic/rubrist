@@ -40,7 +40,8 @@ export const RetentionPruneResultSchema = z.object({
   deletedCases: z.number().int().nonnegative(),
   deletedRawTraces: z.number().int().nonnegative(),
   skippedActiveGoldenCases: z.number().int().nonnegative(),
-  skippedImmutableRevisionCases: z.number().int().nonnegative()
+  skippedImmutableRevisionCases: z.number().int().nonnegative(),
+  skippedReviewCases: z.number().int().nonnegative().default(0)
 });
 export type RetentionPruneResult = z.infer<typeof RetentionPruneResultSchema>;
 

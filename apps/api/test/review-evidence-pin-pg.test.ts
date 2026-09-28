@@ -121,6 +121,82 @@ runPgSmoke("saved review evidence pins", () => {
     } finally { await cleanup(); }
   }, 60_000);
 
+  it("retains pinned and legacy task-reviewed evidence while pruning unrelated expired traces", async () => {
+    const { pool, cleanup } = await openPostgresTestDatabase("review_pin_retention");
+    try {
+      await runMigrations(pool);
+      await pool.query(`insert into organizations(id,name) values('org_test','Test');
+        insert into projects(id,organization_id,name,trace_provider,trace_retention_days)
+        values('proj_test','org_test','Test','manual',7)`);
+      await seedSkill(pool);
+      const repo = new PgRepository(pool);
+      const traces = [];
+      for (const name of ["pinned", "legacy_reviewed", "expired"]) {
+        const trace = await repo.importTrace("proj_test", "manual", {
+          sourceTraceId: name, input: "Evidence", output: "Claim", metadata: {}
+        }, { ingestionPurpose: "analysis_eligible_manual" });
+        const run = await repo.recordJudgeRun({ projectId: "proj_test", caseId: trace.caseId,
+          skillVersionId: "skillv_test", verdict: { label: "fail", score: 0.1, confidence: 0.9, reason: name } });
+        traces.push({ ...trace, run });
+      }
+      const [pinned, legacy, expired] = traces;
+      const pinnedQueue = await repo.createReviewQueue({ projectId: "proj_test", name: "Pinned",
+        caseIds: [pinned!.caseId], skillVersionId: "skillv_test" });
+      const legacyQueue = await repo.createReviewQueue({ projectId: "proj_test", name: "Legacy", caseIds: [legacy!.caseId] });
+      const legacyItem = (await repo.getReviewQueueDetail("proj_test", legacyQueue.id))!.items[0]!;
+      const review = await repo.recordVerdict({ projectId: "proj_test", caseId: legacy!.caseId, source: "human",
+        payload: { kind: "binary", pass: false, rationale: "Keep this historical review" },
+        reviewContext: { queueItemId: legacyItem.id, judgeRunId: legacy!.run.id, submissionId: randomUUID() } });
+      await pool.query(`update raw_traces set created_at='2026-04-01' where project_id='proj_test'`);
+      const result = await repo.pruneExpiredTraces("proj_test", { now: new Date("2026-05-03T00:00:00Z") });
+      expect(result).toMatchObject({ deletedCases: 1, deletedRawTraces: 1,
+        skippedReviewCases: 2, skippedActiveGoldenCases: 0, skippedImmutableRevisionCases: 0 });
+      expect((await pool.query(`select id from cases where id=$1`, [expired!.caseId])).rowCount).toBe(0);
+      expect((await pool.query(`select id from verdicts where id=$1`, [review.id])).rowCount).toBe(1);
+      expect((await repo.getReviewQueueDetail("proj_test", pinnedQueue.id))!.queue.pendingCount).toBe(1);
+      for (const trace of [pinned!, legacy!]) {
+        expect((await repo.getCaseDetail("proj_test", trace.caseId, "skillv_test", undefined, trace.run.id))!.judgeRun.id).toBe(trace.run.id);
+        expect((await pool.query(`select id from raw_traces where id=$1`, [trace.rawTraceId])).rowCount).toBe(1);
+      }
+      expect((await pool.query(`select metadata from audit_logs where action='project.retention.prune'`)).rows[0].metadata.skippedReviewCases).toBe(2);
+      expect((await repo.pruneExpiredTraces("proj_test", { now: new Date("2026-05-03T00:00:30Z") })).skippedReviewCases).toBe(0);
+    } finally { await cleanup(); }
+  }, 60_000);
+
+  it.each(["append", "legacy-review"] as const)("serializes %s with retention before queue locks", async (operation) => {
+    const { pool, cleanup } = await openPostgresTestDatabase("review_retention_race");
+    try {
+      await runMigrations(pool);
+      await pool.query(`insert into organizations(id,name) values('org_test','Test');
+        insert into projects(id,organization_id,name,trace_provider,trace_retention_days)
+        values('proj_test','org_test','Test','manual',7)`);
+      await seedSkill(pool);
+      const repo = new PgRepository(pool);
+      const target = await repo.importTrace("proj_test", "manual", { sourceTraceId: "target", input: "Evidence", output: "Claim", metadata: {} }, { ingestionPurpose: "analysis_eligible_manual" });
+      const expired = await repo.importTrace("proj_test", "manual", { sourceTraceId: "expired", input: "Evidence", output: "Claim", metadata: {} }, { ingestionPurpose: "analysis_eligible_manual" });
+      const run = await repo.recordJudgeRun({ projectId: "proj_test", caseId: target.caseId, skillVersionId: "skillv_test", verdict: { label: "fail", score: 0.1, confidence: 0.9, reason: "Evidence" } });
+      const queue = await repo.createReviewQueue({ projectId: "proj_test", name: "Existing", caseIds: [target.caseId] });
+      const item = (await repo.getReviewQueueDetail("proj_test", queue.id))!.items[0]!;
+      await pool.query(`update raw_traces set created_at='2026-04-01' where project_id='proj_test'`);
+      const blocker = await pool.connect();
+      try {
+        await blocker.query('begin');
+        await blocker.query(`select id from review_queues where id=$1 for update`, [queue.id]);
+        const saving = operation === "append"
+          ? repo.addReviewQueueItems({ projectId: "proj_test", queueId: queue.id, items: [{ caseId: target.caseId, skillVersionId: "skillv_test" }] })
+          : repo.recordVerdict({ projectId: "proj_test", caseId: target.caseId, source: "human", payload: { kind: "binary", pass: false, rationale: "Review" }, reviewContext: { queueItemId: item.id, judgeRunId: run.id, submissionId: randomUUID() } });
+        await waitFor(async () => Number((await pool.query(`select count(*) as n from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select %from review_queues%'`)).rows[0].n) > 0, 5000);
+        const pruning = repo.pruneExpiredTraces("proj_test", { now: new Date("2026-05-03T00:00:00Z") });
+        await waitFor(async () => Number((await pool.query(`select count(*) as n from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%last_retention_pruned_at%for update%'`)).rows[0].n) > 0, 5000);
+        await blocker.query('commit');
+        await saving;
+        expect(await pruning).toMatchObject({ deletedCases: 1, deletedRawTraces: 1, skippedReviewCases: 1 });
+        expect((await pool.query(`select id from cases where id=$1`, [expired.caseId])).rowCount).toBe(0);
+        expect((await repo.getCaseDetail("proj_test", target.caseId, "skillv_test", undefined, run.id))!.judgeRun.id).toBe(run.id);
+      } finally { await blocker.query('rollback'); blocker.release(); }
+    } finally { await cleanup(); }
+  }, 60_000);
+
   it("upgrades the existing baseline without rewriting existing reviews, and retries harmlessly", async () => {
     const { pool, cleanup, databaseUrl } = await openPostgresTestDatabase("review_pin_upgrade");
     const upgradeSchema = `review_upgrade_${randomUUID().replaceAll("-", "")}`;

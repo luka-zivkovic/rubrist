@@ -191,6 +191,8 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      // Serialize with retention before taking any queue/task/run locks.
+      await client.query(`select id from projects where id=$1 for key share`, [input.projectId]);
       const lockedQueue = await client.query(`select id from review_queues where id=$1 and project_id=$2 and status='open' for update`, [input.queueId, input.projectId]);
       if (!lockedQueue.rowCount) throw new DatasetRevisionConflictError("Review queue is missing or closed");
       const positionRow = await client.query(`select coalesce(max(position)+1,0)::int as position from review_queue_items where queue_id=$1`, [input.queueId]);
