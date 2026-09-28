@@ -723,29 +723,29 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
               {goldenSetEntry ? <Chip>in golden set</Chip> : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {!effectiveRuling ? (
                   <Button
-                    className="h-auto min-h-14 w-full justify-start whitespace-normal border-blue-800 bg-blue-800 px-4 py-3 text-left text-white hover:bg-blue-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 dark:border-blue-400 dark:bg-blue-300 dark:text-blue-950 dark:hover:bg-blue-200"
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal border-rule bg-card-2 px-3 py-2 text-left text-ink hover:bg-paper-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                     onClick={() => void handleAccept()}
                     disabled={submitting}
                   >
                     <ThumbsUp aria-hidden="true" />
                     <span>
-                      <span className="block text-[14px] font-semibold">{submitting && decision === "accept" ? "Recording agreement…" : "Agree with evaluator"}</span>
-                      <span className="block text-[12px]">Record {exception.verdict.toUpperCase()} as my ruling</span>
+                      <span className="block text-[13px] font-medium">{submitting && decision === "accept" ? "Recording agreement…" : "Agree with evaluator"}</span>
+                      <span className="block text-[11px] text-ink-3">Record {exception.verdict.toUpperCase()} as my ruling</span>
                     </span>
                   </Button>
                 ) : null}
                 <Button
-                  className="h-auto min-h-14 w-full justify-start whitespace-normal border-2 border-amber-700 bg-amber-50 px-4 py-3 text-left text-amber-950 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900"
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-rule bg-transparent px-3 py-2 text-left text-ink hover:bg-paper-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                   onClick={openReviewForm}
                   disabled={submitting}
                 >
                   <PencilLine aria-hidden="true" />
                   <span>
-                    <span className="block text-[14px] font-semibold">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Disagree with evaluator"}</span>
-                    <span className="block text-[12px]">Choose a different ruling and explain why</span>
+                    <span className="block text-[13px] font-medium">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Disagree with evaluator"}</span>
+                    <span className="block text-[11px] text-ink-3">Choose a different ruling and explain why</span>
                   </span>
                 </Button>
               </div>
