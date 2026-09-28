@@ -25,14 +25,14 @@ export function Topbar({ crumbs, right, navigationOpen = false, onOpenNavigation
           <Menu className="size-4" />
         </button>
       ) : null}
-      <div className="flex min-w-0 items-center gap-2 overflow-hidden font-mono text-[11px] text-ink-3">
+      <nav aria-label="Breadcrumb" className="min-w-0 overflow-hidden"><ol className="flex min-w-0 items-center gap-2 overflow-hidden font-mono text-[11px] text-ink-3">
         {crumbs.map((c, i) => (
-          <React.Fragment key={i}>
-            {i > 0 ? <span className="text-ink-3">/</span> : null}
+          <li key={i} className="flex min-w-0 items-center gap-2" aria-current={i === crumbs.length - 1 ? "page" : undefined}>
+            {i > 0 ? <span aria-hidden="true" className="text-ink-3">/</span> : null}
             <span className={i === crumbs.length - 1 ? "truncate text-ink" : "truncate"}>{c}</span>
-          </React.Fragment>
+          </li>
         ))}
-      </div>
+      </ol></nav>
       <div className="flex-1" />
       {right ? <div className="w-full min-w-0 lg:w-auto">{right}</div> : null}
     </header>
