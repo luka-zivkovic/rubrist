@@ -1,3 +1,5 @@
+import { CheckWait } from "../components/check-wait.js";
+import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Copy, Download, RefreshCcw } from "lucide-react";
@@ -125,9 +127,7 @@ export function SkillVersionsScreen() {
 
   if (loading && versions.length === 0) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Every version of the skill" title="Loading versions" />
-      </div>
+      <PageLoading title="Loading versions" shape="list" />
     );
   }
 
@@ -217,6 +217,7 @@ export function SkillVersionsScreen() {
                   <td role="cell" data-label="Status">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusChip status={v.status} run={regressionRun ?? null} />
+                      {v.status === "calibrating" && !regressionRun ? <CheckWait createdAt={v.createdAt} /> : null}
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
                       <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
@@ -363,9 +364,7 @@ export function SkillVersionDetailScreen() {
   // holds up the rest and never reads as empty meanwhile.
   if (!current && !error) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Judge card" title="Loading version" />
-      </div>
+      <PageLoading title="Loading version" />
     );
   }
 

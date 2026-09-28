@@ -1,3 +1,4 @@
+import { retryableStatus } from "../lib/load-error.js";
 import { useLocation, useNavigate } from "react-router-dom";
 import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,19 +39,21 @@ export function NotFoundScreen() {
 
 interface ApiUnavailableProps {
   retry?: () => void;
-  status?: number;
+  status?: number | null;
+  resource?: string;
   lastOkAt?: string;
 }
 
-export function ApiUnavailableScreen({ retry, status, lastOkAt }: ApiUnavailableProps) {
+export function ApiUnavailableScreen({ retry, status, lastOkAt, resource = "this page" }: ApiUnavailableProps) {
+  const canRetry = status == null || retryableStatus(status);
   return (
     <EmptyShell
-      eyebrow="Connection lost"
-      title="Rubrist can't reach its backend right now."
+      eyebrow="Data unavailable"
+      title={status && status >= 500 ? `Rubrist's server returned an error while loading ${resource}.` : `Couldn't load ${resource}.`}
       body={
         <>
-          Existing records remain on the server. This page cannot load them or save new decisions
-          until the connection returns.
+          This read did not change your saved records.{" "}
+          {canRetry ? "Try again to load the latest data." : "Check your access or return to the previous page."}
           {lastOkAt ? (
             <>
               {" "}Last successful call <span className="font-mono">{lastOkAt}</span>.
@@ -62,7 +65,7 @@ export function ApiUnavailableScreen({ retry, status, lastOkAt }: ApiUnavailable
       // EmptyShell truthy-checks the slot, so null is safe and avoids the
       // undefined-vs-omitted mismatch under exactOptionalPropertyTypes.
       primary={
-        retry ? (
+        retry && canRetry ? (
           <Button variant="primary" onClick={retry}>
             <RefreshCcw /> Try again
           </Button>
@@ -70,7 +73,7 @@ export function ApiUnavailableScreen({ retry, status, lastOkAt }: ApiUnavailable
       }
       secondary={
         <span className="self-center font-mono text-[10.5px] tracking-[0.04em] text-ink-3">
-          {status ? `http · ${status}` : "net::ERR_INTERNET_DISCONNECTED"}
+          {status ? `HTTP ${status}` : null}
         </span>
       }
     />

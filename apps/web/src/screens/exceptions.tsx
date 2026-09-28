@@ -1,3 +1,5 @@
+import { PageLoading } from "../components/page-loading.js";
+import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronDown, ChevronRight, Clock, Inbox } from "lucide-react";
@@ -164,7 +166,7 @@ export function ExceptionsScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { dashboard, loading, error } = useDashboard();
+  const { dashboard, loading, error, errorStatus, reload } = useDashboard();
   const criterionVersionId = dashboardCriterionVersionId(dashboard);
   const skillVersionId = dashboardSkillVersionId(dashboard);
 
@@ -264,28 +266,10 @@ export function ExceptionsScreen() {
     return counts;
   }, [resolved]);
 
-  if (loading && !dashboard) {
-    return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Exception queue" title="Loading exceptions" />
-        <div className="rounded-sm border border-rule-soft bg-card p-12 text-center text-ink-3">
-          Fetching the queue…
-        </div>
-      </div>
-    );
-  }
+  if (loading && !dashboard) return <PageLoading title="Loading exceptions" shape="list" />;
 
   if (error || !dashboard) {
-    return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Exception queue" title="API unavailable" />
-        <Card>
-          <div className="p-6 text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </div>
-        </Card>
-      </div>
-    );
+    return <ApiUnavailableScreen resource="the review queue" status={errorStatus} retry={() => void reload()} />;
   }
 
   // Day 0 — the judge needs cases before there is anything to disagree about:

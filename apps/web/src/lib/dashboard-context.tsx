@@ -14,6 +14,7 @@ interface DashboardContextValue {
   loading: boolean;
   error: string | null;
   errorKind: DashboardErrorKind | null;
+  errorStatus: number | null;
   reload: () => Promise<void>;
   // Silent revalidation for mutating flows (example/trace imports, eval-run
   // completion): updates counts/journey without flipping `loading` (no shell
@@ -40,6 +41,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorKind, setErrorKind] = useState<DashboardErrorKind | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     if (criteriaLoading || selectionRequired) {
@@ -47,11 +49,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setLoading(criteriaLoading);
       setError(null);
       setErrorKind(null);
+      setErrorStatus(null);
       return;
     }
     setLoading(true);
     setError(null);
     setErrorKind(null);
+    setErrorStatus(null);
     try {
       setDashboard(await fetchDashboard(selectedCriterionId ?? undefined));
     } catch (err) {
@@ -71,6 +75,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setDashboard(null);
       setError(message);
       setErrorKind(kind);
+      setErrorStatus(err instanceof ApiError ? err.status : null);
     } finally {
       setLoading(false);
     }
@@ -80,9 +85,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     if (criteriaLoading || selectionRequired) return;
     try {
       setDashboard(await fetchDashboard(selectedCriterionId ?? undefined));
-    } catch {
-      // Keep the last-good dashboard; background refreshes never degrade the
-      // shell. Real failures surface on the next explicit reload/navigation.
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setDashboard(null);
+        setError(err.message);
+        setErrorKind("unauthorized");
+        setErrorStatus(401);
+      }
+      // Transient background failures retain last-good data. An expired
+      // session is different: the shell must offer sign-in immediately.
     }
   }, [criteriaLoading, selectedCriterionId, selectionRequired]);
 
@@ -98,7 +109,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     : dashboard;
 
   return (
-    <DashboardContext.Provider value={{ dashboard: scopedDashboard, loading, error, errorKind, reload, refresh }}>
+    <DashboardContext.Provider value={{ dashboard: scopedDashboard, loading, error, errorKind, errorStatus, reload, refresh }}>
       {children}
     </DashboardContext.Provider>
   );

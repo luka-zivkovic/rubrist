@@ -718,5 +718,6 @@ recorded TypeSafe model/question/probability context. See
 [historical review](historical-review-closeout.md), and
 [readable evidence](2026-09-28-readable-evidence.md). These bounded fixes do
 not complete slice 6. Wave 2 addresses T5/T9/T10 and makes the queue's own
-error recovery reachable; integration/browser verification is pending.
+error recovery reachable; integration/browser verification passed. See the
+[wave 2 record](2026-09-28-wave2-verification.md).
 Vocabulary/display proposals remain deferred under G2.
