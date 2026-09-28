@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronDown, ChevronRight, Clock, Inbox } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,8 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { dashboardCriterionVersionId, dashboardSkillVersionId } from "@/lib/criterion-scope";
 import { isBench, journeyStage } from "@/lib/journey";
 import { resolvedDecisions, type ResolvedDecision } from "@/lib/resolved";
-import { caseReviewUrl, rationalePreview } from "@/lib/exception-queue";
+import { caseReviewUrl, queueReviewUrl, rationalePreview } from "@/lib/exception-queue";
+import { contextualHref } from "../lib/route-metadata.js";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { isVerdictLabel, type DisagreementCase, type ExceptionCase, type VerdictLabel } from "@rubrist/shared";
 
@@ -46,17 +47,23 @@ export interface SessionReceiptState {
   promote: number;
 }
 
+function exceptionCaseHref(exception: ExceptionCase, search: string): string {
+  const params = new URLSearchParams({ from: "exceptions" });
+  if (exception.criterionVersionId) params.set("criterionVersionId", exception.criterionVersionId);
+  return contextualHref(`/cases/${exception.id}?${params}`, search);
+}
+
 export function ExceptionQueueRow({
   exception,
   provisional,
   onOpen,
-  onReview,
+  search = "",
   onCategory
 }: {
   exception: ExceptionCase;
   provisional: boolean;
   onOpen: () => void;
-  onReview: () => void;
+  search?: string;
   onCategory: (category: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -68,7 +75,7 @@ export function ExceptionQueueRow({
       <td>
         <div className="flex min-w-[180px] items-center">
           <RowLink
-            to={`/cases/${exception.id}`}
+            to={exceptionCaseHref(exception, search)}
             state={{ backTo: "/exceptions", backLabel: "Back to queue" }}
             title={exception.title}
             className="block min-w-0 max-w-[280px] flex-1 truncate font-medium"
@@ -137,16 +144,13 @@ export function ExceptionQueueRow({
             {expanded ? "Hide note" : "Full note"}
           </Button> : null}
           <Button
-            type="button"
+            asChild
             variant="default"
             size="xs"
-            aria-label={`Review ${exception.title}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onReview();
-            }}
           >
-            Review <ArrowRight />
+            <Link to={caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)} aria-label={`Review ${exception.title}`} onClick={(event) => event.stopPropagation()}>
+              Review <ArrowRight />
+            </Link>
           </Button>
         </div>
       </td>
@@ -328,9 +332,9 @@ export function ExceptionsScreen() {
             </span>
           }
           cta={
-            <Button size="sm" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
+            <Button size="sm" asChild><Link to={contextualHref(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill", location.search)}>
               {dashboard?.viewerRole === "owner" ? "Open rubric alongside" : "View evaluator"}
-            </Button>
+            </Link></Button>
           }
         />
       ) : null}
@@ -346,14 +350,9 @@ export function ExceptionsScreen() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => {
-                // The filtered list rides along as state; the legacy
-                // ?cluster= category key survives refresh/deep links.
-                const q = category !== ALL_CATEGORIES ? `?cluster=${encodeURIComponent(category)}` : "";
-                navigate(`/review${q}`, { state: { caseIds: list.map((ex) => ex.id) } });
-              }}
+              asChild
             >
-              Review all {list.length} <ArrowRight />
+              <Link to={queueReviewUrl(list, location.search, category !== ALL_CATEGORIES ? category : null)}>Review all {list.length} <ArrowRight /></Link>
             </Button>
           ) : null
         }
@@ -405,9 +404,9 @@ export function ExceptionsScreen() {
               </CardDescription>
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={() => navigate("/reliability")}>
+            <Button variant="ghost" size="sm" asChild><Link to={contextualHref("/reliability", location.search)}>
               Compare and resolve <ArrowRight />
-            </Button>
+            </Link></Button>
           </CardHeader>
           <Table>
             <tbody>
@@ -501,16 +500,12 @@ export function ExceptionsScreen() {
                   exception={ex}
                   provisional={stage === "provisional"}
                   onOpen={() =>
-                    navigate(`/cases/${ex.id}`, {
+                    navigate(exceptionCaseHref(ex, location.search), {
                       state: { backTo: "/exceptions", backLabel: "Back to queue" }
                     })
                   }
                   onCategory={updateCategory}
-                  onReview={() =>
-                    navigate(caseReviewUrl(ex.id, ex.capabilityGap), {
-                      state: { caseIds: [ex.id] }
-                    })
-                  }
+                  search={location.search}
                 />
               ))}
             </tbody>
