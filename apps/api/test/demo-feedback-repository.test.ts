@@ -20,7 +20,8 @@ const EXPECTED_PUBLIC_METHODS = [
   "markFeedbackSyncFailed",
   "markFeedbackSyncBlocked",
   "markFeedbackSyncPending",
-  "listBlockedIronsideFeedbackSyncJobs"
+  "listBlockedIronsideFeedbackSyncJobs",
+  "listSignedOffFeedbackSyncJobs"
 ] as const;
 
 const API_DIRECTORY = fileURLToPath(new URL("../", import.meta.url));
@@ -214,6 +215,7 @@ describe("Demo judge-feedback repository slice", () => {
       markFeedbackSyncFailed: "{ return this.judgeFeedbackRepository.markFeedbackSyncFailed(job, error); }",
       markFeedbackSyncBlocked: "{ return this.judgeFeedbackRepository.markFeedbackSyncBlocked(job, error); }",
       markFeedbackSyncPending: "{ return this.judgeFeedbackRepository.markFeedbackSyncPending(job); }",
+      listSignedOffFeedbackSyncJobs: "{ return this.judgeFeedbackRepository.listSignedOffFeedbackSyncJobs(limit); }",
       listBlockedIronsideFeedbackSyncJobs: "{ return this.judgeFeedbackRepository.listBlockedIronsideFeedbackSyncJobs(projectId, integrationId); }"
     };
     for (const name of EXPECTED_PUBLIC_METHODS) {

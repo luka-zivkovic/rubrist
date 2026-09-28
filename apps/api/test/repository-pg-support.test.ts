@@ -221,9 +221,9 @@ describe("PostgreSQL repository support modules", () => {
     const privateMethods = methods.filter((method) =>
       ts.getModifiers(method)?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword)
     );
-    expect(methods).toHaveLength(167);
+    expect(methods).toHaveLength(168);
     expect(privateMethods).toHaveLength(4);
-    expect(methods.length - privateMethods.length).toBe(163);
+    expect(methods.length - privateMethods.length).toBe(164);
   }, 30_000);
 
   it("pins the extracted command as one caller-owned PoolClient query", () => {

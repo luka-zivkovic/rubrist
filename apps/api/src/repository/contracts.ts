@@ -617,6 +617,7 @@ export interface FeedbackSyncJobRecord {
 }
 
 export interface FeedbackSyncContext {
+  status?: FeedbackSyncStatus;
   id: string;
   projectId: string;
   provider: FeedbackSyncProvider;
