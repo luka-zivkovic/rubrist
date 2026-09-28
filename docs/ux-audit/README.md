@@ -5,7 +5,7 @@ rounds' findings and decisions into one sequence of implementation slices.
 Each round stays the record for its own findings; `PRODUCT.md` and the
 accepted ADRs stay the product authority.
 
-Last updated: 2026-09-28 · wave 1 staged; wave 2 in integration review
+Last updated: 2026-09-28 · waves 1–2 staged; draft PRs remain unmerged
 
 ## Rounds
 
@@ -84,9 +84,9 @@ changed.
 |---|---|---|---|---|
 | 1 | Missing evidence never reads as a result | C1; C7 except skeletons; C6's count; S4 except the breadcrumb | — | PR #159 |
 | 2 | Protect work and choices | C2, C3, C13, O12, and O14's fix if G1 confirms it | G1 for O12's copy and O14 | Implemented in wave 1; staged, PRs #166/#169 |
-| 3 | Links and location | S1, S2, S3, T9, T10 | — | Implemented in wave 2; integration verification pending |
-| 4 | Phones | O10, T5, C4 | — | Implemented in wave 2; integration verification pending |
-| 5 | Loading, errors, and waits | S6; C6's elapsed time and long-wait message; C7's skeletons; S4's breadcrumb | — | Implemented in wave 2; integration verification pending |
+| 3 | Links and location | S1, S2, S3, T9, T10 | — | Implemented in wave 2; staged, see closeout |
+| 4 | Phones | O10, T5, C4 | — | Implemented in wave 2; staged, see closeout |
+| 5 | Loading, errors, and waits | S6; C6's elapsed time and long-wait message; C7's skeletons; S4's breadcrumb | — | Implemented in wave 2; staged, see closeout |
 | 6 | The triage flow | T1, T2, T3, T4, T6, T7 | Slice 5 for the queue's error state; G2 for wording | Planned |
 | 7 | The Overview and shell | O1, O2, O3, O4, O5, O6, O7, O9, O11, O13, S5, S7, S8, S9 | G2 for wording and O7's display part | Planned |
 | 8 | The evaluator pages | C5, C8, C9, C10, C11, C12's status labels | G2 for D1 and D6; G3 for the regressions total | Planned |
@@ -127,7 +127,8 @@ Wave 1 is independently reviewed and deployed to the staging app at
 
 Wave 2 implements slices 3–5: links/location, phone layouts, and
 loading/error/wait recovery. Their individual closeouts bound the scope;
-combined testing and browser verification are required before staging.
+combined testing and browser verification passed before the staging handoff.
+See the [wave 2 verification record](2026-09-28-wave2-verification.md).
 This does not complete slices 6–8 or the remaining audit rounds.
 
 The founder explicitly deferred vocabulary changes on 2026-09-28. G2 and G3

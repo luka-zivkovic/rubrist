@@ -920,8 +920,8 @@ CURRENT update, 2026-09-28: wave 1 stages C2/C3/C13 editor protection and
 additional unavailable-improvement handling. See
 [editor protection](2026-09-28-protect-editor.md) and
 [evidence counts](evidence-counts-closeout.md). Wave 2 addresses C4, C6's
-elapsed-time guidance, and C7's loading placeholders; integration/browser
-verification is pending. G2/G3 remain open. The earlier PR #159 snapshot
+elapsed-time guidance, and C7's loading placeholders; integration/browser verification passed. See the
+[wave 2 record](2026-09-28-wave2-verification.md). G2/G3 remain open. The earlier PR #159 snapshot
 below is retained as history, not the latest completion claim.
 
 As of PR #159 (slice 1, "missing evidence never reads as a result"). The findings

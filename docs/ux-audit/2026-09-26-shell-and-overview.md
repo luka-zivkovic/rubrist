@@ -1106,7 +1106,8 @@ exact-version sign-off hold/confirmation (O12/O14). See
 [feedback recovery](provisional-feedback-closeout.md). G1 is resolved by
 PostgreSQL tests with injected upstream writers; no real upstream feedback
 was sent during verification. Wave 2 addresses S1–S3, S4's breadcrumb, S6,
-and O10; integration/browser verification is pending. The earlier PR #159
+and O10; integration/browser verification passed. See the
+[wave 2 record](2026-09-28-wave2-verification.md). The earlier PR #159
 snapshot below is retained as history, not the latest completion claim.
 
 As of PR #159 (slice 1, "missing evidence never reads as a result"). The finding
