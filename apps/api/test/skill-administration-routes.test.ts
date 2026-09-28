@@ -306,7 +306,8 @@ describe("Judge Card (M1 E5)", () => {
     expect(response.status).toBe(200);
     const card = JudgeCardSchema.parse(await response.json());
     expect(card.version.id).toBe("skillv_1_2_0");
-    expect(card.version.rubricProvenance).toBe("human-authored");
+    expect(card.version.rubricProvenance).toBe("unspecified");
+    expect(card.version.rubricProvenanceDeclared).toBe(false);
     expect(card.executionBinding.provider).toBe("anthropic");
     expect(card.goldenSet.size).toBe(2);
     // Seeded demo has judge+human overlap AND repeat judge runs — the trust
@@ -336,7 +337,7 @@ describe("Judge Card (M1 E5)", () => {
     const text = await md.text();
     expect(text).toContain("# Judge Card — Support Answer Quality 1.2.0");
     expect(text).toContain("anthropic/claude-sonnet-4-6");
-    expect(text).toContain("Rubric provenance**: human-authored");
+    expect(text).toContain("Evaluator authorship**: Not specified");
     expect(text).toContain("Judge–human κ**: none recorded yet");
 
     // &download=1 forces an attachment with a STATIC filename stem

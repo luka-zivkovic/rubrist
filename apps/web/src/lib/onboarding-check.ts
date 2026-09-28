@@ -1,4 +1,4 @@
-import type { OnboardingEvidenceInventory, ProjectMode } from "@rubrist/shared";
+import { RubricProvenanceSchema, type RubricProvenance, type OnboardingEvidenceInventory, type ProjectMode } from "@rubrist/shared";
 import { findStarterSkill, STARTER_SKILLS, type StarterSkill } from "./starter-skills.js";
 
 export interface OnboardingCheckDraft {
@@ -10,6 +10,7 @@ export interface OnboardingCheckDraft {
   criterionName: string;
   qualityQuestion: string;
   rubricMarkdown: string;
+  rubricProvenance?: RubricProvenance;
   decisionSource: "user" | "rubrist";
   decisionReason: string | null;
 }
@@ -28,7 +29,8 @@ export function onboardingCheckDraftIdentity(draft: OnboardingCheckDraft): strin
     starterId: draft.starterId,
     criterionName: draft.criterionName,
     qualityQuestion: draft.qualityQuestion,
-    rubricMarkdown: draft.rubricMarkdown
+    rubricMarkdown: draft.rubricMarkdown,
+    ...(draft.rubricProvenance ? { rubricProvenance: draft.rubricProvenance } : {})
   });
 }
 
@@ -108,6 +110,7 @@ function isDraft(value: unknown, projectId: string, skillId: string): value is O
     typeof draft.criterionName === "string" &&
     typeof draft.qualityQuestion === "string" &&
     typeof draft.rubricMarkdown === "string" &&
+    (draft.rubricProvenance === undefined || RubricProvenanceSchema.safeParse(draft.rubricProvenance).success) &&
     (draft.decisionSource === "user" || draft.decisionSource === "rubrist") &&
     (draft.decisionReason === null || typeof draft.decisionReason === "string");
 }

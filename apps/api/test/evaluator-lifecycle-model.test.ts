@@ -92,6 +92,8 @@ describe("evaluator lifecycle authority", () => {
       outputSchema: MinimumVerdictOutputSchema,
       idempotencyKey: "first"
     });
+    expect(evaluatorCandidateRequestDigest("project", input)).toBe(evaluatorCandidateRequestDigest("project", { ...input, rubricProvenance: "unspecified" }));
+    expect(evaluatorCandidateRequestDigest("project", input)).not.toBe(evaluatorCandidateRequestDigest("project", { ...input, rubricProvenance: "human-authored" }));
     expect(evaluatorCandidateRequestDigest("project", input)).toBe(
       evaluatorCandidateRequestDigest("project", { ...input, idempotencyKey: "second" })
     );

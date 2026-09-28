@@ -1,3 +1,5 @@
+import { EvaluatorAuthorshipField } from "../../components/evaluator-authorship-field.js";
+import type { RubricProvenance } from "@rubrist/shared";
 import type { Dispatch, SetStateAction } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { ArrowLeft, Check, Clock, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
@@ -31,6 +33,7 @@ const TIME_SCOPES: ReadonlyArray<{ value: SkillVersionTimeScope; label: string; 
 ];
 
 export function SkillVersionEditor({
+  rubricProvenance = "unspecified", onAuthorshipChange,
   navigate, firstRun, v, skill, gateKnownUnarmed, loading, submitting, phase,
   dashboardReady, goldenSetSize, evidenceCount, bench, resetToCurrent,
   appliedStarter, setAppliedStarter, applyStarter, rubricMode, setRubricMode,
@@ -42,6 +45,8 @@ export function SkillVersionEditor({
   verdictKind, scalarRange, choiceScores, hasConfiguredRealProvider, timeScope,
   setTimeScope, changeInput, submitError, canSave, submit
 }: {
+  rubricProvenance?: RubricProvenance;
+  onAuthorshipChange?: (value: RubricProvenance) => void;
   navigate: NavigateFunction;
   firstRun: boolean;
   v: SkillVersion;
@@ -551,6 +556,8 @@ export function SkillVersionEditor({
           {prompt.trim() === "" ? <li>Write the judge instructions, under Judge prompt template · advanced.</li> : null}
         </ul>
       ) : null}
+
+      {onAuthorshipChange ? <EvaluatorAuthorshipField value={rubricProvenance} onChange={onAuthorshipChange} disabled={submitting} /> : null}
 
       {submitError ? <div className="mb-4 text-[12px] text-signal">{submitError}</div> : null}
 

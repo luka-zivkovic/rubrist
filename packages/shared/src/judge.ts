@@ -296,8 +296,21 @@ export function renderJudgePromptContent(input: { rubricMarkdown: string; prompt
   return compileJudgePrompt(input).content;
 }
 
-export const RubricProvenanceSchema = z.enum(["human-authored", "agent-drafted"]);
+export const RubricProvenanceSchema = z.enum(["human-authored", "agent-drafted", "unspecified"]);
 export type RubricProvenance = z.infer<typeof RubricProvenanceSchema>;
+
+/** Authorship is a declaration, separate from the saving account and validation. */
+export function evaluatorAuthorship(input: { rubricProvenance: RubricProvenance; rubricProvenanceDeclared?: boolean | undefined }): { label: string; note: string } {
+  if (input.rubricProvenance === "unspecified") return {
+    label: "Not specified",
+    note: "No authorship declaration was recorded. The account that saved this version does not establish who drafted it."
+  };
+  const label = input.rubricProvenance === "agent-drafted" ? "Agent-drafted or assisted" : "Human-authored";
+  return input.rubricProvenanceDeclared === true
+    ? { label: `Declared: ${label}`, note: "Self-reported for this version; not independent verification, human approval, or validation." }
+    : { label: `Previously recorded: ${label}`, note: "Older versions could infer authorship from the saving account. This historical label is not an explicit declaration or proof of authorship." };
+}
+
 
 // Seed text only. Whether a skill is still the untouched starter is persisted
 // separately on the skill row; content matching must never authorize setup.

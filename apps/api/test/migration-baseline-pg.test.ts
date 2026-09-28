@@ -22,7 +22,8 @@ run("clean-install database baseline", () => {
           id: "0001_baseline",
           checksum: "ad6cc2bd761ed324fead34d8db59a50d0d2ed21a6ae17223ad7eee40c608ae83",
         },
-        { id: "0002_review_queue_evidence_pins", checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }
+        { id: "0002_review_queue_evidence_pins", checksum: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        { id: "0003_evaluator_authorship", checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }
       ]);
     } finally {
       await cleanup();
@@ -105,6 +106,7 @@ run("clean-install database baseline", () => {
       expect(applied.rows).toEqual([
         { id: "0001_baseline" },
         { id: "0002_review_queue_evidence_pins" },
+        { id: "0003_evaluator_authorship" },
         { id: "0055_evaluator_lifecycle" },
       ]);
     } finally {

@@ -1236,6 +1236,7 @@ run("PostgreSQL analysis criterion promotion persistence", () => {
         bindingDigest: sha256Digest(candidateBinding),
         record: await resolvedRecordFor(candidateBinding)
       });
+      expect(candidate.skill.currentVersion).toMatchObject({ rubricProvenance: "unspecified", rubricProvenanceDeclared: false });
       expect(candidate).toMatchObject({
         replayed: false,
         projection: {
@@ -1643,7 +1644,7 @@ run("PostgreSQL analysis criterion promotion persistence", () => {
         idempotencyKey: "promotion-repository-typed-candidate"
       };
       const typedResolution = { bindingDigest: sha256Digest(TYPED_BINDING), record: await resolvedRecordFor(TYPED_BINDING) };
-      const typedCandidate = await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse(typedRaw), typedResolution);
+      const typedCandidate = await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse({ ...typedRaw, rubricProvenance: "agent-drafted" }), typedResolution);
       expect(typedCandidate).toMatchObject({
         replayed: false,
         skill: { currentVersion: {
@@ -1651,8 +1652,22 @@ run("PostgreSQL analysis criterion promotion persistence", () => {
           executionBinding: TYPED_BINDING, outputSchema: TypedQuestionOutputSchema
         } }
       });
-      expect(await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse({ ...typedRaw, outputSchema: TypedQuestionOutputSchema }), typedResolution))
+      expect(typedCandidate.skill.currentVersion).toMatchObject({ rubricProvenance: "agent-drafted", rubricProvenanceDeclared: true });
+      expect(await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse({ ...typedRaw, rubricProvenance: "agent-drafted", outputSchema: TypedQuestionOutputSchema }), typedResolution))
         .toMatchObject({ replayed: true, skill: { currentVersion: { id: typedCandidate.skill.currentVersion.id } } });
+      await expect(lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse({ ...typedRaw, rubricProvenance: "human-authored" }), typedResolution))
+        .rejects.toMatchObject({ code: "idempotency_conflict" });
+      for (const rubricProvenance of ["human-authored", "unspecified"] as const) {
+        const raw = { ...typedRaw, rubricProvenance, idempotencyKey: `candidate-authorship-${rubricProvenance}` };
+        const authored = await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse(raw), typedResolution);
+        expect(authored.skill.currentVersion).toMatchObject({ rubricProvenance, rubricProvenanceDeclared: rubricProvenance !== "unspecified" });
+        const row = (await pool.query(`select request_digest,evaluator_lifecycle_request_digest_v1(lifecycle) as reconstructed from evaluator_lifecycles lifecycle where id=$1`, [authored.projection.lifecycle.id])).rows[0];
+        expect(row.request_digest).toBe(row.reconstructed);
+        if (rubricProvenance === "unspecified") {
+          const { rubricProvenance: _declaration, ...omitted } = raw;
+          expect(await lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse(omitted), typedResolution)).toMatchObject({ replayed: true });
+        }
+      }
       await expect(lifecycle.createCandidate(actor, EvaluatorCandidateCreateInputSchema.parse({ ...typedRaw, decisionThreshold: 0.31 }), typedResolution))
         .rejects.toMatchObject({ code: "idempotency_conflict" });
     });

@@ -115,7 +115,8 @@ export class DemoCriterionSuiteRepository implements CriterionSuiteRepositoryPor
       categoricalChoiceScores: input.evaluator.verdictKind === "categorical"
         ? input.evaluator.categoricalChoiceScores ?? null
         : null,
-      rubricProvenance: "human-authored",
+      rubricProvenance: "unspecified",
+      rubricProvenanceDeclared: false,
       regressionDatasetRevisionId: null,
       createdAt,
       approvedAt: null

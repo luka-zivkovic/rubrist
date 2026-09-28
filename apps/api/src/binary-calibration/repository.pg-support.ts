@@ -225,6 +225,7 @@ export function skillVersionFromRow(row: Record<string, unknown>): SkillVersion 
     scalarRange,
     categoricalChoiceScores: choices,
     rubricProvenance: String(row.rubric_provenance),
+    rubricProvenanceDeclared: row.rubric_provenance_declared === true,
     regressionDatasetRevisionId: nullableString(row.regression_dataset_revision_id),
     createdAt: toIso(row.created_at),
     approvedAt: row.approved_at ? toIso(row.approved_at) : null

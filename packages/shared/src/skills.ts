@@ -99,6 +99,8 @@ export const SkillVersionSchema = z
     scalarRange: z.tuple([z.number(), z.number()]).nullable(),
     categoricalChoiceScores: z.record(z.string(), z.number().min(0).max(1)).nullable(),
     rubricProvenance: RubricProvenanceSchema,
+    // Absent/false is historical recorded metadata, never proof of a declaration.
+    rubricProvenanceDeclared: z.boolean().optional(),
     // Beginner assurance is independent from the legacy regression lifecycle:
     // an empty known-failure gate may approve execution, but it cannot validate
     // the Check. This marker survives that transition until a future governed

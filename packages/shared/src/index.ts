@@ -7,6 +7,7 @@ import {
   MinimumVerdictOutputSchema,
   TypedQuestionOutputSchema,
   isTypedQuestionOutputSchema,
+  evaluatorAuthorship,
   RubricProvenanceSchema,
   RUBRIC_TEMPLATE_VARIABLE,
   SkillStatusSchema,
@@ -117,6 +118,7 @@ export {
   ProjectSettingsSchema,
   RUBRIC_TEMPLATE_VARIABLE,
   RetentionPruneResultSchema,
+  evaluatorAuthorship,
   RubricProvenanceSchema,
   STARTER_RUBRIC_MARKER,
   ScalarVerdictPayloadSchema,
@@ -745,6 +747,7 @@ export type SkillVersionTimeScope = z.infer<typeof SkillVersionTimeScopeSchema>;
 export const CreateSkillVersionInputSchema = z
   .object({
     criterionVersionId: z.string().min(1).optional(),
+    rubricProvenance: RubricProvenanceSchema.optional(),
     // A prompted version's definition text.
     rubricMarkdown: z.string().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),
     prompt: z.string().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),

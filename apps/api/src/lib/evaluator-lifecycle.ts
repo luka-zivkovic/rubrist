@@ -40,12 +40,14 @@ export function evaluatorCandidateRequestDigest(
   input: EvaluatorCandidateCreateInput
 ): string {
   const parsed = EvaluatorCandidateCreateInputSchema.parse(input);
-  const { idempotencyKey: _idempotencyKey, executionBinding, rubricMarkdown, prompt, typedQuestion, decisionThreshold, ...request } = parsed;
+  const { idempotencyKey: _idempotencyKey, executionBinding, rubricMarkdown, prompt, typedQuestion, decisionThreshold, rubricProvenance, ...request } = parsed;
   const stored = executionBindingFromInput(executionBinding, undefined, { typedQuestion: typedQuestion !== undefined });
   return evaluatorLifecycleDigest({
     basis: EVALUATOR_CANDIDATE_REQUEST_DIGEST_BASIS,
     projectId: nonBlank(projectId, "projectId"),
     ...request,
+    // Unknown authorship is absence, matching the stored declaration flag.
+    ...(rubricProvenance && rubricProvenance !== "unspecified" ? { rubricProvenance } : {}),
     rubricMarkdown: rubricMarkdown ?? null,
     prompt: prompt ?? null,
     typedQuestion: typedQuestion ?? null,

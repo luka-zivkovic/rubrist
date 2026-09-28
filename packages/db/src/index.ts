@@ -48,7 +48,8 @@ export const demoSkill: Skill = {
     verdictKind: "binary",
     scalarRange: null,
     categoricalChoiceScores: null,
-    rubricProvenance: "human-authored",
+    rubricProvenance: "unspecified",
+    rubricProvenanceDeclared: false,
     regressionDatasetRevisionId: null,
     createdAt: now,
     approvedAt: now

@@ -1087,6 +1087,7 @@
     "documentedReasoningDefault",
     "effectiveHumanLabel",
     "effectiveHumanVerdict",
+    "evaluatorAuthorship",
     "evaluatorDefinitionInputIssues",
     "ignoredTemperatureTable",
     "interpretKappa",

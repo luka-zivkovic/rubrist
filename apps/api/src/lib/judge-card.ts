@@ -1,3 +1,4 @@
+import { evaluatorAuthorship } from "@rubrist/shared";
 import {
   describeExecutionBinding,
   KAPPA_MIN_SHARED_CASES,
@@ -78,9 +79,7 @@ export function buildJudgeCard(input: {
   if (input.audit.length === 0) {
     basis.push("audit: no sign-off/override audit entries recorded for this version.");
   }
-  if (input.version.rubricProvenance === "agent-drafted") {
-    basis.push("rubric provenance: agent-drafted scaffold — human adjudication is still required before treating the judge as trusted.");
-  }
+  basis.push(`authorship: ${evaluatorAuthorship(input.version).note}`);
   basis.push("This card reports recorded evidence only; it is not a composite score and consistency is not correctness.");
 
   return {
@@ -93,6 +92,7 @@ export function buildJudgeCard(input: {
       status: input.version.status,
       verdictKind: input.version.verdictKind,
       rubricProvenance: input.version.rubricProvenance,
+      rubricProvenanceDeclared: input.version.rubricProvenanceDeclared === true,
       createdAt: input.version.createdAt,
       approvedAt: input.version.approvedAt
     },
@@ -147,7 +147,8 @@ export function renderJudgeCardMarkdown(card: JudgeCard): string {
   lines.push("");
   lines.push(`- **Version**: ${card.version.version} (\`${card.version.id}\`) · status **${card.version.status}** · verdict kind ${card.version.verdictKind}`);
   lines.push(`- **Approved**: ${card.version.approvedAt ?? "not approved"}`);
-  lines.push(`- **Rubric provenance**: ${card.version.rubricProvenance}`);
+  lines.push(`- **Evaluator authorship**: ${evaluatorAuthorship(card.version).label}`);
+  lines.push(`  ${evaluatorAuthorship(card.version).note}`);
   lines.push(`- **Execution binding**: ${esc(describeExecutionBinding(card.executionBinding))}`);
   const agreement = card.goldenSet.agreement === null
     ? "no comparable golden cases"

@@ -44,6 +44,7 @@ import {
   compileJudgePrompt,
   takesSamplingSettings,
   type CriterionVersion,
+  type RubricProvenance,
   type CreateSkillVersionInput,
   type JudgeModel,
   type JudgeProviderAvailabilityItem,
@@ -118,6 +119,7 @@ export function SkillEditScreen() {
   }
 
   // Editable fields.
+  const [rubricProvenance, setRubricProvenance] = useState<RubricProvenance>("unspecified");
   const [rubric, setRubric] = useState("");
   const [rubricMode, setRubricMode] = useState<"source" | "preview">("source");
   const [prompt, setPrompt] = useState("");
@@ -212,6 +214,7 @@ export function SkillEditScreen() {
   // whatever's loaded (the team's existing pinned model) — starters
   // deliberately don't include a binding, to avoid pinning a version that drifts.
   const applyStarter = useCallback((starter: StarterSkill) => {
+    setRubricProvenance("unspecified");
     setRubric(starter.rubricMarkdown);
     setPrompt(starter.prompt);
     setVerdictKind(starter.verdictKind);
@@ -227,6 +230,7 @@ export function SkillEditScreen() {
   // not silently re-apply the template.
   const applyCurrentVersion = useCallback((s: Skill) => {
     const v = s.currentVersion;
+    setRubricProvenance("unspecified");
     setRubric(v.rubricMarkdown ?? "");
     setPrompt(v.prompt ?? "");
     setTypedDraft(typedQuestionDraftFrom(v));
@@ -244,6 +248,7 @@ export function SkillEditScreen() {
   }, [skill, providerOptions, applyCurrentVersion, applyBindingFields]);
 
   const editFromVersion = useCallback((version: SkillVersion) => {
+    setRubricProvenance("unspecified");
     setRubric(version.rubricMarkdown ?? "");
     setPrompt(version.prompt ?? "");
     setTypedDraft(typedQuestionDraftFrom(version));
@@ -303,6 +308,7 @@ export function SkillEditScreen() {
         if (savedDraft && savedStarter) {
           applyStarter(savedStarter);
           setRubric(savedDraft.rubricMarkdown);
+          setRubricProvenance(savedDraft.rubricProvenance ?? "unspecified");
           setOnboardingDraft(savedDraft);
         } else {
           applyCurrentVersion(s);
@@ -377,7 +383,8 @@ export function SkillEditScreen() {
     saveOnboardingCheckDraft(draft);
   }, [skill, dashboard?.project.name, applyStarter]);
 
-  const updateOnboardingDraft = useCallback((change: Partial<Pick<OnboardingCheckDraft, "qualityQuestion" | "rubricMarkdown">>) => {
+  const updateOnboardingDraft = useCallback((change: Partial<Pick<OnboardingCheckDraft, "qualityQuestion" | "rubricMarkdown" | "rubricProvenance">>) => {
+    if (change.rubricProvenance !== undefined) setRubricProvenance(change.rubricProvenance);
     if (change.rubricMarkdown !== undefined) setRubric(change.rubricMarkdown);
     setOnboardingDraft((current) => {
       if (!current) return current;
@@ -560,6 +567,7 @@ export function SkillEditScreen() {
         criterionVersionId: skillCriterionVersionId(skill),
         binding: { provider, modelId, modelVersion, baseUrl, ...pickerSavedFields(temperature) },
         rubricMarkdown: rubric,
+        rubricProvenance,
         prompt,
         typedQuestion: typedDraft,
         verdict: { verdictKind, scalarRange, categoricalChoiceScores: choiceScores },
@@ -569,7 +577,7 @@ export function SkillEditScreen() {
         overrideReason: extra?.overrideReason
       });
     },
-    [skill, baseVersion, rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
+    [skill, baseVersion, rubric, rubricProvenance, prompt, typedDraft, provider, modelId, modelVersion, baseUrl, temperature, pickerSavedFields, timeScope, verdictKind, choiceScores, scalarRange, firstRun, starterSuppliedOutputContract]
   );
 
   // A setting the check saw rejected would fail resolution after save, so it
@@ -594,7 +602,7 @@ export function SkillEditScreen() {
     !submitting;
 
   const unsaved = useEditorUnsavedChanges(JSON.stringify({
-    rubric, prompt, typedDraft, provider, modelId, modelVersion, baseUrl,
+    rubric, rubricProvenance, prompt, typedDraft, provider, modelId, modelVersion, baseUrl,
     temperature, settings: picker.settings, timeScope, verdictKind, choiceScores,
     scalarRange, starterSuppliedOutputContract
   }), !firstRun && !loading && dashboard?.viewerRole === "owner");
@@ -851,6 +859,8 @@ export function SkillEditScreen() {
     );
     return (
       <FirstRunCheckSetup
+        rubricProvenance={rubricProvenance}
+        onAuthorshipChange={(value) => updateOnboardingDraft({ rubricProvenance: value })}
         projectName={dashboard.project.name}
         evidenceInventory={onboardingEvidenceInventory}
         starters={STARTER_SKILLS}
@@ -892,6 +902,8 @@ export function SkillEditScreen() {
   return (
     <fieldset disabled={submitting} className="m-0 min-w-0 border-0 p-0" aria-label="Evaluator draft">
     <SkillVersionEditor
+      rubricProvenance={rubricProvenance}
+      onAuthorshipChange={setRubricProvenance}
       navigate={navigate}
       firstRun={firstRun}
       v={v}

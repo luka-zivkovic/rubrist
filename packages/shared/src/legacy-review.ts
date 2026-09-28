@@ -513,6 +513,8 @@ export const JudgeCardSchema = z.object({
     status: SkillStatusSchema,
     verdictKind: VerdictKindSchema,
     rubricProvenance: RubricProvenanceSchema,
+    // Absent/false is historical recorded metadata, never proof of a declaration.
+    rubricProvenanceDeclared: z.boolean().optional(),
     createdAt: z.string(),
     approvedAt: z.string().nullable()
   }),

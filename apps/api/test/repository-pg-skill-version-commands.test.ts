@@ -198,8 +198,8 @@ describe("PostgreSQL skill-version client commands", () => {
       "verdict_kind, scalar_range, categorical_choice_scores, rubric_provenance, " +
       "regression_dataset_revision_id, created_at, approved_at, criterion_version_id, " +
       "created_by_user_id, created_by_subject_id, developer_identity_status, " +
-      "onboarding_idempotency_key, onboarding_request_digest, onboarding_assurance, typed_question, decision_threshold) " +
-      "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$29,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$30,$31)"
+      "onboarding_idempotency_key, onboarding_request_digest, onboarding_assurance, typed_question, decision_threshold, rubric_provenance_declared) " +
+      "values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$29,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$30,$31,$32)"
     );
     expect(calls[3]?.values).toEqual([
       "skill-version-2",
@@ -232,7 +232,8 @@ describe("PostgreSQL skill-version client commands", () => {
       "starter_unvalidated",
       null,
       null,
-      null
+      null,
+      false
     ]);
   });
 
