@@ -53,6 +53,12 @@ function serverAccepts(input: unknown) {
 }
 
 describe("the editor's create-version request", () => {
+  it("never inherits authorship from the base and carries explicit declarations", () => {
+    expect(skillVersionInputFromDraft(draft({}))).not.toHaveProperty("rubricProvenance");
+    expect(skillVersionInputFromDraft(draft({ rubricProvenance: "unspecified" }))).not.toHaveProperty("rubricProvenance");
+    expect(skillVersionInputFromDraft(draft({ rubricProvenance: "agent-drafted" }))).toHaveProperty("rubricProvenance", "agent-drafted");
+  });
+
   it("sends a typed question with the typesafe binding, a binary verdict, and the fixed contract", () => {
     const input = skillVersionInputFromDraft(draft({ binding: { provider: "typesafe", modelId: "jev-1.13.0", modelVersion: "jev-1.13.0", baseUrl: "", temperature: "0" } }));
     expect(input).toMatchObject({ typedQuestion: QUESTION, decisionThreshold: 0.7, verdictKind: "binary", executionBinding: JEV, criterionVersionId: "cv" });

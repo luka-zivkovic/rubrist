@@ -187,6 +187,7 @@ export class PgSkillLifecycleRepository implements SkillLifecycleRepositoryPort 
               sv.scalar_range,
               sv.categorical_choice_scores,
               sv.rubric_provenance,
+              sv.rubric_provenance_declared,
               sv.onboarding_assurance,
               sv.regression_dataset_revision_id,
               sv.criterion_version_id as version_criterion_version_id,
@@ -513,7 +514,8 @@ export class PgSkillLifecycleRepository implements SkillLifecycleRepositoryPort 
         verdictKind: input.verdictKind,
         scalarRange: input.verdictKind === "scalar" ? input.scalarRange ?? null : null,
         categoricalChoiceScores: input.verdictKind === "categorical" ? input.categoricalChoiceScores ?? null : null,
-        rubricProvenance: context.rubricProvenance ?? "human-authored",
+        rubricProvenance: context.rubricProvenance ?? input.rubricProvenance ?? "unspecified",
+        rubricProvenanceDeclared: (context.rubricProvenance ?? input.rubricProvenance ?? "unspecified") !== "unspecified",
         onboardingAssurance: context.onboardingCriterion || context.agentSetup
           ? "starter_unvalidated"
           : (await client.query(

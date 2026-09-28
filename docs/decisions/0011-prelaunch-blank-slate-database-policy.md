@@ -16,7 +16,10 @@ The founder authorized continuing the review-correctness checklist while
 preserving the hosted benchmark and its human reviews. For this work, the
 existing `0001_baseline.sql` bytes and checksum are retained and the review
 pinning schema is added in `0002_review_queue_evidence_pins.sql`. Existing
-criterion-only tasks are not assigned guessed evidence pins.
+criterion-only tasks are not assigned guessed evidence pins. The separately
+reviewed authorship fix uses `0003_evaluator_authorship.sql`: old provenance
+values remain unchanged, and a new declaration flag distinguishes explicit
+authorship from older defaults. Neither migration rewrites stored reviews.
 
 This is a narrow preservation exception, not a declaration of external
 production launch or global exit from the policy. This installation must use

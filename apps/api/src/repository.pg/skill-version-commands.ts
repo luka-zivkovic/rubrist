@@ -22,8 +22,8 @@ export async function insertSkillVersion(
         regression_dataset_revision_id, created_at, approved_at, criterion_version_id,
         created_by_user_id, created_by_subject_id, developer_identity_status,
         onboarding_idempotency_key, onboarding_request_digest, onboarding_assurance,
-        typed_question, decision_threshold)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$29,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$30,$31)`,
+        typed_question, decision_threshold, rubric_provenance_declared)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$29,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$30,$31,$32)`,
     [
       version.id,
       version.skillId,
@@ -55,7 +55,8 @@ export async function insertSkillVersion(
       version.onboardingAssurance ?? null,
       version.customEndpointUrl,
       version.typedQuestion === null ? null : JSON.stringify(version.typedQuestion),
-      version.decisionThreshold
+      version.decisionThreshold,
+      version.rubricProvenanceDeclared === true
     ]
   );
 }

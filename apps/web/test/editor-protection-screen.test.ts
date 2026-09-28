@@ -182,6 +182,26 @@ const change = async (field: string, value: unknown) => {
 };
 
 describe("editor protects author choices and work", () => {
+  it("keeps failed-save authorship, protects it as unsaved work, and clears it when resetting", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor();
+    expect(lastEditor.rubricProvenance).toBe("unspecified");
+    await change("onAuthorshipChange", "agent-drafted");
+    await click("History");
+    expect(router.state.location.pathname).toBe("/skill/edit");
+    expect(confirm).toHaveBeenCalled();
+    api.createSkillVersion.mockRejectedValueOnce(new Error("Temporarily unavailable"));
+    await click("Save");
+    expect(api.createSkillVersion.mock.calls[0]?.[1]).toMatchObject({ rubricProvenance: "agent-drafted" });
+    expect(lastEditor.rubricProvenance).toBe("agent-drafted");
+    confirm.mockReturnValue(true);
+    await click("Reset");
+    expect(lastEditor.rubricProvenance).toBe("unspecified");
+    await change("onAuthorshipChange", "human-authored");
+    await click("Template");
+    expect(lastEditor.rubricProvenance).toBe("unspecified");
+  });
+
   it("freezes the entire draft while save is pending, including template actions", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderEditor();

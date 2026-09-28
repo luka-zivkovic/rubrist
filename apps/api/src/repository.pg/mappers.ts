@@ -184,6 +184,7 @@ export function rowToSkill(row: Record<string, unknown>): Skill {
       scalarRange: row.scalar_range == null ? null : parseJson(row.scalar_range),
       categoricalChoiceScores: row.categorical_choice_scores == null ? null : parseJson(row.categorical_choice_scores),
       rubricProvenance: String(row.rubric_provenance),
+      rubricProvenanceDeclared: row.rubric_provenance_declared === true,
       onboardingAssurance: row.onboarding_assurance === "starter_unvalidated" ? "starter_unvalidated" : null,
       regressionDatasetRevisionId: row.regression_dataset_revision_id === null || row.regression_dataset_revision_id === undefined
         ? null
@@ -232,6 +233,7 @@ export function rowToSkillVersion(row: Record<string, unknown>): SkillVersion {
     scalarRange: scalarRangeRaw,
     categoricalChoiceScores: categoricalChoiceScoresRaw,
     rubricProvenance: String(row.rubric_provenance),
+    rubricProvenanceDeclared: row.rubric_provenance_declared === true,
     onboardingAssurance: row.onboarding_assurance === "starter_unvalidated" ? "starter_unvalidated" : null,
     regressionDatasetRevisionId: row.regression_dataset_revision_id === null || row.regression_dataset_revision_id === undefined
       ? null

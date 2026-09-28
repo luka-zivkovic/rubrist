@@ -270,14 +270,15 @@ export class PgEvaluatorLifecycleRepository implements EvaluatorLifecycleReposit
             golden_set_agreement,too_strict_count,too_lenient_count,ambiguous_count,known_limitations,
             verdict_kind,scalar_range,categorical_choice_scores,rubric_provenance,
             regression_dataset_revision_id,created_at,approved_at,criterion_version_id,
-            created_by_user_id,created_by_subject_id,developer_identity_status,typed_question,decision_threshold)
+            created_by_user_id,created_by_subject_id,developer_identity_status,typed_question,decision_threshold,rubric_provenance_declared)
          values ($1,$2,$3,$4,'calibrating',$5,$6,$7::jsonb,$8::jsonb,$13,
-                 null,0,0,0,'{}','binary',null,null,'human-authored',$9,
-                 date_trunc('milliseconds',clock_timestamp()),null,$10,$11,$12,'recorded',$14::jsonb,$15)`,
+                 null,0,0,0,'{}','binary',null,null,$16,$9,
+                 date_trunc('milliseconds',clock_timestamp()),null,$10,$11,$12,'recorded',$14::jsonb,$15,$17)`,
         [skillVersionId, skillId, actor.projectId, `${versionNumber}.0.0`, input.rubricMarkdown ?? null, input.prompt ?? null,
           JSON.stringify(input.outputSchema ?? defaultEvaluatorOutputSchema(stored.executionBinding.verdictProtocol)), JSON.stringify(stored.executionBinding),
           regressionRevisionId, input.criterionVersionId, actor.userId, subjectId, stored.customEndpointUrl,
-          input.typedQuestion === undefined ? null : JSON.stringify(input.typedQuestion), input.decisionThreshold ?? null]
+          input.typedQuestion === undefined ? null : JSON.stringify(input.typedQuestion), input.decisionThreshold ?? null,
+          input.rubricProvenance ?? "unspecified", (input.rubricProvenance ?? "unspecified") !== "unspecified"]
       );
       await saveResolutionRecord(client, actor.projectId, skillVersionId, stored.executionBinding, record!);
 
@@ -789,7 +790,7 @@ async function loadSkill(db: Pool | PoolClient, projectId: string, skillVersionI
             version.execution_binding,version.custom_endpoint_url,version.output_schema,version.golden_set_agreement,
             version.too_strict_count,version.too_lenient_count,version.ambiguous_count,
             version.known_limitations,version.verdict_kind,version.scalar_range,
-            version.categorical_choice_scores,version.rubric_provenance,
+            version.categorical_choice_scores,version.rubric_provenance,version.rubric_provenance_declared,
             version.regression_dataset_revision_id,version.created_at as version_created_at,version.approved_at
      from skill_versions version
      join skills skill on skill.id=version.skill_id and skill.project_id=version.project_id
@@ -819,6 +820,7 @@ async function loadSkill(db: Pool | PoolClient, projectId: string, skillVersionI
     scalarRange: row.scalar_range == null ? null : parseJson(row.scalar_range),
     categoricalChoiceScores: row.categorical_choice_scores == null ? null : parseJson(row.categorical_choice_scores),
     rubricProvenance: row.rubric_provenance,
+    rubricProvenanceDeclared: row.rubric_provenance_declared === true,
     regressionDatasetRevisionId: row.regression_dataset_revision_id,
     createdAt: toIso(row.version_created_at),
     approvedAt: row.approved_at ? toIso(row.approved_at) : null

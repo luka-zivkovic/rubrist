@@ -1,3 +1,4 @@
+import { evaluatorAuthorship } from "@rubrist/shared";
 import { CheckWait } from "../components/check-wait.js";
 import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useState } from "react";
@@ -733,8 +734,11 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
         <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[12.5px]">
           <div className="text-ink-3">Execution binding</div>
           <div className="font-mono">{describeExecutionBinding(card.executionBinding)}</div>
-          <div className="text-ink-3">Rubric provenance</div>
-          <div className="font-mono">{card.version.rubricProvenance}</div>
+          <div className="text-ink-3">Evaluator authorship</div>
+          <div>
+            <div>{evaluatorAuthorship(card.version).label}</div>
+            <p className="mt-1 text-[11px] leading-4 text-ink-3">{evaluatorAuthorship(card.version).note}</p>
+          </div>
           <div className="text-ink-3">Known-failure agreement</div>
           <div className="font-mono">
             {agreement === null

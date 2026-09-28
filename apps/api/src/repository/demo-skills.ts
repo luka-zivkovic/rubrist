@@ -301,7 +301,8 @@ export class DemoSkillLifecycleRepository implements SkillLifecycleRepositoryPor
       verdictKind: input.verdictKind,
       scalarRange: input.verdictKind === "scalar" ? input.scalarRange ?? null : null,
       categoricalChoiceScores: input.verdictKind === "categorical" ? input.categoricalChoiceScores ?? null : null,
-      rubricProvenance: context.rubricProvenance ?? "human-authored",
+      rubricProvenance: context.rubricProvenance ?? input.rubricProvenance ?? "unspecified",
+      rubricProvenanceDeclared: (context.rubricProvenance ?? input.rubricProvenance ?? "unspecified") !== "unspecified",
       onboardingAssurance: context.onboardingCriterion || context.agentSetup
         ? "starter_unvalidated"
         : priorVersions.find((candidate) => candidate.onboardingAssurance)?.onboardingAssurance ?? null,

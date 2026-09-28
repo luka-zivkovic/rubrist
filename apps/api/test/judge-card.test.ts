@@ -93,10 +93,10 @@ describe("renderJudgeCardMarkdown — C1 injection safety", () => {
     const base = card();
     const md = renderJudgeCardMarkdown({
       ...base,
-      version: { ...base.version, rubricProvenance: "agent-drafted" },
+      version: { ...base.version, rubricProvenance: "agent-drafted", rubricProvenanceDeclared: true },
       basis: [...base.basis, "rubric provenance: agent-drafted scaffold — human adjudication is still required."]
     });
-    expect(md).toContain("Rubric provenance**: agent-drafted");
+    expect(md).toContain("Evaluator authorship**: Declared: Agent-drafted or assisted");
     expect(md).toContain("human adjudication is still required");
   });
 

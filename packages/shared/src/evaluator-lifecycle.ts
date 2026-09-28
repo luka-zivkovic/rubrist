@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   JsonSchemaSchema,
+  RubricProvenanceSchema,
   containsLoneUtf16Surrogate
 } from "./judge.js";
 import { EVALUATOR_DEFINITION_TEXT_MAX, ExecutionBindingInputSchema, TypedQuestionSchema } from "./evaluator-execution.js";
@@ -59,6 +60,7 @@ export const EvaluatorCandidateCreateInputSchema = z.object({
   expectedTruthContentDigest: EvaluatorLifecycleDigestSchema,
   skillName: z.string().trim().min(1).max(200),
   skillDescription: z.string().trim().min(1).max(2_000),
+  rubricProvenance: RubricProvenanceSchema.optional(),
   // A prompted candidate's rubric and prompt, or a typed-question candidate's
   // question and decision threshold (ADR-0014 section 5), never both.
   rubricMarkdown: z.string().trim().min(1).max(EVALUATOR_DEFINITION_TEXT_MAX).optional(),

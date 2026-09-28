@@ -1,3 +1,5 @@
+import { EvaluatorAuthorshipField } from "./evaluator-authorship-field.js";
+import type { RubricProvenance } from "@rubrist/shared";
 import { ArrowLeft, Check, LoaderCircle, Pencil, Sparkles } from "lucide-react";
 import type { JudgeProviderId, OnboardingEvidenceInventory } from "@rubrist/shared";
 import { MarkdownPreview } from "./markdown-preview.js";
@@ -9,6 +11,8 @@ import type { StarterSkill } from "../lib/starter-skills.js";
 import { cn } from "../lib/utils.js";
 
 interface FirstRunCheckSetupProps {
+  rubricProvenance?: RubricProvenance;
+  onAuthorshipChange?: (value: RubricProvenance) => void;
   projectName: string;
   evidenceInventory: OnboardingEvidenceInventory | null;
   starters: ReadonlyArray<StarterSkill>;
@@ -39,6 +43,8 @@ interface FirstRunCheckSetupProps {
 }
 
 export function FirstRunCheckSetup({
+  rubricProvenance = "unspecified",
+  onAuthorshipChange,
   projectName,
   evidenceInventory,
   starters,
@@ -271,6 +277,7 @@ export function FirstRunCheckSetup({
           <Button variant="link" size="sm" onClick={onOpenSettings} disabled={submitting}>Open Settings</Button>
         </MarginNote>
       ) : null}
+      {onAuthorshipChange ? <EvaluatorAuthorshipField value={rubricProvenance} onChange={onAuthorshipChange} disabled={submitting} /> : null}
       {error ? <p role="alert" className="mb-3 text-[12.5px] text-signal">{error}</p> : null}
 
       <div className="flex flex-wrap items-center justify-end gap-2">

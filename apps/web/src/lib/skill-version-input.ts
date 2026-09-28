@@ -3,6 +3,7 @@ import {
   verdictOutputSchema,
   type CreateSkillVersionInput,
   type SkillVersion,
+  type RubricProvenance,
   type SkillVersionTimeScope
 } from "@rubrist/shared";
 import { executionBindingInputFromFields, type ExecutionBindingFields } from "./execution-binding-draft.js";
@@ -18,6 +19,7 @@ export interface EditorVersionDraft {
   /** The version the editor started from; settings the editor leaves out carry over from it. */
   base: SkillVersion;
   criterionVersionId: string | null;
+  rubricProvenance?: RubricProvenance;
   binding: ExecutionBindingFields;
   rubricMarkdown: string;
   prompt: string;
@@ -37,6 +39,7 @@ export function skillVersionInputFromDraft(draft: EditorVersionDraft): CreateSki
   const common = {
     ...(draft.criterionVersionId ? { criterionVersionId: draft.criterionVersionId } : {}),
     executionBinding,
+    ...(draft.rubricProvenance && draft.rubricProvenance !== "unspecified" ? { rubricProvenance: draft.rubricProvenance } : {}),
     timeScope: draft.timeScope,
     ...(draft.overrideReason ? { overrideReason: draft.overrideReason } : {})
   };

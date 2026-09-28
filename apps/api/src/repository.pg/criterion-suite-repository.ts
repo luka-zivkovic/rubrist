@@ -137,7 +137,8 @@ export class PgCriterionSuiteRepository implements CriterionSuiteRepositoryPort 
         categoricalChoiceScores: input.evaluator.verdictKind === "categorical"
           ? input.evaluator.categoricalChoiceScores ?? null
           : null,
-        rubricProvenance: "human-authored",
+        rubricProvenance: "unspecified",
+        rubricProvenanceDeclared: false,
         regressionDatasetRevisionId: null,
         createdAt: new Date().toISOString(),
         approvedAt: null

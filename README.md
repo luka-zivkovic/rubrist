@@ -679,3 +679,11 @@ Rubrist is early-stage software. APIs, migrations, and the SkillFormat specifica
 ## License
 
 Rubrist is open source under the [MIT License](LICENSE.md). You are free to use, modify, distribute, and self-host it, including in commercial products and hosted services, subject to the license terms.
+
+### Evaluator authorship
+
+CURRENT: evaluator saves accept an optional authorship declaration, separately
+from the authenticated account. Missing declarations stay unspecified; the
+editor never inherits authorship from its base version. Version cards distinguish
+explicit declarations from historical labels that could be defaults. Neither is
+validation or approval. See [the storage and compatibility contract](docs/evaluator-authorship.md).
