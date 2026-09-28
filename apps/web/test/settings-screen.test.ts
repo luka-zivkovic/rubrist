@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, useState, type ReactNode } from "react";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
@@ -7,13 +7,14 @@ for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInput
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const { createRoot } = await import("react-dom/client");
 const { createMemoryRouter, RouterProvider } = await import("react-router-dom");
-const api = vi.hoisted(() => ({ fetchProjectSettings: vi.fn(), updateProjectSettings: vi.fn(), pruneExpiredTraces: vi.fn(), fetchJudgeKeys: vi.fn(), fetchJudgeProviders: vi.fn(), setJudgeKey: vi.fn(), deleteJudgeKey: vi.fn(), fetchApiKeys: vi.fn(), createApiKey: vi.fn(), revokeApiKey: vi.fn(), deleteProject: vi.fn(), selectProject: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchProjectSettings: vi.fn(), updateProjectSettings: vi.fn(), pruneExpiredTraces: vi.fn(), fetchJudgeKeys: vi.fn(), fetchJudgeProviders: vi.fn(), setJudgeKey: vi.fn(), deleteJudgeKey: vi.fn(), fetchApiKeys: vi.fn(), createApiKey: vi.fn(), revokeApiKey: vi.fn(), deleteProject: vi.fn(), selectProject: vi.fn(), createProject: vi.fn() }));
 const state = vi.hoisted(() => ({ demoMode: false, signOut: vi.fn(), purge: vi.fn(), clipboard: vi.fn() }));
 vi.mock("@/lib/api", () => api);
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: state.demoMode }) }));
 vi.mock("@/lib/auth-client", () => ({ useSession: () => ({ data: { user: { name: "Owner", email: "owner@example.com" } } }), authClient: { signOut: state.signOut } }));
-vi.mock("@/lib/journey", () => ({ forgetFirstProjectKey: vi.fn() }));
+vi.mock("@/lib/journey", () => ({ forgetFirstProjectKey: vi.fn(), rememberFirstProjectKey: vi.fn(() => true) }));
 vi.mock("@/lib/production-calibration-api", () => ({ purgeProductionApiKeyRecords: state.purge }));
+vi.mock("@/lib/clipboard", () => ({ copyTextToClipboard: state.clipboard }));
 vi.mock("../src/lib/clipboard.js", () => ({ copyTextToClipboard: state.clipboard }));
 vi.mock("@/hooks/use-dialog-focus", async () => import("../src/hooks/use-dialog-focus.js"));
 vi.mock("@/components/connect-agent-panel", () => ({ ConnectAgentPanel: ({ apiKey }: any) => createElement("div", { "data-agent-snippets": true }, apiKey ?? "key placeholder") }));
@@ -21,7 +22,9 @@ type Props = { children?: ReactNode } & Record<string, any>;
 const Block = ({ children, ...props }: Props) => createElement("div", props, children);
 vi.mock("@/components/ui/card", () => ({ Card: Block, CardHeader: Block, CardContent: Block, CardDescription: Block, CardTitle: ({ children, ...props }: Props) => createElement("h2", props, children) }));
 vi.mock("@/components/ui/button", () => ({ Button: ({ children, variant: _variant, size: _size, ...props }: Props) => createElement("button", { type: "button", ...props }, children) }));
-vi.mock("@/components/rubrist", () => ({ Chip: ({ children }: Props) => createElement("span", null, children), MarginNote: ({ children }: Props) => createElement("p", null, children), SectionHead: ({ title, sub, right }: Props) => createElement("header", null, createElement("h1", null, title), sub, right) }));
+vi.mock("@/components/rubrist", () => ({ Eyebrow: Block, Chip: ({ children }: Props) => createElement("span", null, children), MarginNote: ({ children }: Props) => createElement("p", null, children), SectionHead: ({ title, sub, right }: Props) => createElement("header", null, createElement("h1", null, title), sub, right) }));
+vi.mock("@/components/project-task", () => ({ CHOOSE_TASK_ERROR: "Choose", NAME_REQUIRED_ERROR: "Name", PROJECT_TASK_COPY: { bench: { cta: "Create project", busyCta: "Creating…" } }, ProjectTaskFields: ({ setMode, setName }: any) => createElement("button", { onClick: () => { setMode("bench"); setName("New project"); } }, "Set project draft") }));
+const { NewProjectModal } = await import("../src/components/project-create.js");
 const { SettingsScreen } = await import("../src/screens/settings.js");
 const { parseRetentionDraft } = await import("../src/screens/settings/retention-card.js");
 const { confirmProjectSwitch } = await import("../src/lib/project-switch.js");
@@ -45,8 +48,12 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); router?.dispose(); container.remove(); vi.restoreAllMocks(); });
 afterAll(() => { vi.unstubAllGlobals(); dom.window.close(); });
-async function mount() {
-  router = createMemoryRouter([{ path: "/settings", element: createElement(SettingsScreen) }, { path: "/away", element: createElement("p", null, "Away") }], { initialEntries: ["/settings?criterionId=criterion_one"] });
+function SettingsHarness({ withProjectModal }: { withProjectModal: boolean }) {
+  const [showModal, setShowModal] = useState(withProjectModal);
+  return createElement("div", null, createElement(SettingsScreen), showModal ? createElement(NewProjectModal, { onClose: () => setShowModal(false) }) : null);
+}
+async function mount(withProjectModal = false) {
+  router = createMemoryRouter([{ path: "/settings", element: createElement(SettingsHarness, { withProjectModal }) }, { path: "/away", element: createElement("p", null, "Away") }], { initialEntries: ["/settings?criterionId=criterion_one"] });
   await act(async () => root.render(createElement(RouterProvider, { router })));
 }
 function button(text: string, scope: ParentNode = container) { const value = [...scope.querySelectorAll("button")].find((node) => node.textContent?.trim() === text); if (!value) throw new Error(`No button ${text}`); return value; }
@@ -124,6 +131,23 @@ describe("settings interaction", () => {
     expect(confirmProjectSwitch()).toBe(true);
     const unload = new window.Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload); expect(unload.defaultPrevented).toBe(false);
+  });
+  it.each([true, false])("preserves the old scope and pending project after cancelled creation navigation (key=%s)", async (hasKey) => {
+    api.createProject.mockResolvedValue({ projectId: "project_2", apiKey: hasKey ? { ...key, key: "created-project-test-secret" } : null });
+    await mount(true); await fill("trace-retention-days", "14");
+    await click("Set project draft", document.body); vi.mocked(window.confirm).mockReturnValue(false);
+    await click("Create project", document.body);
+    expect(api.createProject).toHaveBeenCalledTimes(1);
+    expect(api.selectProject).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain(hasKey ? "created-project-test-secret" : "Project created — continue");
+    await click(hasKey ? "I saved it — continue" : "Project created — continue", document.body);
+    expect(api.selectProject).not.toHaveBeenCalled();
+    expect(api.createProject).toHaveBeenCalledTimes(1);
+    await click("Stay in current project", document.body);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect((container.querySelector("#trace-retention-days") as HTMLInputElement).value).toBe("14");
+    expect(button("Save period").matches(":disabled")).toBe(false);
+    expect(api.selectProject).not.toHaveBeenCalled();
   });
   it("freezes forms and project switching while sign-out is pending, and restores failed sessions", async () => {
     const signOut = deferred<any>(); state.signOut.mockReturnValueOnce(signOut.promise);
