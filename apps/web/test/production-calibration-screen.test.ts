@@ -1,3 +1,4 @@
+import { routeMetadata } from "../src/lib/route-metadata.js";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -69,7 +70,8 @@ describe("production calibration screen", () => {
     ]);
     expect(app).toContain('{ path: "production-calibration", element: <ProductionCalibrationScreen /> }');
     expect(sidebar.match(/{ to: "\/production-calibration", label: "Production calibration", icon: Activity }/g)).toHaveLength(2);
-    expect(rootLayout).toContain('"/production-calibration": ["Production calibration"]');
+    expect(rootLayout).toContain("routeMetadata(location.pathname, location.search, bench)");
+    expect(routeMetadata("/production-calibration").crumbs).toEqual([{ label: "Production calibration" }]);
     expect(criterionSelection).toContain('"/production-calibration",');
   });
 });
