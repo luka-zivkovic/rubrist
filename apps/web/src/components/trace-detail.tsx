@@ -233,15 +233,15 @@ function HumanRulingCard({
       : null;
   const agrees = priorEvaluatorLabel ? label === priorEvaluatorLabel : null;
   return (
-    <Card data-testid="human-ruling-card">
-      <CardHeader>
+    <Card data-testid="human-ruling-card" className="border-ink border-t-4">
+      <CardHeader className="bg-ink text-paper">
         <div>
           <CardTitle>{ruling.source === "adjudicated" ? "Owner ruling" : "Recorded human ruling"}</CardTitle>
-          <CardDescription>
+          <CardDescription className="text-paper/80">
             Ungoverned legacy review evidence. This is not governed human truth.
           </CardDescription>
         </div>
-        <VerdictChip verdict={label} />
+        <VerdictChip verdict={label} className="px-3 py-2 text-[24px] font-semibold tracking-tight" />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="text-[13px] text-ink-2">
@@ -574,15 +574,70 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
         sub={`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}
       />
 
-      <div className="grid grid-cols-1 gap-7 xl:grid-cols-[1.25fr_1fr]">
-        <div className="min-w-0 flex flex-col gap-5">
-          {typedEvaluation ? (
-            <Card>
-              <CardContent className="pt-5">
-                <TypedQuestionView question={typedEvaluation.question} threshold={typedEvaluation.threshold} />
-              </CardContent>
-            </Card>
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[1.25fr_1fr] xl:grid-rows-[auto_1fr]">
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-1">
+          {effectiveRuling ? (
+            <HumanRulingCard
+              ruling={effectiveRuling}
+              verdicts={verdictHistory}
+              currentJudgeRun={judgeRun}
+            />
           ) : null}
+
+          <Card className={effectiveRuling ? "border-rule" : "border-ink border-t-4"}>
+            <CardHeader className={effectiveRuling ? undefined : "bg-ink text-paper"}>
+              <div>
+                <CardTitle className="text-[16px] font-semibold">Latest evaluator opinion</CardTitle>
+                <CardDescription className={effectiveRuling ? undefined : "text-paper/80"}>
+                  Model output from the latest judge run. A recorded human ruling takes precedence in this view.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <VerdictChip verdict={exception.verdict} className={effectiveRuling ? "text-[14px]" : "px-3 py-2 text-[24px] font-semibold tracking-tight"} />
+                <span className="text-[14px] font-medium text-ink">
+                  {typedEvaluation?.probability != null
+                    ? `Probability answer is true: ${(typedEvaluation.probability * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+                    : `score ${judgeRun.score.toFixed(2)}`}
+                </span>
+                {effectiveRulingLabel ? (
+                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with ruling" : "overridden by ruling"}</Chip>
+                ) : null}
+              </div>
+
+              <div className="text-[11.5px] text-ink-3">
+                Model: {judgeRun.providerMetadata?.model ?? "not recorded"}
+                <div className="mt-1 break-all">Evaluator version {versionName ? `v${versionName}` : judgeRun.skillVersionId}</div>
+              </div>
+              {typedEvaluation ? (
+                <div className="text-[12px] text-ink-3">
+                  {typedEvaluation.probability !== null
+                    ? `True means pass. This version passes when the probability is at least ${typedEvaluation.threshold}. This is a model estimate, not measured accuracy.`
+                    : "The recorded probability and threshold could not be verified from this call; inspect the raw evaluator record."}
+                </div>
+              ) : null}
+              <Separator />
+
+              <div>
+                <Eyebrow>Reasoning</Eyebrow>
+                <div className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
+                  {judgeRun.reasoning === null
+                    ? <span className="text-ink-3">{typedEvaluation ? "This evaluator returns a probability and does not provide an explanation." : "This evaluator states no rationale."}</span>
+                    : judgeRun.reasoning || <span className="text-ink-3">No rationale recorded.</span>}
+                </div>
+              </div>
+
+              {exception.capabilityGap ? <div>
+                <Eyebrow>Capability gap</Eyebrow>
+                <div className="mt-1 font-mono text-[12px] text-ink-2">
+                  {exception.capabilityGap}
+                </div>
+              </div> : null}
+            </CardContent>
+          </Card>
+        </div>
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
           {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} /> : (
             <Card>
               <CardHeader>
@@ -634,85 +689,11 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
           ) : null}
         </div>
 
-        <div className="min-w-0 flex flex-col gap-5">
-          {effectiveRuling ? (
-            <HumanRulingCard
-              ruling={effectiveRuling}
-              verdicts={verdictHistory}
-              currentJudgeRun={judgeRun}
-            />
-          ) : null}
-
-          <Card>
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-2">
+          <Card className="border-rule-strong">
             <CardHeader>
               <div>
-                <CardTitle>Latest evaluator opinion</CardTitle>
-                <CardDescription>
-                  Model output from the latest judge run. A recorded human ruling takes precedence in this view.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <div className="flex items-baseline gap-3">
-                <VerdictChip verdict={exception.verdict} />
-                <span className="font-mono text-[11px] text-ink-3">
-                  {typedEvaluation?.probability != null
-                    ? `Probability answer is true: ${(typedEvaluation.probability * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-                    : `score ${judgeRun.score.toFixed(2)}`}
-                </span>
-                {effectiveRulingLabel ? (
-                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with ruling" : "overridden by ruling"}</Chip>
-                ) : null}
-              </div>
-
-              <div className="text-[11.5px] text-ink-3">
-                Model: {judgeRun.providerMetadata?.model ?? "not recorded"}
-                <div className="mt-1 break-all">Evaluator version {versionName ? `v${versionName} · ` : ""}{judgeRun.skillVersionId}</div>
-              </div>
-              {typedEvaluation ? (
-                <div className="text-[12px] text-ink-3">
-                  {typedEvaluation.probability !== null
-                    ? `True means pass. This version passes when the probability is at least ${typedEvaluation.threshold}. This is a model estimate, not measured accuracy.`
-                    : "The recorded probability and threshold could not be verified from this call; inspect the raw evaluator record."}
-                </div>
-              ) : null}
-              <Separator />
-
-              <div>
-                <Eyebrow>Reasoning</Eyebrow>
-                <div className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
-                  {judgeRun.reasoning === null
-                    ? <span className="text-ink-3">{typedEvaluation ? "This evaluator returns a probability and does not provide an explanation." : "This evaluator states no rationale."}</span>
-                    : judgeRun.reasoning || <span className="text-ink-3">No rationale recorded.</span>}
-                </div>
-              </div>
-
-              {exception.capabilityGap ? <div>
-                <Eyebrow>Capability gap</Eyebrow>
-                <div className="mt-1 font-mono text-[12px] text-ink-2">
-                  {exception.capabilityGap}
-                </div>
-              </div> : null}
-            </CardContent>
-          </Card>
-
-          <JudgeCallPanel
-            meta={judgeCallMeta}
-            compiledPrompt={compiledPrompt}
-            rawRequest={rawRequestStr}
-            rawResponse={rawResponseStr}
-          />
-
-          <DecisionHistory
-            verdicts={verdictHistory}
-            effectiveRulingId={effectiveRuling?.id ?? null}
-            detail={detail}
-          />
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>{effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
                 <CardDescription>
                   {effectiveRuling
                     ? "The ruling is saved on this case. Record another review or add it as a separate regression reference."
@@ -740,7 +721,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
                   <X /> {effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Record different ruling"}
                 </Button>
                 <Button
-                  variant={decision === "promote" ? "primary" : "default"}
+                  variant={decision === "promote" ? "primary" : "ghost"}
                   onClick={() => {
                     setDecision("promote");
                     resetForms();
@@ -873,6 +854,31 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
               {shortcuts ? <KeyLegend hasRuling={Boolean(effectiveRuling)} inGoldenSet={Boolean(goldenSetEntry)} /> : null}
             </CardContent>
           </Card>
+          {typedEvaluation ? (
+            <details key={`question-${exception.id}-${judgeRun.id}`} className="rounded-sm border border-rule-soft bg-card">
+              <summary className="cursor-pointer px-[18px] py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2">Typed question and decision threshold</summary>
+              <div className="border-t border-rule-soft px-[18px] py-4">
+                <TypedQuestionView question={typedEvaluation.question} threshold={typedEvaluation.threshold} />
+              </div>
+            </details>
+          ) : null}
+
+          <details key={`call-${exception.id}-${judgeRun.id}`} className="rounded-sm border border-rule-soft bg-card">
+            <summary className="cursor-pointer px-[18px] py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2">Judge call and version details</summary>
+            <div className="px-[18px] pb-3 text-[11.5px] text-ink-3 break-all">Evaluator version {judgeRun.skillVersionId}</div>
+            <JudgeCallPanel
+              meta={judgeCallMeta}
+              compiledPrompt={compiledPrompt}
+              rawRequest={rawRequestStr}
+              rawResponse={rawResponseStr}
+            />
+          </details>
+
+          <DecisionHistory
+            verdicts={verdictHistory}
+            effectiveRulingId={effectiveRuling?.id ?? null}
+            detail={detail}
+          />
         </div>
       </div>
     </>

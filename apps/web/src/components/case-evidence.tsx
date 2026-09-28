@@ -8,14 +8,14 @@ export function CaseEvidence({ input, output }: { input: unknown; output: unknow
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Claim and supplied evidence</CardTitle>
+          <CardTitle className="text-[16px] font-semibold">Claim and supplied evidence</CardTitle>
           <CardDescription>Read the claim against the complete source text below.</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <section>
+        <section className="border-l-4 border-ink bg-card-2 p-4">
           <h3 className="mb-2 text-[13px] font-medium">Claim to evaluate</h3>
-          <p className="whitespace-pre-wrap break-words text-[14px] leading-6">{content.claim}</p>
+          <p className="whitespace-pre-wrap break-words text-[18px] font-medium leading-7">{content.claim}</p>
         </section>
         {content.context !== undefined ? (
           <section>
