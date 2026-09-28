@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Sidebar } from "./sidebar";
@@ -15,37 +15,8 @@ import { DashboardProvider, useDashboard } from "@/lib/dashboard-context";
 import { CriterionProvider, useCriterion } from "@/lib/criterion-context";
 import { routeRequiresCriterionSelection } from "@/lib/criterion-selection";
 import { CriterionPicker } from "@/screens/criteria";
+import { contextualHref, observePageHeading, pageDocumentTitle, routeMetadata } from "../../lib/route-metadata.js";
 import { isBench, journeyActStates } from "@/lib/journey";
-
-const CRUMBS: Record<string, string[]> = {
-  "/":               ["Overview"],
-  "/traces":         ["Traces"],
-  "/exceptions":     ["Exceptions"],
-  "/reliability":    ["Reliability"],
-  "/production-calibration": ["Production calibration"],
-  "/review-queues":  ["Review queues"],
-  "/criteria":       ["Criteria"],
-  "/skill":          ["Skill"],
-  "/skill/versions": ["Skill versions"],
-  "/first-result":   ["First Result"],
-  "/golden":         ["Golden set"],
-  "/datasets":       ["Datasets"],
-  "/integrations":   ["Integrations"],
-  "/settings":       ["Settings"]
-};
-
-function crumbsFor(pathname: string, projectName: string, bench: boolean): string[] {
-  for (const [prefix, value] of Object.entries(CRUMBS)) {
-    if (pathname === prefix || (prefix !== "/" && pathname.startsWith(prefix))) {
-      if (prefix === "/exceptions" && pathname !== "/exceptions") {
-        return [projectName, "Exceptions", "Trace"];
-      }
-      if (bench && prefix === "/datasets") return [projectName, "Examples"];
-      return [projectName, ...value];
-    }
-  }
-  return [projectName];
-}
 
 export function RootLayout() {
   return (
@@ -88,7 +59,17 @@ function RootLayoutInner() {
   const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname);
   const showCriterionPicker = selectionRequired && criterionSelectionRequiredForRoute;
 
-  const crumbs = useMemo(() => crumbsFor(location.pathname, projectName, bench), [location.pathname, projectName, bench]);
+  const route = useMemo(() => routeMetadata(location.pathname, location.search, bench), [location.pathname, location.search, bench]);
+  const [pageHeading, setPageHeading] = useState("");
+  useEffect(() => observePageHeading(document.body, setPageHeading), [location.pathname]);
+  const pageTitle = pageHeading || route.crumbs.at(-1)?.label || "Rubrist";
+  useEffect(() => { document.title = pageDocumentTitle(pageTitle, projectName); }, [pageTitle, projectName]);
+  const crumbs = [
+    <Link key="project" to={contextualHref("/", location.search)}>{projectName}</Link>,
+    ...route.crumbs.map((crumb, index) => crumb.to
+      ? <Link key={crumb.to} to={crumb.to}>{crumb.label}</Link>
+      : <span key={index}>{pageHeading || crumb.label}</span>)
+  ];
 
   useEffect(() => {
     setNavigationOpen(false);

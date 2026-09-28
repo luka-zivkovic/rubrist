@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Eyebrow, KPI, KPIRow, MarginNote, SectionHead } from "@/components/rubrist";
 import { ReviewPlayer } from "@/components/review-player";
 import { useDashboard } from "@/lib/dashboard-context";
-import { selectReviewCaseIds } from "@/lib/exception-queue";
+import { contextualHref } from "../lib/route-metadata.js";
+import { reviewCaseCriterionPin, selectReviewCaseIds } from "@/lib/exception-queue";
 import type { TraceDecisionKind } from "@/components/trace-detail";
 import type { SessionReceiptState } from "@/screens/exceptions";
 
@@ -18,8 +19,8 @@ function receiptFrom(decisions: Record<string, TraceDecisionKind>): SessionRecei
 
 // Ad-hoc review: "Review all N" from Exceptions or the Overview opens the
 // same sequential player a persisted review queue uses — no DB queue row is
-// created. A row-level review stores its exact case id in the URL so refreshes
-// preserve that scope. Older navigation can still supply router state or fall
+// created. Links store all selected case IDs and recorded definition pins in
+// the URL so refreshes preserve their scope. Older navigation can still supply router state or fall
 // back to the current exception queue (optionally narrowed by the legacy
 // ?cluster= query key, whose value is an exact judge category).
 export function ReviewScreen() {
@@ -34,12 +35,13 @@ export function ReviewScreen() {
 
   const caseIds: string[] = useMemo(() => {
     return selectReviewCaseIds({
+      explicitCaseIds: searchParams.getAll("caseId"),
       explicitCaseId,
       stateCaseIds,
       exceptions: dashboard?.exceptions ?? [],
       categoryFilter
     });
-  }, [explicitCaseId, stateCaseIds, dashboard, categoryFilter]);
+  }, [searchParams, explicitCaseId, stateCaseIds, dashboard, categoryFilter]);
 
   // Client-side session state: which cases got a decision this walk, and what
   // kind — the done view tallies it. Nothing here persists; the verdicts
@@ -48,10 +50,10 @@ export function ReviewScreen() {
 
   const items = useMemo(
     () => caseIds.map((id) => {
-      const criterionVersionId = dashboard?.exceptions.find((exception) => exception.id === id)?.criterionVersionId;
+      const criterionVersionId = reviewCaseCriterionPin(searchParams, id) || dashboard?.exceptions.find((exception) => exception.id === id)?.criterionVersionId;
       return { key: id, caseId: id, ...(criterionVersionId ? { criterionVersionId } : {}), completed: Boolean(decisions[id]) };
     }),
-    [caseIds, decisions, dashboard]
+    [caseIds, decisions, dashboard, searchParams]
   );
 
   if (loading && !dashboard && caseIds.length === 0) {
@@ -71,9 +73,9 @@ export function ReviewScreen() {
           sub={error ?? "Nothing waiting. Auto-judged traces are already synced back."}
         />
         <div className="mt-4">
-          <Button variant="default" onClick={() => navigate("/exceptions")}>
+          <Button variant="default" asChild><Link to={contextualHref("/exceptions", location.search, ["cluster"])}>
             <ArrowLeft /> Back to queue
-          </Button>
+          </Link></Button>
         </div>
       </div>
     );
@@ -83,7 +85,7 @@ export function ReviewScreen() {
   // once; the durable record is the verdicts themselves.
   const exitToQueue = () => {
     const receipt = receiptFrom(decisions);
-    navigate("/exceptions", receipt.decided > 0 ? { state: { sessionReceipt: receipt } } : undefined);
+    navigate(contextualHref("/exceptions", location.search, ["cluster"]), receipt.decided > 0 ? { state: { sessionReceipt: receipt } } : undefined);
   };
 
   return (
@@ -98,10 +100,10 @@ export function ReviewScreen() {
           decisions={decisions}
           total={caseIds.length}
           categoryFilter={categoryFilter}
-          onBack={() => navigate("/")}
-          onQueue={exitToQueue}
+          backHref={contextualHref("/", location.search)}
+          queueHref={contextualHref("/exceptions", location.search, ["cluster"])}
           canEdit={dashboard?.viewerRole === "owner"}
-          onSkill={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}
+          skillHref={contextualHref(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill", location.search)}
           onReopen={reopen}
         />
       )}
@@ -113,18 +115,18 @@ function DoneView({
   decisions,
   total,
   categoryFilter,
-  onBack,
-  onQueue,
-  onSkill,
+  backHref,
+  queueHref,
+  skillHref,
   canEdit,
   onReopen
 }: {
   decisions: Record<string, TraceDecisionKind>;
   total: number;
   categoryFilter: string | null;
-  onBack: () => void;
-  onQueue: () => void;
-  onSkill: () => void;
+  backHref: string;
+  queueHref: string;
+  skillHref: string;
   canEdit: boolean;
   onReopen: () => void;
 }) {
@@ -139,10 +141,10 @@ function DoneView({
   return (
     <div className="fadeUp max-w-[720px]">
       <Eyebrow>Review session complete</Eyebrow>
-      <div className="mt-2 font-serif text-[30px] font-medium leading-[1.08] tracking-[-0.02em]">
+      <h1 className="mt-2 font-serif text-[30px] font-medium leading-[1.08] tracking-[-0.02em]">
         {total} exception{total === 1 ? "" : "s"} handled
         {categoryFilter ? ` in ${categoryFilter.toLowerCase()}` : ""}.
-      </div>
+      </h1>
       <div className="mt-3 max-w-[60ch] text-[14px] leading-[1.55] text-ink-3">
         Human verdicts are recorded on each case.
         {counts.promote
@@ -171,21 +173,17 @@ function DoneView({
           You recorded {counts.override} overrides. If they point to the same evaluator gap, review
           the cases together before editing the guide.
           <div className="mt-2 flex gap-2">
-            <Button variant="signal" size="sm" onClick={onSkill}>
+            <Button variant="signal" size="sm" asChild><Link to={skillHref}>
               {canEdit ? "Draft rubric edit from these cases" : "View evaluator"}
-            </Button>
+            </Link></Button>
           </div>
         </MarginNote>
       ) : null}
 
       <Card className="mb-5">
         <CardContent className="flex flex-wrap gap-2 py-4">
-          <Button variant="primary" onClick={onBack}>
-            Back to overview
-          </Button>
-          <Button variant="default" onClick={onQueue}>
-            Open the queue
-          </Button>
+          <Button variant="primary" asChild><Link to={backHref}>Back to overview</Link></Button>
+          <Button variant="default" asChild><Link to={queueHref} state={{ sessionReceipt: receiptFrom(decisions) }}>Open the queue</Link></Button>
           <Button variant="ghost" onClick={onReopen}>
             Walk the cases again
           </Button>

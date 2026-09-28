@@ -171,6 +171,7 @@ export function ReviewPlayer({
             </MarginNote>
           ) : null}
           <TraceDetail
+            headingAs="h2"
             key={`${current.key}:${detail.judgeRun.id}`}
             detail={detail}
             shortcuts={shortcuts}
@@ -213,9 +214,9 @@ function Topbar({
             <Eyebrow>{eyebrow}</Eyebrow>
             {idTag ? <span className="font-mono text-[10.5px] text-ink-3">· {idTag}</span> : null}
           </div>
-          <div className="mt-0.5 truncate font-serif text-[16px] font-medium tracking-[-0.012em]">
+          <h1 aria-label={`Case ${cursor + 1} of ${total} · ${name}`} className="mt-0.5 truncate font-serif text-[16px] font-medium tracking-[-0.012em]">
             {name}
-          </div>
+          </h1>
           <div className="mt-1.5 flex items-center gap-3">
             <div className="h-[3px] flex-1 max-w-[420px] rounded-sm bg-paper-3">
               <div className="h-full rounded-sm bg-ink" style={{ width: `${pct}%` }} />

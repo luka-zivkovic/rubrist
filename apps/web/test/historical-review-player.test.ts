@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, cloneElement, createElement } from "react";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { ExceptionDetail } from "@rubrist/shared";
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
@@ -15,7 +15,7 @@ vi.mock("@/lib/criterion-scope", async () => import("../src/lib/criterion-scope.
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@/components/review-player", async () => import("../src/components/review-player.js"));
 const route = vi.hoisted(() => ({ id: "case_1", search: "", state: null }));
-vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn(), useParams: () => ({ id: route.id }), useSearchParams: () => [new URLSearchParams(route.search)], useLocation: () => ({ state: route.state }) }));
+vi.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }: any) => createElement("a", { href: to, ...props }, children), useNavigate: () => vi.fn(), useParams: () => ({ id: route.id }), useSearchParams: () => [new URLSearchParams(route.search)], useLocation: () => ({ state: route.state, search: route.search }) }));
 vi.mock("@/lib/exception-queue", async () => import("../src/lib/exception-queue.js"));
 vi.mock("@/components/view-in-ironside", () => ({ ViewInIronside: () => null }));
 vi.mock("@/lib/trace-test-flow", () => ({ intentForVerdict: () => "prevent" }));
@@ -29,7 +29,7 @@ vi.mock("@/components/ui/card", () => ({
   CardContent: ({ children, ...props }: { children?: unknown }) => createElement("div", props, children as never)
 }));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, ...props }: { children?: unknown }) => createElement("button", props, children as never)
+  Button: ({ children, asChild, ...props }: any) => asChild ? cloneElement(children, props) : createElement("button", props, children as never)
 }));
 vi.mock("@/components/ui/separator", () => ({
   Separator: (props: Record<string, unknown>) => createElement("hr", props)
@@ -102,6 +102,33 @@ describe("historical review player", () => {
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1");
     expect(container.textContent).toContain("Accept evaluator opinion");
+  });
+
+  it("reloads a Review all URL with every case and its pinned definition, independent of the current dashboard", async () => {
+    route.search = "criterionId=c1&caseId=case_1&caseId=case_2&criterionVersionId%5Bcase_1%5D=old_definition&criterionVersionId%5Bcase_2%5D=other_definition";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 1 of 2");
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+  });
+
+  it("offers real case-back and test-builder links preserving criterion and the displayed evaluator", async () => {
+    route.search = "?from=exceptions&criterionId=c1&criterionVersionId=criterionv_1";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(CaseScreen)));
+    expect(container.querySelector('a[href="/exceptions?criterionId=c1"]')?.textContent).toContain("Back to queue");
+    const builder = [...container.querySelectorAll("a")].find((link) => link.href.includes("/make-test"));
+    expect(builder).toBeDefined();
+    const params = new URL(builder!.href).searchParams;
+    expect(params.get("skillVersionId")).toBe("skillv_1");
+    expect(params.get("criterionId")).toBe("c1");
+    expect(params.get("from")).toBe("exceptions");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
 
   it("opens historical case links, but keeps explicitly selected evaluator links exact", async () => {

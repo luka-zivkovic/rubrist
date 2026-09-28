@@ -1,13 +1,13 @@
-import { createElement } from "react";
+import { cloneElement, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ExceptionCase } from "@rubrist/shared";
 
-vi.mock("react-router-dom", () => ({}));
+vi.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }: any) => createElement("a", { href: to, ...props }, children) }));
 vi.mock("@/components/ui/card", () => ({}));
 vi.mock("@/components/ui/table", () => ({}));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, variant: _variant, size: _size, ...props }: any) => createElement("button", props, children)
+  Button: ({ children, asChild, variant: _variant, size: _size, ...props }: any) => asChild ? cloneElement(children, props) : createElement("button", props, children)
 }));
 vi.mock("@/components/rubrist", () => ({
   VerdictChip: ({ verdict }: any) => createElement("span", null, verdict),
@@ -31,7 +31,7 @@ const exception: ExceptionCase = {
 };
 function render(value: ExceptionCase) {
   return renderToStaticMarkup(createElement("table", null, createElement("tbody", null,
-    createElement(ExceptionQueueRow, { exception: value, provisional: false, onOpen: () => {}, onReview: () => {}, onCategory: () => {} })
+    createElement(ExceptionQueueRow, { exception: value, provisional: false, onOpen: () => {}, search: "?criterionId=criterion_1", onCategory: () => {} })
   )));
 }
 describe("exception note controls", () => {
@@ -40,6 +40,8 @@ describe("exception note controls", () => {
     expect(html).toContain("No explanation recorded.");
     expect(html).not.toContain("Full note");
     expect(html).toContain("Review Question without explanation");
+    expect(html).toContain('href="/review?criterionId=criterion_1&amp;criterionVersionId=criterionv_1&amp;caseId=case_1"');
+    expect(html).toContain('href="/cases/case_1?from=exceptions&amp;criterionVersionId=criterionv_1&amp;criterionId=criterion_1"');
   });
 
   it("keeps expansion when an actual earlier or newer explanation exists", () => {
