@@ -213,10 +213,10 @@ export function SkillVersionsScreen() {
               </tr>
             ) : null}
             {versions.map((v, index) => {
-              const agreementPct =
-                v.goldenSetAgreement == null ? null : Math.round(v.goldenSetAgreement * 100);
-              const changes = skillVersionChangeLabels(v, versions[index + 1]);
               const regressionRun = regressionRuns[v.id];
+              const agreementPct =
+                v.goldenSetAgreement == null || regressionRun?.compared === 0 ? null : Math.round(v.goldenSetAgreement * 100);
+              const changes = skillVersionChangeLabels(v, versions[index + 1]);
               const receiptLabel = regressionReceiptLabel(regressionRun);
               const receiptAt = regressionRun?.createdAt ?? v.approvedAt;
               return (
@@ -261,8 +261,8 @@ export function SkillVersionsScreen() {
                       </>
                     )}
                   </td>
-                  <td role="cell" data-label="Strict" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooStrictCount)}</td>
-                  <td role="cell" data-label="Lenient" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooLenientCount)}</td>
+                  <td role="cell" data-label="Strict" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooStrictCount, regressionRun)}</td>
+                  <td role="cell" data-label="Lenient" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooLenientCount, regressionRun)}</td>
                   <td role="cell" data-label="Recorded" className="font-mono text-ink-3">
                     <div title={v.createdAt}>
                       {new Date(v.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
@@ -413,7 +413,7 @@ export function SkillVersionDetailScreen() {
     );
   }
 
-  const agreementPct = v.goldenSetAgreement == null ? null : Math.round(v.goldenSetAgreement * 100);
+  const agreementPct = v.goldenSetAgreement == null || regressionRun?.compared === 0 ? null : Math.round(v.goldenSetAgreement * 100);
   const compiledPrompt = v.typedQuestion === null ? compileJudgePrompt({ prompt: v.prompt ?? "", rubricMarkdown: v.rubricMarkdown ?? "" }) : null;
 
   return (
@@ -515,11 +515,11 @@ export function SkillVersionDetailScreen() {
                   {agreementPct == null ? "—" : `${agreementPct}%`}
                 </div>
                 <div className="text-ink-3">Too strict</div>
-                <div className="font-mono">{measuredCount(v, v.tooStrictCount)}</div>
+                <div className="font-mono">{measuredCount(v, v.tooStrictCount, regressionRun)}</div>
                 <div className="text-ink-3">Too lenient</div>
-                <div className="font-mono">{measuredCount(v, v.tooLenientCount)}</div>
+                <div className="font-mono">{measuredCount(v, v.tooLenientCount, regressionRun)}</div>
                 <div className="text-ink-3">Ambiguous</div>
-                <div className="font-mono">{measuredCount(v, v.ambiguousCount)}</div>
+                <div className="font-mono">{measuredCount(v, v.ambiguousCount, regressionRun)}</div>
               </div>
             </CardContent>
           </Card>

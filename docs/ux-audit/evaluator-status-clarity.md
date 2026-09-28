@@ -18,9 +18,10 @@ check covers its pinned known-failure cases, not general accuracy or calibration
 | Recorded error / blocked / override | Preserve that outcome and count | Empty means successful |
 | Missing / unreadable / loading run | Not recorded / unavailable / loading | Zero comparisons or pass |
 
-CURRENT legacy saving: a successful check makes the saved version eligible for
-automatic default selection, including when no references exist. The latest
-eligible version is selected; saving is not evidence that it is better. Backfill
+CURRENT legacy saving: successful checks make saved versions preferred for automatic
+default selection, including when no references exist. Without an approved
+version, the selector can use an unvalidated draft or pending version. Saving
+is not evidence that a version is better; read the actual selector. Backfill
 scope does not prevent default selection. Governed lineages retain their separate
 candidate/active lifecycle and cannot use the legacy editing path.
 

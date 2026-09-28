@@ -108,7 +108,8 @@ describe("guided evaluator editing", () => {
     expect(html).toContain("Pass when grounded.");
     expect(html).toContain("Pass only with a cited source.");
     expect(html).toContain("Future and existing traces");
-    expect(html).toContain("automatic default selection");
+    expect(html).toContain("Saving can change the default");
+    expect(html).toContain("Without an approved version, an unvalidated version can be selected");
     expect(html).toContain("even when no reference cases exist");
   });
 

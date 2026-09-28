@@ -170,7 +170,7 @@ export function RegressionRunning({
             </div>
             <p className="mt-1 max-w-[72ch] text-[12px] leading-5 text-ink-2">
               Rubrist records the full outcome only after every case in the pinned revision finishes.
-              Until then this version is not presented as passed or current.
+              A pending check does not establish quality. Check Version history for the current default.
             </p>
             <CheckWait createdAt={version.createdAt} stopped={stopped} />
             <dl className="mt-4 grid grid-cols-1 gap-y-1 text-[11.5px] sm:grid-cols-[150px_1fr] sm:gap-y-2">

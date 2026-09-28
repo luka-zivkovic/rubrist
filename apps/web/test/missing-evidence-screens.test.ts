@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, createElement, Fragment, type ReactNode } from "react";
+import { act, createElement, Fragment, useState, type ReactNode } from "react";
 import type { Root } from "react-dom/client";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RegressionRunResult, SelfConsistencyReport, Skill, SkillVersion } from "@rubrist/shared";
@@ -307,6 +307,9 @@ describe("version page", () => {
     expect(text()).toContain("Current default: v1.0.2");
     expect(text()).toContain("regression · no comparison");
     expect(text()).toContain("0 reference cases compared");
+    expect(text()).not.toContain("100%");
+    expect(text()).toContain("Too strict—");
+    expect(text()).toContain("Too lenient—");
     expect(text()).not.toContain("regression · clean");
   });
 
@@ -441,6 +444,35 @@ describe("version page", () => {
 });
 
 describe("skill page", () => {
+  it("hides the previous criterion default and ignores its late refresh", async () => {
+    const oldSkill = skillWith(version("skillv_2", "1.0.2"));
+    const newSkill = { ...skillWith(version("skillv_new", "2.0.3")), criterionId: "criterion_2" };
+    api.fetchCurrentSkill.mockResolvedValueOnce(oldSkill);
+    let rerender = () => undefined;
+    function ScopedScreen() {
+      const [, setTick] = useState(0);
+      rerender = () => setTick((value) => value + 1);
+      return createElement(SkillScreen);
+    }
+    await render("/skill", "/skill", () => createElement(ScopedScreen));
+    expect(text()).toContain("current default · v1.0.2");
+    let finishOld!: (value: Skill) => void;
+    let finishNew!: (value: Skill) => void;
+    api.fetchCurrentSkill.mockReturnValueOnce(new Promise<Skill>((resolve) => { finishOld = resolve; }));
+    await act(async () => buttons("Refresh")[0]!.click());
+    api.fetchCurrentSkill.mockReturnValueOnce(new Promise<Skill>((resolve) => { finishNew = resolve; }));
+    criterion.selectedCriterionId = "criterion_2";
+    await act(async () => rerender());
+    expect(text()).not.toContain("current default · v1.0.2");
+    await act(async () => finishNew(newSkill));
+    await settle();
+    expect(text()).toContain("current default · v2.0.3");
+    await act(async () => finishOld(oldSkill));
+    await settle();
+    expect(text()).toContain("current default · v2.0.3");
+    expect(text()).not.toContain("current default · v1.0.2");
+  });
+
   it("shows unmeasured counts as unknown", async () => {
     api.fetchCurrentSkill.mockResolvedValue(skillWith(version("skillv_2", "1.0.2", { goldenSetAgreement: null })));
 
@@ -461,6 +493,17 @@ describe("skill page", () => {
 });
 
 describe("version history", () => {
+  it("suppresses stored ratios and counts when the exact run compared zero cases", async () => {
+    const empty = version("skillv_2", "1.0.2");
+    api.fetchCurrentSkill.mockResolvedValue(skillWith(empty));
+    api.fetchSkillVersionHistory.mockResolvedValue({ versions: [empty], regressionRuns: [run(empty.id, { compared: 0, cases: [] })] });
+    await render("/skill/versions", "/skill/versions", () => createElement(SkillVersionsScreen));
+    const row = container.querySelector("tbody tr");
+    expect(row?.textContent).toContain("regression · no comparison");
+    expect(row?.textContent).not.toContain("100%");
+    expect([...(row?.querySelectorAll("td") ?? [])].slice(3, 6).map((cell) => cell.textContent)).toEqual(["—", "—", "—"]);
+  });
+
   it("reads each version from its recorded run, and unmeasured counts as unknown", async () => {
     // A governed candidate stays calibrating after its run is recorded.
     const candidate = version("skillv_3", "1.0.3", { status: "calibrating", approvedAt: null });

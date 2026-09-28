@@ -1,5 +1,5 @@
 import { PageLoading } from "../components/page-loading.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,27 +42,38 @@ export function SkillScreen() {
   const [error, setError] = useState<LoadFailure | null>(null);
   const [tab, setTab] = useState<Tab>("rubric");
 
+  const [loadedCriterion, setLoadedCriterion] = useState<string | null | undefined>(undefined);
+  const loadGeneration = useRef(0);
+
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
+      const selected = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+      if (generation !== loadGeneration.current) return;
+      setSkill(selected);
+      setLoadedCriterion(selectedCriterionId);
     } catch (err) {
-      setError(loadFailure(err));
+      if (generation === loadGeneration.current) {
+        setError(loadFailure(err));
+        setLoadedCriterion(selectedCriterionId);
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [selectedCriterionId]);
 
   useEffect(() => {
     void load();
+    return () => { loadGeneration.current += 1; };
   }, [load]);
 
   useEffect(() => {
     void refreshDashboard();
   }, [refreshDashboard]);
 
-  if (loading && !skill) {
+  if (loadedCriterion !== selectedCriterionId || (loading && !skill)) {
     return (
       <PageLoading title="Loading skill" shape="detail" />
     );

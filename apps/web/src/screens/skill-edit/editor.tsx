@@ -121,7 +121,7 @@ export function SkillVersionEditor({
         title={firstRun ? "Define what a good result looks like" : "Edit the evaluator"}
         sub={gateKnownUnarmed
           ? "Save creates a new immutable evaluator version. Once you promote reference cases, later edits run a known-failure regression check."
-          : "Save creates a new immutable evaluator version and compares it with the promoted known-failure set before it becomes current. Regressions require review or a recorded override reason."}
+          : "Save creates a new immutable evaluator version and checks it against promoted references. Saving can change the default; check Current default in Version history."}
         right={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
@@ -502,7 +502,7 @@ export function SkillVersionEditor({
           <CardHeader>
             <div>
               <CardTitle>Apply to</CardTitle>
-              <CardDescription>Choose whether to rejudge existing traces as well. Every option still allows this version to become the default for future unpinned runs after its check succeeds.</CardDescription>
+              <CardDescription>Choose whether to rejudge existing traces as well. Every option still allows this version to become the default for future unpinned runs. Check Current default in Version history.</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">

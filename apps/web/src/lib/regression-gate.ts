@@ -30,8 +30,8 @@ export const GATE_LABEL: Record<GateState, string> = {
 
 // Stored disagreement counts are zeros until a check measures them; while a
 // version has no agreement value they are unknown, never zero.
-export function measuredCount(version: SkillVersion, count: number): number | "—" {
-  return version.goldenSetAgreement == null ? "—" : count;
+export function measuredCount(version: SkillVersion, count: number, run?: Pick<RegressionRunResult, "compared"> | null): number | "—" {
+  return version.goldenSetAgreement == null || run?.compared === 0 ? "—" : count;
 }
 
 export function isGateState(value: string): value is GateState {
