@@ -98,7 +98,7 @@ export function SkillScreen() {
   return (
     <div className="fadeUp max-w-[1760px]">
       <SectionHead
-        eyebrow="Evaluator definition"
+        eyebrow={`Evaluator definition · current default · v${v.version}`}
         title={skill.name}
         sub={starterUnvalidated
           ? `${skill.description} This Starter Check can run, but it has not been validated against governed human judgment. Review what it checks before relying on its Results.`
@@ -119,6 +119,10 @@ export function SkillScreen() {
           </div>
         }
       />
+
+      <p className="mb-5 text-[12.5px] leading-5 text-ink-2">
+        Used for new runs that do not pin a version. Default selection is separate from evidence of accuracy or calibration.
+      </p>
 
       {starterUnvalidated ? (
         <MarginNote tone="neutral" who="Starter · unvalidated" className="mb-5 max-w-[82ch]">
@@ -179,7 +183,7 @@ export function SkillScreen() {
             <div className="px-2 font-mono text-[11px] text-ink-3">
               {starterUnvalidated
                 ? "Starter · unvalidated"
-                : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleDateString() : "—"}`}
+                : `Recorded status: ${v.status}`}
             </div>
           </div>
         </aside>

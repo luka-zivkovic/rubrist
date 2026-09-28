@@ -108,3 +108,23 @@ describe("renderJudgeCardMarkdown — C1 injection safety", () => {
     expect(md).not.toContain("%");
   });
 });
+
+
+describe("Judge Card evidence scope", () => {
+  it("keeps zero comparisons neutral despite a passed historical status", () => {
+    const value = card();
+    value.regression!.compared = 0;
+    const markdown = renderJudgeCardMarkdown(value);
+    expect(markdown).toContain("no reference cases compared");
+    expect(markdown).not.toContain("passed · 0 compared");
+    expect(markdown).not.toContain("recorded ratio");
+    expect(markdown).toContain("not evidence of accuracy or calibration");
+  });
+
+  it("does not hide an error when no cases were compared", () => {
+    const value = card();
+    value.regression!.compared = 0;
+    value.regression!.status = "error";
+    expect(renderJudgeCardMarkdown(value)).toContain("error · 0 compared");
+  });
+});

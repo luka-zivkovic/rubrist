@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Chip, Eyebrow } from "@/components/rubrist";
 import { knownFailureGateSummary } from "../lib/skill-edit-flow.js";
+import { LEGACY_SAVE_CONSEQUENCE } from "../lib/skill-presentation.js";
 import { inputMatchesVersion } from "../lib/execution-binding-draft.js";
 import { cn } from "@/lib/utils";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@rubrist/shared";
 
 export type SkillEditPhase = "edit" | "creating" | "running" | "result";
-export type SkillEditOutcome = "passed" | "blocked" | "overridden" | "error";
+export type SkillEditOutcome = "passed" | "blocked" | "overridden" | "error" | "uncompared";
 
 type StepState = "done" | "current" | "upcoming";
 
@@ -26,7 +27,8 @@ function stepStates(phase: SkillEditPhase): readonly StepState[] {
 }
 
 const OUTCOME_LABEL: Record<SkillEditOutcome, string> = {
-  passed: "Passed",
+  passed: "Reference check passed",
+  uncompared: "No reference comparison",
   blocked: "Review required",
   overridden: "Override recorded",
   error: "Check failed"
@@ -58,7 +60,7 @@ export function SkillEditFlow({
         ? "Pinned revision"
         : `${referenceCount} case${referenceCount === 1 ? "" : "s"}`
     },
-    { label: "Outcome", detail: outcome ? OUTCOME_LABEL[outcome] : "Passed or review required" }
+    { label: "Outcome", detail: outcome ? OUTCOME_LABEL[outcome] : "Recorded check outcome" }
   ] as const;
   const currentIndex = states.findIndex((state) => state === "current");
   const announcement = `${steps[currentIndex]?.label ?? "Evaluator edit"}: ${steps[currentIndex]?.detail ?? "in progress"}`;
@@ -208,6 +210,7 @@ export function SkillChangeReview({
         </Chip>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <p className="rounded-sm border border-rule-soft bg-paper-2 px-3 py-2 text-[12px] leading-5 text-ink-2">{LEGACY_SAVE_CONSEQUENCE}</p>
         <div className="grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-2 lg:grid-cols-4">
           {showQuestion ? (
             <div className={cn("rounded-sm border border-rule-soft bg-paper-3 px-3 py-2", !showPrompted && "sm:col-span-2")}>

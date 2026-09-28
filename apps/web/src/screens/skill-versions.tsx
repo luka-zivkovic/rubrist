@@ -1,7 +1,7 @@
 import { evaluatorAuthorship } from "@rubrist/shared";
 import { CheckWait } from "../components/check-wait.js";
 import { PageLoading } from "../components/page-loading.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Copy, Download, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,9 +13,10 @@ import { regressionReceiptLabel, skillVersionChangeLabels } from "@/lib/skill-ed
 import { Table } from "@/components/ui/table";
 import { RowLink } from "@/components/row-action";
 import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError, SectionLoading } from "@/components/rubrist";
-import { fetchCurrentSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
+import { fetchLatestSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
 import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { EvaluatorDefault, useCurrentDefault, defaultVersionLabel } from "../components/evaluator-default.js";
 import { measuredCount } from "@/lib/regression-gate";
 import { useSectionRead } from "@/hooks/use-section-read";
 import { verdictKindDescription } from "@/lib/verdict-kind";
@@ -27,9 +28,9 @@ import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type JudgeCard, type Regres
 // `assertNever` keeps future schema additions honest.
 type ChipVariant = "pass" | "ambig" | "fail" | "outline" | "default";
 const STATUS_VARIANT: Record<SkillStatus, ChipVariant> = {
-  production:   "pass",
-  approved:     "pass",
-  validated:    "pass",
+  production:   "outline",
+  approved:     "outline",
+  validated:    "outline",
   calibrating:  "ambig",
   needs_review: "ambig",
   draft:        "ambig",
@@ -38,9 +39,9 @@ const STATUS_VARIANT: Record<SkillStatus, ChipVariant> = {
   deprecated:   "outline"
 };
 const STATUS_LABEL: Record<SkillStatus, string> = {
-  production:   "current",
-  approved:     "approved",
-  validated:    "validated",
+  production:   "recorded: production",
+  approved:     "recorded: approved",
+  validated:    "recorded: validated",
   calibrating:  "regression running",
   needs_review: "needs review",
   draft:        "draft · held",
@@ -71,25 +72,37 @@ export function SkillVersionsScreen() {
   const [regressionRuns, setRegressionRuns] = useState<Record<string, RegressionRunResult>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadFailure | null>(null);
+  const [selectionRevision, setSelectionRevision] = useState(0);
+  const [loadedCriterion, setLoadedCriterion] = useState<string | null | undefined>(undefined);
+  const loadGeneration = useRef(0);
+  const scopeLoaded = loadedCriterion === selectedCriterionId;
+  const defaultRead = useCurrentDefault(loading || !scopeLoaded ? null : skill, selectedCriterionId, `${selectedCriterionId ?? ""}:${selectionRevision}`);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
-      setSkill(s);
+      const s = await fetchLatestSkill(selectedCriterionId ?? undefined);
       const history = await fetchSkillVersionHistory(s.id, 50);
+      if (generation !== loadGeneration.current) return;
+      setSkill(s);
+      setLoadedCriterion(selectedCriterionId);
       setVersions(history.versions);
       setRegressionRuns(Object.fromEntries(history.regressionRuns.map((run) => [run.skillVersionId, run])));
     } catch (err) {
-      setError(loadFailure(err));
+      if (generation === loadGeneration.current) {
+        setError(loadFailure(err));
+        setLoadedCriterion(selectedCriterionId);
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [selectedCriterionId]);
 
   useEffect(() => {
     void load();
+    return () => { loadGeneration.current += 1; };
   }, [load]);
 
   // Async regression check (M0 C5b): a `calibrating` version without a recorded
@@ -109,10 +122,11 @@ export function SkillVersionsScreen() {
     const timer = setInterval(() => {
       void (async () => {
         try {
-          const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+          const s = await fetchLatestSkill(selectedCriterionId ?? undefined);
           const history = await fetchSkillVersionHistory(s.id, 50);
           if (cancelled) return;
           setSkill(s);
+          setSelectionRevision((value) => value + 1);
           setVersions(history.versions);
           setRegressionRuns(Object.fromEntries(history.regressionRuns.map((run) => [run.skillVersionId, run])));
         } catch {
@@ -126,7 +140,7 @@ export function SkillVersionsScreen() {
     };
   }, [pollInterval, selectedCriterionId]);
 
-  if (loading && versions.length === 0) {
+  if (!scopeLoaded || (loading && versions.length === 0)) {
     return (
       <PageLoading title="Loading versions" shape="list" />
     );
@@ -167,6 +181,8 @@ export function SkillVersionsScreen() {
           </div>
         }
       />
+
+      <EvaluatorDefault read={defaultRead} />
 
       <Card className="mb-6">
         <Table className="ledger-stacked" role="table" aria-label="Evaluator versions">
@@ -217,7 +233,8 @@ export function SkillVersionsScreen() {
                   </td>
                   <td role="cell" data-label="Status">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusChip status={v.status} run={regressionRun ?? null} />
+                      <Chip>{defaultVersionLabel(defaultRead, v.id)}</Chip>
+                      {!["approved", "production", "validated"].includes(v.status) ? <StatusChip status={v.status} run={regressionRun ?? null} /> : null}
                       {v.status === "calibrating" && !regressionRun ? <CheckWait createdAt={v.createdAt} /> : null}
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
                       <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
@@ -304,7 +321,7 @@ export function SkillVersionDetailScreen() {
     setFailure(null);
     (async () => {
       try {
-        const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+        const s = await fetchLatestSkill(selectedCriterionId ?? undefined);
         if (cancelled) return;
         const vs = await fetchSkillVersions(s.id, 100);
         if (cancelled) return;
@@ -323,12 +340,13 @@ export function SkillVersionDetailScreen() {
   }, [id, selectedCriterionId, reloadKey]);
 
   const v = versions.find((vv) => vv.id === id) ?? null;
-  const isCurrent = v && skill ? v.id === skill.currentVersion.id : false;
+
 
   // Each evidence read fails on its own: the version stays readable, a failed
   // section says so where its data would be, and its Retry reads only that
   // section again. fetchSkillVersionRegression maps "no recorded run" to null.
   const current = !loading && !error && loadedFor === routeKey;
+  const defaultRead = useCurrentDefault(current ? skill : null, selectedCriterionId, `${routeKey}:${reloadKey}`);
   const evidence = current && skill && v ? { skillId: skill.id, versionId: v.id } : null;
   const evidenceKey = evidence ? `${evidence.skillId}:${evidence.versionId}` : null;
   const regression = useSectionRead(
@@ -416,21 +434,23 @@ export function SkillVersionDetailScreen() {
       <SectionHead
         eyebrow={`Judge card · v${v.version}`}
         title={`${v.executionBinding.provider}/${v.executionBinding.modelId}`}
-        sub={v.onboardingAssurance === "starter_unvalidated"
-          ? `Starter · unvalidated · runnable does not mean calibrated · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`
-          : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "—"} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusChip status={v.status} run={regressionRun} />
-            {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-            <GateChip
-              state={regression.status === "loading" ? "loading" : gateStateForVersion(v, regressionRun)}
-              title={v.knownLimitations.join(" · ")}
-            />
-            {isCurrent ? <Chip>current</Chip> : null}
-          </div>
-        }
+        sub={`Saved ${new Date(v.createdAt).toLocaleString()} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
       />
+
+      <EvaluatorDefault read={defaultRead} versionId={v.id} />
+      <section aria-label="Reference check evidence" className="mb-5 rounded-sm border border-rule-soft px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-medium">Known-failure reference check</span>
+          <GateChip state={regression.status === "loading" ? "loading" : gateStateForVersion(v, regressionRun)} />
+          {regressionRun ? <span className="text-[12px] text-ink-2">{regressionRun.compared} reference cases compared</span> : null}
+          {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
+        </div>
+        <p className="mt-1 text-[12px] leading-5 text-ink-2">This checks known failures on the pinned reference set. It does not establish general accuracy or sealed calibration.</p>
+        <details className="mt-2 text-[11.5px] text-ink-3">
+          <summary className="cursor-pointer">Recorded lifecycle details</summary>
+          <p className="mt-1">Recorded status: {v.status}. Approval timestamp: {v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "not recorded"}. These fields do not identify the current default or replace scoped validation evidence.</p>
+        </details>
+      </section>
 
       {judgeCard.status === "loading" ? (
         <SectionLoading className="mb-6" label="Loading the Judge Card…" />
@@ -712,7 +732,7 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
       <CardContent className="py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Eyebrow>Judge Card · attested · {card.version.version}</Eyebrow>
+            <Eyebrow>Judge Card · recorded evidence · {card.version.version}</Eyebrow>
             <div className="mt-1 text-[11px] text-ink-3">
               This card contains recorded evidence for one evaluator version. It keeps each signal
               separate and does not turn them into a combined score.
@@ -741,14 +761,16 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
           </div>
           <div className="text-ink-3">Known-failure agreement</div>
           <div className="font-mono">
-            {agreement === null
+            {agreement === null || card.regression?.compared === 0
               ? "no comparable promoted reference cases"
               : `recorded ratio ${agreement.toFixed(2)}${card.regression ? ` over ${card.regression.compared} case(s) at version creation` : ""}`}
           </div>
           <div className="text-ink-3">Evaluator regression</div>
           <div className="font-mono">
             {card.regression
-              ? `${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} regressed, ${card.regression.flipped} flipped`
+              ? card.regression.status === "passed" && card.regression.compared === 0
+                ? "No reference cases compared"
+                : `${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} regressed, ${card.regression.flipped} flipped`
               : "no recorded run"}
           </div>
           <div className="text-ink-3">Judge–human κ</div>

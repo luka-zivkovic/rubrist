@@ -502,7 +502,7 @@ export function SkillVersionEditor({
           <CardHeader>
             <div>
               <CardTitle>Apply to</CardTitle>
-              <CardDescription>Which traces this evaluator version judges after it becomes current.</CardDescription>
+              <CardDescription>Choose whether to rejudge existing traces as well. Every option still allows this version to become the default for future unpinned runs after its check succeeds.</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">

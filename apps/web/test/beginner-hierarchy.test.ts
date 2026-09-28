@@ -160,7 +160,7 @@ describe("beginner-first hierarchy", () => {
 
     expect(heading).toBeGreaterThan(-1);
     expect(details).toBeGreaterThan(heading);
-    expect(loadedView).toContain('eyebrow="Evaluator definition"');
+    expect(loadedView).toContain('eyebrow={`Evaluator definition · current default · v${v.version}`}');
     expect(loadedView).toContain("right={");
     expect(loadedView).toContain("Edit evaluator");
     expect(loadedView).toContain('dashboard?.viewerRole === "owner"');
