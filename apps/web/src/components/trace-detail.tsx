@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, X, Sparkles } from "lucide-react";
+import { ThumbsUp, PencilLine, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -63,6 +63,26 @@ const VERDICT_CHOICE_SCORES: Record<VerdictLabel, number> = {
 };
 
 const OVERRIDE_OPTIONS: ReadonlyArray<VerdictLabel> = ["pass", "fail", "ambiguous"];
+
+// Result colors describe the recorded label. Review action colors describe
+// agreement/change: agreeing with a FAIL must never look like recording PASS.
+const REVIEW_RESULT_TONES: Record<VerdictLabel, { card: string; header: string; chip: string }> = {
+  pass: {
+    card: "border-emerald-700 dark:border-emerald-500",
+    header: "bg-emerald-100 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100",
+    chip: "border-emerald-700 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-100"
+  },
+  fail: {
+    card: "border-red-700 dark:border-red-400",
+    header: "bg-red-100 text-red-950 dark:bg-red-950 dark:text-red-100",
+    chip: "border-red-700 bg-red-100 text-red-900 dark:border-red-400 dark:bg-red-950 dark:text-red-100"
+  },
+  ambiguous: {
+    card: "border-amber-700 dark:border-amber-400",
+    header: "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100",
+    chip: "border-amber-700 bg-amber-100 text-amber-900 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100"
+  }
+};
 
 // the judge-named failing step for THIS case's latest judge run.
 // rawResponse is the structured verdict recordJudgeRun persisted — read it
@@ -233,15 +253,15 @@ function HumanRulingCard({
       : null;
   const agrees = priorEvaluatorLabel ? label === priorEvaluatorLabel : null;
   return (
-    <Card data-testid="human-ruling-card" className="border-ink border-t-4">
-      <CardHeader className="bg-ink text-paper">
+    <Card data-testid="human-ruling-card" className={`border-2 ${REVIEW_RESULT_TONES[label].card}`}>
+      <CardHeader className={REVIEW_RESULT_TONES[label].header}>
         <div>
           <CardTitle>{ruling.source === "adjudicated" ? "Owner ruling" : "Recorded human ruling"}</CardTitle>
-          <CardDescription className="text-paper/80">
+          <CardDescription className="text-inherit">
             Ungoverned legacy review evidence. This is not governed human truth.
           </CardDescription>
         </div>
-        <VerdictChip verdict={label} className="px-3 py-2 text-[24px] font-semibold tracking-tight" />
+        <VerdictChip verdict={label} className={`px-3 py-2 text-[24px] font-semibold tracking-tight ${REVIEW_RESULT_TONES[label].chip}`} />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="text-[13px] text-ink-2">
@@ -584,18 +604,18 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
             />
           ) : null}
 
-          <Card className={effectiveRuling ? "border-rule" : "border-ink border-t-4"}>
-            <CardHeader className={effectiveRuling ? undefined : "bg-ink text-paper"}>
+          <Card className={effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}>
+            <CardHeader className={effectiveRuling ? undefined : REVIEW_RESULT_TONES[exception.verdict].header}>
               <div>
                 <CardTitle className="text-[16px] font-semibold">Latest evaluator opinion</CardTitle>
-                <CardDescription className={effectiveRuling ? undefined : "text-paper/80"}>
+                <CardDescription className={effectiveRuling ? undefined : "text-inherit"}>
                   Model output from the latest judge run. A recorded human ruling takes precedence in this view.
                 </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
-                <VerdictChip verdict={exception.verdict} className={effectiveRuling ? "text-[14px]" : "px-3 py-2 text-[24px] font-semibold tracking-tight"} />
+                <VerdictChip verdict={exception.verdict} className={`${REVIEW_RESULT_TONES[exception.verdict].chip} ${effectiveRuling ? "text-[14px]" : "px-3 py-2 text-[24px] font-semibold tracking-tight"}`} />
                 <span className="text-[14px] font-medium text-ink">
                   {typedEvaluation?.probability != null
                     ? `Probability answer is true: ${(typedEvaluation.probability * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
@@ -697,44 +717,39 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
                 <CardDescription>
                   {effectiveRuling
                     ? "The ruling is saved on this case. Record another review or add it as a separate regression reference."
-                    : "Accept the evaluator opinion, record a different ruling, or add a regression reference."}
+                    : `The evaluator said ${exception.verdict.toUpperCase()}. Agree to record the same ruling, or disagree to choose another.`}
                 </CardDescription>
               </div>
               {goldenSetEntry ? <Chip>in golden set</Chip> : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-3">
                 {!effectiveRuling ? (
                   <Button
-                    variant={decision === "accept" ? "primary" : "default"}
+                    className="h-auto min-h-14 w-full justify-start whitespace-normal border-blue-800 bg-blue-800 px-4 py-3 text-left text-white hover:bg-blue-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 dark:border-blue-400 dark:bg-blue-300 dark:text-blue-950 dark:hover:bg-blue-200"
                     onClick={() => void handleAccept()}
                     disabled={submitting}
                   >
-                    <Check /> Accept evaluator opinion
+                    <ThumbsUp aria-hidden="true" />
+                    <span>
+                      <span className="block text-[14px] font-semibold">{submitting && decision === "accept" ? "Recording agreement…" : "Agree with evaluator"}</span>
+                      <span className="block text-[12px]">Record {exception.verdict.toUpperCase()} as my ruling</span>
+                    </span>
                   </Button>
                 ) : null}
                 <Button
-                  variant={decision === "override" ? "signal" : "default"}
+                  className="h-auto min-h-14 w-full justify-start whitespace-normal border-2 border-amber-700 bg-amber-50 px-4 py-3 text-left text-amber-950 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900"
                   onClick={openReviewForm}
                   disabled={submitting}
                 >
-                  <X /> {effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Record different ruling"}
-                </Button>
-                <Button
-                  variant={decision === "promote" ? "primary" : "ghost"}
-                  onClick={() => {
-                    setDecision("promote");
-                    resetForms();
-                    setResultText(null);
-                  }}
-                  disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
-                  title={goldenSetEntry
-                    ? "This case is already an active golden-set regression reference."
-                    : promoteEligible ? undefined : "Only pass/fail verdicts can be added."}
-                >
-                  <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}
+                  <PencilLine aria-hidden="true" />
+                  <span>
+                    <span className="block text-[14px] font-semibold">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Disagree with evaluator"}</span>
+                    <span className="block text-[12px]">Choose a different ruling and explain why</span>
+                  </span>
                 </Button>
               </div>
+
 
               {decision === "override" ? (
                 <div className="fadeUp flex flex-col gap-2">
@@ -782,7 +797,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
                       onClick={() => void handleOverrideSubmit()}
                       disabled={submitting || !overrideReason.trim()}
                     >
-                      Record review
+                      Record {overrideChoice.toUpperCase()} ruling
                     </Button>
                     <Button
                       variant="ghost"
@@ -795,6 +810,23 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
                   </div>
                 </div>
               ) : null}
+
+              <div className="border-t border-rule-soft pt-3">
+                <Button
+                  variant={decision === "promote" ? "primary" : "ghost"}
+                  onClick={() => {
+                    setDecision("promote");
+                    resetForms();
+                    setResultText(null);
+                  }}
+                  disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
+                  title={goldenSetEntry
+                    ? "This case is already an active golden-set regression reference."
+                    : promoteEligible ? undefined : "Only pass/fail verdicts can be added."}
+                >
+                  <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}
+                </Button>
+              </div>
 
               {decision === "promote" ? (
                 <div className="fadeUp flex flex-col gap-2">
@@ -894,11 +926,11 @@ function KeyLegend({ hasRuling, inGoldenSet }: { hasRuling: boolean; inGoldenSet
       <div className="flex justify-between gap-3">
         {!hasRuling ? (
           <span className={item}>
-            <span className={kb}>A</span> accept
+            <span className={kb}>A</span> agree
           </span>
         ) : null}
         <span className={item}>
-          <span className={kb}>O</span> {hasRuling ? "review again" : "different ruling"}
+          <span className={kb}>O</span> {hasRuling ? "review again" : "disagree"}
         </span>
         {!inGoldenSet ? (
           <span className={item}>

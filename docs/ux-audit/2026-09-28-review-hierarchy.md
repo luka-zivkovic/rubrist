@@ -20,8 +20,8 @@ threshold mapping, and absence of a Jev rationale remain explicit.
 
 These are presentation changes. Review writes, historical version selection,
 provider execution, reference labels, and display-mode behavior are unchanged.
-The two human review choices keep equal button weight; the separate golden-set
-transaction is quieter.
+The follow-up below strengthens the review buttons and makes their actions explicit;
+the separate golden-set transaction is quieter.
 
 Independent source review found no blocking correctness issues. The complete
 suite passed 1,822 tests plus 29 tooling checks; 150 database-only tests were
@@ -53,3 +53,22 @@ the light theme and developer tools closed.
 This is bounded visual and keyboard verification, not a full assistive-technology
 audit. The longer source text still requires reading and scrolling; this
 change adds no fabricated evidence highlights or Jev explanation.
+
+
+## Explicit result colors and agreement actions
+
+CURRENT follow-up to founder feedback: PASS has green borders/tint, FAIL red,
+and ambiguous amber, including dark-theme variants. Labels remain explicit.
+The saved human ruling still takes visual precedence over model output.
+
+The review buttons now say “Agree with evaluator” with “Record PASS/FAIL/AMBIGUOUS
+as my ruling,” or “Disagree with evaluator” with “Choose a different ruling and
+explain why.” Agreement uses a filled blue button, so agreeing with a FAIL
+cannot be confused with a green pass action. Disagreement uses an amber edit
+button and opens the existing form without writing. The final form submission
+names the selected ruling. The golden-set action sits below that form.
+
+Independent source review found no blocking issue. All 465 web tests passed,
+including mocked agreement handler request payloads for pass/fail/ambiguous with the historical
+version pin and disagreement opening without a write. Typecheck and production
+web build passed. Deployment/browser follow-up remains to be recorded.

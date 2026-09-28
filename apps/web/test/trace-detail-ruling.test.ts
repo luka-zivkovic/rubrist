@@ -117,7 +117,7 @@ describe("case-detail human ruling state", () => {
     expect(html).toContain("Add to golden set");
     expect(html).toContain("Decision history · 2 append-only records");
     expect(html).toContain("Evaluator output");
-    expect(html).not.toContain("Accept evaluator opinion");
+    expect(html).not.toContain("Agree with evaluator");
     expect(html).not.toContain("next week");
   });
 
@@ -330,7 +330,7 @@ describe("review attention and progressive disclosure", () => {
     const html = renderToStaticMarkup(createElement(TraceDetail, { detail }));
     expect(html.indexOf("Recorded human ruling")).toBeLessThan(html.indexOf("Latest evaluator opinion"));
     expect(html).toContain("overridden by ruling");
-    expect(html).not.toContain("Accept evaluator opinion");
+    expect(html).not.toContain("Agree with evaluator");
   });
 
   it("keeps ordinary LLM rationale visible without a typed-question disclosure", () => {
