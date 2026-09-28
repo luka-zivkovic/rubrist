@@ -1,3 +1,5 @@
+import { CheckWait } from "../components/check-wait.js";
+import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Copy, Download, RefreshCcw } from "lucide-react";
@@ -9,11 +11,14 @@ import { TypedQuestionView } from "@/components/typed-question-view";
 import { regressionReceiptLabel, skillVersionChangeLabels } from "@/lib/skill-edit-flow";
 import { Table } from "@/components/ui/table";
 import { RowLink } from "@/components/row-action";
-import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, RegressionDiffTable, ConvergenceCard } from "@/components/rubrist";
+import { Eyebrow, SectionHead, Chip, GateChip, gateStateForVersion, LabelChip, MarginNote, PageLoadError, RegressionDiffTable, ConvergenceCard, SectionLoadError, SectionLoading } from "@/components/rubrist";
 import { fetchCurrentSkill, fetchJudgeCard, fetchJudgeCardMarkdown, fetchSkillFormat, fetchSkillVersionHistory, fetchSkillVersions, fetchSkillVersionRegression, fetchSkillVersionConvergence, fetchSkillVersionSelfConsistency } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { measuredCount } from "@/lib/regression-gate";
+import { useSectionRead } from "@/hooks/use-section-read";
 import { verdictKindDescription } from "@/lib/verdict-kind";
-import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type ConvergenceAudit, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
+import { compileJudgePrompt, KAPPA_MIN_SHARED_CASES, type JudgeCard, type RegressionRunResult, type SelfConsistencyReport, type Skill, type SkillStatus, type SkillVersion, describeExecutionBinding } from "@rubrist/shared";
 
 // Explicit mapping for every SkillStatus value. Reviewer scanning a versions
 // ledger needs to distinguish approved (on-deck) from deprecated (end of life)
@@ -43,8 +48,18 @@ const STATUS_LABEL: Record<SkillStatus, string> = {
   deprecated:   "deprecated"
 };
 
-function StatusChip({ status }: { status: SkillStatus }) {
-  return <Chip variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Chip>;
+// A governed candidate reads as calibrating for its whole candidate life. With
+// its regression run recorded it is a candidate; with none, its check is
+// running; while the run can't be read, the page can't tell which.
+function StatusChip({ status, run }: { status: SkillStatus; run: RegressionRunResult | null | undefined }) {
+  const label = status !== "calibrating"
+    ? STATUS_LABEL[status]
+    : run === undefined
+      ? "calibrating"
+      : run === null
+        ? STATUS_LABEL.calibrating
+        : "candidate";
+  return <Chip variant={STATUS_VARIANT[status]}>{label}</Chip>;
 }
 
 export function SkillVersionsScreen() {
@@ -54,7 +69,7 @@ export function SkillVersionsScreen() {
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [regressionRuns, setRegressionRuns] = useState<Record<string, RegressionRunResult>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,7 +81,7 @@ export function SkillVersionsScreen() {
       setVersions(history.versions);
       setRegressionRuns(Object.fromEntries(history.regressionRuns.map((run) => [run.skillVersionId, run])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(loadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -76,13 +91,19 @@ export function SkillVersionsScreen() {
     void load();
   }, [load]);
 
-  // Async regression check (M0 C5b): a `calibrating` version is a gate.run in flight —
-  // poll quietly until it lands as approved/regressing so the history updates
-  // without a manual refresh. Silent refetch (no setLoading) to avoid a shell
-  // flash on every tick; the interval tears down once nothing is calibrating.
+  // Async regression check (M0 C5b): a `calibrating` version without a recorded
+  // run is a gate.run in flight — poll quietly until its run lands so the
+  // history updates without a manual refresh. A governed candidate stays
+  // calibrating after its run is recorded, so it only keeps a slow poll: the
+  // versions and runs are separate reads, and a check that lands between them
+  // shows a run on a still-calibrating version until the next tick.
+  // Silent refetch (no setLoading) to avoid a shell flash on every tick; the
+  // interval tears down once nothing is calibrating.
+  const anyCheckRunning = versions.some((candidate) => candidate.status === "calibrating" && !regressionRuns[candidate.id]);
   const anyCalibrating = versions.some((candidate) => candidate.status === "calibrating");
+  const pollInterval = anyCheckRunning ? 3_000 : anyCalibrating ? 30_000 : null;
   useEffect(() => {
-    if (!anyCalibrating) return;
+    if (pollInterval === null) return;
     let cancelled = false;
     const timer = setInterval(() => {
       void (async () => {
@@ -97,31 +118,32 @@ export function SkillVersionsScreen() {
           // Transient poll failure keeps last-good state; next tick retries.
         }
       })();
-    }, 3000);
+    }, pollInterval);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [anyCalibrating, selectedCriterionId]);
+  }, [pollInterval, selectedCriterionId]);
 
   if (loading && versions.length === 0) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Every version of the skill" title="Loading versions" />
-      </div>
+      <PageLoading title="Loading versions" shape="list" />
     );
   }
 
   if (error || !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Every version of the skill" title="Could not load versions" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+      <PageLoadError
+        eyebrow="Every version of the skill"
+        title="Couldn't load versions"
+        failure={error ?? NO_SKILL_FAILURE}
+        onRetry={() => void load()}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
+      />
     );
   }
 
@@ -132,7 +154,7 @@ export function SkillVersionsScreen() {
         title="Evaluator versions"
         sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a guide and prompt, or a typed question), result format, and evidence attached to it."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCcw /> Refresh
             </Button>
@@ -146,28 +168,28 @@ export function SkillVersionsScreen() {
       />
 
       <Card className="mb-6">
-        <Table>
-          <thead>
-            <tr>
-              <th style={{ width: 110 }}>Version</th>
-              <th style={{ width: 140 }}>Status</th>
-              <th>Changes / model</th>
-              <th style={{ width: 120 }} className="text-right">
+        <Table className="ledger-stacked" role="table" aria-label="Evaluator versions">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader" style={{ width: 110 }}>Version</th>
+              <th scope="col" role="columnheader" style={{ width: 140 }}>Status</th>
+              <th scope="col" role="columnheader">Changes / model</th>
+              <th scope="col" role="columnheader" style={{ width: 120 }} className="text-right">
                 Golden agree
               </th>
-              <th style={{ width: 80 }} className="text-right">
+              <th scope="col" role="columnheader" style={{ width: 80 }} className="text-right">
                 Strict
               </th>
-              <th style={{ width: 80 }} className="text-right">
+              <th scope="col" role="columnheader" style={{ width: 80 }} className="text-right">
                 Lenient
               </th>
-              <th style={{ width: 150 }}>Recorded</th>
-              <th style={{ width: 30 }}></th>
+              <th scope="col" role="columnheader" style={{ width: 150 }}>Recorded</th>
+              <th scope="col" role="columnheader" style={{ width: 30 }}></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {versions.length === 0 ? (
-              <tr>
+              <tr role="row">
                 <td colSpan={8} className="text-center text-ink-3">
                   No versions recorded yet.
                 </td>
@@ -182,23 +204,25 @@ export function SkillVersionsScreen() {
               const receiptAt = regressionRun?.createdAt ?? v.approvedAt;
               return (
                 <tr
+                  role="row"
                   key={v.id}
                   className="row-link"
                   onClick={() => navigate(`/skill/versions/${v.id}`)}
                 >
-                  <td>
+                  <td role="cell" data-label="Version">
                     <RowLink to={`/skill/versions/${v.id}`} className="font-mono text-ink">
                       v{v.version}
                     </RowLink>
                   </td>
-                  <td>
+                  <td role="cell" data-label="Status">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusChip status={v.status} />
+                      <StatusChip status={v.status} run={regressionRun ?? null} />
+                      {v.status === "calibrating" && !regressionRun ? <CheckWait createdAt={v.createdAt} /> : null}
                       {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-                      <GateChip state={gateStateForVersion(v)} title={v.knownLimitations.join(" · ")} />
+                      <GateChip state={gateStateForVersion(v, regressionRun ?? null)} title={v.knownLimitations.join(" · ")} />
                     </div>
                   </td>
-                  <td>
+                  <td role="cell" data-label="Changes / model">
                     <div className="text-[13px] text-ink-2">
                       {changes.join(" · ")}
                     </div>
@@ -211,7 +235,7 @@ export function SkillVersionsScreen() {
                       </div>
                     ) : null}
                   </td>
-                  <td className="text-right font-mono tabular-nums">
+                  <td role="cell" data-label="Golden agree" className="text-left font-mono md:text-right tabular-nums">
                     {agreementPct == null ? "—" : (
                       <>
                         {agreementPct}
@@ -219,9 +243,9 @@ export function SkillVersionsScreen() {
                       </>
                     )}
                   </td>
-                  <td className="text-right font-mono tabular-nums">{v.tooStrictCount}</td>
-                  <td className="text-right font-mono tabular-nums">{v.tooLenientCount}</td>
-                  <td className="font-mono text-ink-3">
+                  <td role="cell" data-label="Strict" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooStrictCount)}</td>
+                  <td role="cell" data-label="Lenient" className="text-left font-mono md:text-right tabular-nums">{measuredCount(v, v.tooLenientCount)}</td>
+                  <td role="cell" data-label="Recorded" className="font-mono text-ink-3">
                     <div title={v.createdAt}>
                       {new Date(v.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
                     </div>
@@ -231,7 +255,7 @@ export function SkillVersionsScreen() {
                         : receiptLabel}
                     </div>
                   </td>
-                  <td>
+                  <td role="cell" aria-hidden="true" className="hidden md:table-cell">
                     <ChevronRight className="size-3 text-ink-3" />
                   </td>
                 </tr>
@@ -262,67 +286,32 @@ export function SkillVersionDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
-  const [regression, setRegression] = useState<RegressionRunResult | null>(null);
-  const [convergence, setConvergence] = useState<ConvergenceAudit | null>(null);
-  const [consistency, setConsistency] = useState<SelfConsistencyReport | null>(null);
-  // the AUTHORITATIVE Judge Card, fetched from /card (κ + basis + audit)
-  // — distinct from the client-side signal assembly on this screen.
-  const [judgeCard, setJudgeCard] = useState<JudgeCard | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ routeKey: string; failure: LoadFailure } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Which version and criterion `skill` and `versions` were read for. Until they
+  // match the route, the page is still loading, never "not found", and another
+  // route's failure never shows for this one.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const routeKey = `${selectedCriterionId ?? ""}|${id ?? ""}`;
+  const error = failure !== null && failure.routeKey === routeKey ? failure.failure : null;
 
   useEffect(() => {
     let cancelled = false;
+    const readFor = `${selectedCriterionId ?? ""}|${id ?? ""}`;
     setLoading(true);
-    setError(null);
-    setRegression(null);
-    setConvergence(null);
-    setConsistency(null);
-    setJudgeCard(null);
+    setFailure(null);
     (async () => {
       try {
         const s = await fetchCurrentSkill(selectedCriterionId ?? undefined);
         if (cancelled) return;
-        setSkill(s);
         const vs = await fetchSkillVersions(s.id, 100);
         if (cancelled) return;
+        setSkill(s);
         setVersions(vs);
-        // The recorded regression run is best-effort: fetchSkillVersionRegression
-        // already maps 404 (no run for this version, e.g. the seeded baseline)
-        // to null. We don't swallow other errors here — a 500/network failure
-        // should surface via the surrounding catch, not silently omit the diff.
-        if (id) {
-          const run = await fetchSkillVersionRegression(s.id, id);
-          if (!cancelled) setRegression(run);
-          // A2.2c: the convergence audit is supplementary to the Judge Card. A
-          // transient failure on it shouldn't collapse the whole version view
-          // (rubric, prompt, regression) — isolate it and just omit the card,
-          // mirroring how a missing regression run degrades to null.
-          try {
-            const page = await fetchSkillVersionConvergence(s.id, id);
-            if (!cancelled) setConvergence(page.audit);
-          } catch {
-            if (!cancelled) setConvergence(null);
-          }
-          // self-consistency is the third trust signal on the card; like
-          // convergence it degrades to absent rather than failing the view.
-          try {
-            const report = await fetchSkillVersionSelfConsistency(s.id, id);
-            if (!cancelled) setConsistency(report);
-          } catch {
-            if (!cancelled) setConsistency(null);
-          }
-          // The attested Judge Card — supplementary like the signals above;
-          // a transient failure omits the panel rather than failing the view.
-          try {
-            const cardData = await fetchJudgeCard(s.id, id);
-            if (!cancelled) setJudgeCard(cardData);
-          } catch {
-            if (!cancelled) setJudgeCard(null);
-          }
-        }
+        setLoadedFor(readFor);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setFailure({ routeKey: readFor, failure: loadFailure(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -330,31 +319,75 @@ export function SkillVersionDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, selectedCriterionId]);
+  }, [id, selectedCriterionId, reloadKey]);
 
   const v = versions.find((vv) => vv.id === id) ?? null;
   const isCurrent = v && skill ? v.id === skill.currentVersion.id : false;
 
-  if (loading && !v) {
+  // Each evidence read fails on its own: the version stays readable, a failed
+  // section says so where its data would be, and its Retry reads only that
+  // section again. fetchSkillVersionRegression maps "no recorded run" to null.
+  const current = !loading && !error && loadedFor === routeKey;
+  const evidence = current && skill && v ? { skillId: skill.id, versionId: v.id } : null;
+  const evidenceKey = evidence ? `${evidence.skillId}:${evidence.versionId}` : null;
+  const regression = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchSkillVersionRegression(evidence.skillId, evidence.versionId))
+  );
+  const convergence = useSectionRead(
+    evidenceKey,
+    evidence && (async () => (await fetchSkillVersionConvergence(evidence.skillId, evidence.versionId)).audit)
+  );
+  const consistency = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchSkillVersionSelfConsistency(evidence.skillId, evidence.versionId))
+  );
+  // the AUTHORITATIVE Judge Card, fetched from /card (κ + basis + audit)
+  // — distinct from the client-side signal assembly on this screen.
+  const judgeCard = useSectionRead(
+    evidenceKey,
+    evidence && (() => fetchJudgeCard(evidence.skillId, evidence.versionId))
+  );
+  // The recorded run, null when this version has none, and undefined while it
+  // is read or when the read failed.
+  const regressionRun = regression.status === "loaded" ? regression.data : undefined;
+  const convergenceAudit = convergence.status === "loaded" ? convergence.data : null;
+
+  const backToVersions = (
+    <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
+      <ArrowLeft /> Back to versions
+    </Button>
+  );
+
+  // The page renders once its version is read. Each evidence section then
+  // says it is loading until its own read settles, so a slow section never
+  // holds up the rest and never reads as empty meanwhile.
+  if (!current && !error) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Judge card" title="Loading version" />
-      </div>
+      <PageLoading title="Loading version" />
     );
   }
 
-  if (error || !v) {
+  if (error) {
+    return (
+      <PageLoadError
+        eyebrow="Judge card"
+        title="Couldn't load this version"
+        failure={error}
+        onRetry={() => setReloadKey((key) => key + 1)}
+        back={backToVersions}
+      />
+    );
+  }
+
+  if (!v) {
     return (
       <div className="fadeUp">
-        <div className="mb-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/skill/versions")}>
-            <ArrowLeft /> Back to versions
-          </Button>
-        </div>
+        <div className="mb-3">{backToVersions}</div>
         <SectionHead eyebrow="Judge card" title="Version not found" />
         <Card>
           <CardContent className="text-[13px] text-ink-2">
-            {error ?? "This version may have been archived or removed."}
+            This version may have been archived or removed.
           </CardContent>
         </Card>
       </div>
@@ -386,16 +419,31 @@ export function SkillVersionDetailScreen() {
           ? `Starter · unvalidated · runnable does not mean calibrated · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`
           : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleString() : "—"} · ${v.knownLimitations.length} known limitation${v.knownLimitations.length === 1 ? "" : "s"}`}
         right={
-          <div className="flex items-center gap-2">
-            <StatusChip status={v.status} />
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusChip status={v.status} run={regressionRun} />
             {v.onboardingAssurance === "starter_unvalidated" ? <Chip>Starter · unvalidated</Chip> : null}
-            <GateChip state={gateStateForVersion(v)} title={v.knownLimitations.join(" · ")} />
+            <GateChip
+              state={regression.status === "loading" ? "loading" : gateStateForVersion(v, regressionRun)}
+              title={v.knownLimitations.join(" · ")}
+            />
             {isCurrent ? <Chip>current</Chip> : null}
           </div>
         }
       />
 
-      {judgeCard && skill ? <JudgeCardPanel card={judgeCard} skillId={skill.id} versionId={v.id} /> : null}
+      {judgeCard.status === "loading" ? (
+        <SectionLoading className="mb-6" label="Loading the Judge Card…" />
+      ) : judgeCard.status === "failed" ? (
+        <SectionLoadError
+          className="mb-6"
+          title="Couldn't load the Judge Card."
+          failure={judgeCard.failure}
+          retrying={judgeCard.retrying}
+          onRetry={judgeCard.retry}
+        />
+      ) : judgeCard.status === "loaded" && skill ? (
+        <JudgeCardPanel card={judgeCard.data} skillId={skill.id} versionId={v.id} />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.3fr_1fr]">
         <div className="flex flex-col gap-5">
@@ -446,11 +494,11 @@ export function SkillVersionDetailScreen() {
                   {agreementPct == null ? "—" : `${agreementPct}%`}
                 </div>
                 <div className="text-ink-3">Too strict</div>
-                <div className="font-mono">{v.tooStrictCount}</div>
+                <div className="font-mono">{measuredCount(v, v.tooStrictCount)}</div>
                 <div className="text-ink-3">Too lenient</div>
-                <div className="font-mono">{v.tooLenientCount}</div>
+                <div className="font-mono">{measuredCount(v, v.tooLenientCount)}</div>
                 <div className="text-ink-3">Ambiguous</div>
-                <div className="font-mono">{v.ambiguousCount}</div>
+                <div className="font-mono">{measuredCount(v, v.ambiguousCount)}</div>
               </div>
             </CardContent>
           </Card>
@@ -525,29 +573,49 @@ export function SkillVersionDetailScreen() {
       </div>
 
       <div className="mt-6">
-        {regression && regression.cases.length > 0 ? (
-          <RegressionDiffTable
-            cases={regression.cases}
-            title="Regression at version creation"
-            description={`The immutable reference revision pinned when this version was created was re-judged${regression.datasetRevisionId ? ` (${regression.datasetRevisionId})` : ""}. Click a row to open the trace.`}
+        {regression.status === "loading" ? (
+          <SectionLoading label="Loading the regression run…" />
+        ) : regression.status === "failed" ? (
+          <SectionLoadError
+            title="Couldn't load the regression run."
+            failure={regression.failure}
+            retrying={regression.retrying}
+            onRetry={regression.retry}
           />
-        ) : regression && regression.compared > 0 ? (
+        ) : regressionRun && regressionRun.cases.length > 0 ? (
+          <RegressionDiffTable
+            cases={regressionRun.cases}
+            title="Regression at version creation"
+            description={`The immutable reference revision pinned when this version was created was re-judged${regressionRun.datasetRevisionId ? ` (${regressionRun.datasetRevisionId})` : ""}. Click a row to open the trace.`}
+          />
+        ) : regressionRun && regressionRun.compared > 0 ? (
           <MarginNote tone="neutral" who="Regression">
-            {regression.compared} case{regression.compared === 1 ? "" : "s"} were re-judged when this
+            {regressionRun.compared} case{regressionRun.compared === 1 ? "" : "s"} were re-judged when this
             version was created, but this run didn't capture a per-case breakdown (older run format).
           </MarginNote>
         ) : null}
       </div>
 
-      {convergence ? (
+      {convergence.status === "loading" ? (
+        <SectionLoading className="mt-6" label="Loading the convergence audit…" />
+      ) : convergence.status === "failed" ? (
+        <div className="mt-6">
+          <SectionLoadError
+            title="Couldn't load the convergence audit."
+            failure={convergence.failure}
+            retrying={convergence.retrying}
+            onRetry={convergence.retry}
+          />
+        </div>
+      ) : convergenceAudit ? (
         <div className="mt-6">
           <ConvergenceCard
-            audit={convergence}
+            audit={convergenceAudit}
             versionLabel={`v${v.version}`}
             beforeVersionLabel={
-              convergence.beforeVersionId
+              convergenceAudit.beforeVersionId
                 ? (() => {
-                    const before = versions.find((vv) => vv.id === convergence.beforeVersionId);
+                    const before = versions.find((vv) => vv.id === convergenceAudit.beforeVersionId);
                     return before ? `v${before.version}` : null;
                   })()
                 : null
@@ -557,7 +625,19 @@ export function SkillVersionDetailScreen() {
       ) : null}
 
       <div className="mt-6">
-        <SelfConsistencyCard report={consistency} />
+        {consistency.status === "failed" ? (
+          <SelfConsistencyCard
+            report={null}
+            failure={consistency.failure}
+            retrying={consistency.retrying}
+            onRetry={consistency.retry}
+          />
+        ) : (
+          <SelfConsistencyCard
+            report={consistency.status === "loaded" ? consistency.data : null}
+            loading={consistency.status === "loading"}
+          />
+        )}
       </div>
     </div>
   );
@@ -699,7 +779,19 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
   );
 }
 
-function SelfConsistencyCard({ report }: { report: SelfConsistencyReport | null }) {
+function SelfConsistencyCard({
+  report,
+  loading = false,
+  failure,
+  retrying = false,
+  onRetry
+}: {
+  report: SelfConsistencyReport | null;
+  loading?: boolean;
+  failure?: LoadFailure;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
   return (
     <Card>
       <CardContent className="py-4">
@@ -712,7 +804,17 @@ function SelfConsistencyCard({ report }: { report: SelfConsistencyReport | null 
             </span>
           ) : null}
         </div>
-        {!report || report.comparedCases === 0 ? (
+        {loading ? (
+          <SectionLoading label="Loading self-consistency…" />
+        ) : failure && onRetry ? (
+          <SectionLoadError
+            className="mt-2"
+            title="Couldn't load self-consistency."
+            failure={failure}
+            retrying={retrying}
+            onRetry={onRetry}
+          />
+        ) : !report || report.comparedCases === 0 ? (
           <div className="text-[12.5px] leading-[1.55] text-ink-3">
             No repeat runs under this version yet. Re-judge a case with <code>force: true</code> on{" "}
             <code>POST /api/v1/judge</code> (or re-run a dataset eval) to probe whether the requested

@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
@@ -116,7 +117,7 @@ describe("case-detail human ruling state", () => {
     expect(html).toContain("Add to golden set");
     expect(html).toContain("Decision history · 2 append-only records");
     expect(html).toContain("Evaluator output");
-    expect(html).not.toContain("Accept evaluator opinion");
+    expect(html).not.toContain("Agree with evaluator");
     expect(html).not.toContain("next week");
   });
 
@@ -211,6 +212,75 @@ describe("case-detail human ruling state", () => {
     expect(html).not.toContain("Add to golden set");
   });
 
+  it("renders the complete claim and evidence as text, preserving raw content and escaping source markup", () => {
+    const evidence = Array.from({ length: 700 }, (_, index) => `Source sentence ${index}.`);
+    evidence[0] = '<script>alert("source")</script>';
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, trace: { ...detail.trace,
+        input: { evidence, claim_context_for_reference_resolution_only: "Context is not evidence." },
+        output: { claim: "An unsupported claim <img src=x onerror=alert(1)>" }
+      } }
+    }));
+    expect(html).toContain("Claim to evaluate");
+    expect(html).toContain("Supplied evidence · 700 entries");
+    expect(html).toContain("Source sentence 699.");
+    expect(html).toContain("Context is not evidence.");
+    expect(html).toContain("Raw input and output");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("claim_context_for_reference_resolution_only");
+  });
+
+  it("retains the generic full payload view when extra fields might affect the evaluation", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, trace: { ...detail.trace,
+        input: { evidence: ["source"], important_other_evidence: "Do not omit this." },
+        output: { claim: "Claim" }
+      } }
+    }));
+    expect(html).toContain("Conversation");
+    expect(html).toContain("Do not omit this.");
+    expect(html).not.toContain("Claim to evaluate");
+  });
+
+  it("shows a recorded TypeSafe question, true probability, exact threshold and observed models without inventing an explanation", () => {
+    const question = { type: "noul", instructions: "Is every claim supported?", criteria: { true: "All claims supported.", false: "Any claim unsupported." } };
+    const typed: ExceptionDetail = {
+      ...detail,
+      judgeRun: { ...detail.judgeRun, verdict: "pass", score: 0.63, reasoning: null },
+      exception: { ...detail.exception, verdict: "pass" },
+      rawRequest: { provider: "typesafe", modelName: "jev-1.13.0", prompt: { id: "skillv_1", name: "0.1.4", content: JSON.stringify(question) } },
+      rawResponse: { kind: "typed-question", probability: 0.63, threshold: 0.3, label: "pass", rationaleStatus: "not_provided" },
+      verdictHistory: [
+        { ...judgeBeforeRuling, observed: { model: "claude-sonnet-5", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null }, skillVersionId: "skillv_sonnet" },
+        { ...judgeBeforeRuling, id: "typed", payload: { kind: "binary", pass: true, rationaleStatus: "not_provided" }, observed: { model: "jev-1.13.0", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null } }
+      ]
+    };
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: typed }));
+    expect(html).toContain("Is every claim supported?");
+    expect(html).toContain("Probability answer is true: 63%");
+    expect(html).toContain("True means pass.");
+    expect(html).toContain("probability is at least 0.3");
+    expect(html).toContain("does not provide an explanation");
+    expect(html).toContain("Model: claude-sonnet-5");
+    expect(html).toContain("Model: jev-1.13.0");
+    expect(html).toContain("skillv_sonnet");
+    expect(html).toContain("v0.1.4");
+    expect(html).not.toContain("score 0.63");
+    expect(html).not.toContain("confidence");
+  });
+
+  it("escapes recorded model names and does not infer an absent model from another history item", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, {
+      detail: { ...detail, verdictHistory: [{ ...judgeBeforeRuling, observed: { model: "<img src=x onerror=alert(1)>", requestId: null, responseId: null, systemFingerprint: null, upstreamProvider: null, thinkingReturned: null, reasoningTokens: null } }, { ...judgeBeforeRuling, id: "missing_model", skillVersionId: "other_version" }] }
+    }));
+    expect(html).toContain("Model: &lt;img");
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("Model: not recorded");
+    expect(html).toContain("other_version");
+  });
+
   it("refreshes the shared dashboard after standalone and player decisions", async () => {
     const [traceSource, playerSource] = await Promise.all([
       readFile(new URL("../src/screens/trace.tsx", import.meta.url), "utf8"),
@@ -219,5 +289,56 @@ describe("case-detail human ruling state", () => {
 
     expect(traceSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*load\(caseId\);[\s\S]*void refresh\(\);/);
     expect(playerSource).toMatch(/onChanged=\{\(kind\) => \{[\s\S]*void refresh\(\);[\s\S]*advanceCursor\(\);/);
+  });
+});
+
+
+describe("review attention and progressive disclosure", () => {
+  const typedDetail: ExceptionDetail = {
+    ...detail,
+    latestHumanLabel: null,
+    verdictHistory: [judgeBeforeRuling],
+    trace: { ...detail.trace, input: { evidence: ["First source sentence.", "Final source sentence."], claim_context_for_reference_resolution_only: "Reference context." }, output: { claim: "The claim to check." } },
+    judgeRun: { ...detail.judgeRun, score: 0.2, reasoning: null },
+    rawRequest: { provider: "typesafe", prompt: { id: "skillv_1", name: "0.1.3", content: JSON.stringify({ type: "noul", instructions: "Is every factual part supported?", criteria: { true: "All supported", false: "Unsupported" } }) } },
+    rawResponse: { kind: "typed-question", probability: 0.2, threshold: 0.5, label: "fail", rationaleStatus: "not_provided" }
+  };
+
+  it("puts the opinion before long evidence, and review choices before closed diagnostics", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: typedDetail }));
+    const document = new JSDOM(html).window.document;
+    const disclosures = [...document.querySelectorAll("details")];
+    const question = disclosures.find((el) => el.querySelector("summary")?.textContent === "Typed question and decision threshold");
+    const call = disclosures.find((el) => el.querySelector("summary")?.textContent === "Judge call and version details");
+    expect(question?.open).toBe(false);
+    expect(call?.open).toBe(false);
+    expect(question?.textContent).toContain("Is every factual part supported?");
+    expect(question?.textContent).toContain("0.5");
+    expect(call?.textContent).toContain("skillv_1");
+    expect(html.indexOf("Latest evaluator opinion")).toBeLessThan(html.indexOf("Claim and supplied evidence"));
+    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Typed question and decision threshold"));
+    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Judge call and version details"));
+    expect(html).toContain("Probability answer is true: 20%");
+    expect(html).toContain("not measured accuracy");
+    expect(html).toContain("does not provide an explanation");
+    expect(document.querySelectorAll("ol li")).toHaveLength(2);
+    expect(html).toContain("Final source sentence.");
+    expect(html).toContain("Reference context.");
+  });
+
+  it("keeps a saved human ruling ahead of the highlighted model output", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail }));
+    expect(html.indexOf("Recorded human ruling")).toBeLessThan(html.indexOf("Latest evaluator opinion"));
+    expect(html).toContain("overridden by ruling");
+    expect(html).not.toContain("Agree with evaluator");
+  });
+
+  it("keeps ordinary LLM rationale visible without a typed-question disclosure", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: { ...detail, verdictHistory: [], latestHumanLabel: null } }));
+    const document = new JSDOM(html).window.document;
+    const rationale = [...document.querySelectorAll("div")].find((el) => el.textContent === "The answer omitted a direct link.");
+    expect(rationale).toBeDefined();
+    expect(rationale?.closest("details")).toBeNull();
+    expect(html).not.toContain("Typed question and decision threshold");
   });
 });

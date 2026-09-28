@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Flag,
@@ -25,6 +25,7 @@ import { RubristBrand } from "@/components/rubrist-brand";
 import { fetchProjects, selectProject, selectedProjectId } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
 import { useAppMode } from "@/lib/app-mode";
+import { routeMetadata } from "../../lib/route-metadata.js";
 import { useCriterion } from "@/lib/criterion-context";
 import { useMode } from "@/hooks/use-mode";
 import { DISPLAY_MODE_BY_VALUE, DISPLAY_MODE_OPTIONS, workspaceRouteVisible } from "@/lib/display-mode";
@@ -148,6 +149,7 @@ export function Sidebar({
   onMobileClose
 }: SidebarProps) {
   const [mode, setMode] = useMode();
+  const location = useLocation();
   const { href: criterionHref } = useCriterion();
   const navGroups = (bench ? BENCH_NAV : TRACING_NAV)
     .map((group) => ({
@@ -157,6 +159,12 @@ export function Sidebar({
     .filter((group) => group.items.length > 0);
   const systemItems = (bench ? BENCH_SYS_ITEMS : SYS_ITEMS)
     .filter((item) => workspaceRouteVisible(mode, bench, item.to));
+  const visiblePaths = [...navGroups.flatMap((group) => group.items), ...systemItems].map((item) => item.to);
+  const routeActivePath = routeMetadata(location.pathname, location.search, bench).activePath;
+  const activePath = visiblePaths.includes(routeActivePath) ? routeActivePath
+    : routeActivePath === "/review-queues" && visiblePaths.includes("/exceptions") ? "/exceptions"
+    : routeActivePath === "/traces" && bench && visiblePaths.includes("/datasets") ? "/datasets"
+    : routeActivePath;
   const { theme, setTheme } = useTheme();
   const session = useSession();
   const userName = session.data?.user?.name ?? "Operator";
@@ -200,6 +208,7 @@ export function Sidebar({
                 <NavItem
                   key={item.to}
                   to={criterionHref(item.to)}
+                  activePath={activePath}
                   icon={<item.icon className="h-3.5 w-3.5" />}
                   label={item.label}
                   {...(showBadge ? { badge: exceptionsCount, badgeSignal: true } : {})}
@@ -214,7 +223,7 @@ export function Sidebar({
         {systemItems.length > 0 ? (
           <NavSection label="System">
             {systemItems.map((item) => (
-              <NavItem key={item.to} to={criterionHref(item.to)} icon={<item.icon className="h-3.5 w-3.5" />} label={item.label} onNavigate={onMobileClose} />
+              <NavItem activePath={activePath} key={item.to} to={criterionHref(item.to)} icon={<item.icon className="h-3.5 w-3.5" />} label={item.label} onNavigate={onMobileClose} />
             ))}
           </NavSection>
         ) : null}
@@ -415,6 +424,7 @@ function NavSection({ label, state, children }: { label: string; state?: Journey
 }
 
 interface NavItemProps {
+  activePath: string;
   to: string;
   icon: React.ReactNode;
   label: string;
@@ -424,10 +434,10 @@ interface NavItemProps {
   onNavigate?: (() => void) | undefined;
 }
 
-function NavItem({ to, icon, label, badge, badgeSignal, end, onNavigate }: NavItemProps) {
+function NavItem({ to, icon, label, badge, badgeSignal, onNavigate, activePath }: NavItemProps) {
+  const isActive = activePath === to.split("?")[0];
   return (
-    <NavLink to={to} {...(end ? { end: true } : {})} className="block" onClick={onNavigate}>
-      {({ isActive }) => (
+    <Link to={to} aria-current={isActive ? "page" : undefined} className="block" onClick={onNavigate}>
         <div
           className={cn(
             "relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2 py-[7px] text-[13px] text-ink-2 select-none",
@@ -450,7 +460,6 @@ function NavItem({ to, icon, label, badge, badgeSignal, end, onNavigate }: NavIt
             </span>
           ) : null}
         </div>
-      )}
-    </NavLink>
+    </Link>
   );
 }

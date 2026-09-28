@@ -88,6 +88,6 @@ describe("DemoRepository facade module", () => {
     expect(facade.heritageClauses?.flatMap((clause) =>
       clause.types.map((type) => type.expression.getText(demoSource))
     )).toEqual(["RubristRepository"]);
-    expect(facade.members.filter(ts.isMethodDeclaration)).toHaveLength(163);
+    expect(facade.members.filter(ts.isMethodDeclaration)).toHaveLength(164);
   }, 30_000);
 });

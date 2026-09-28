@@ -14,16 +14,16 @@ describe("exception queue rows", () => {
 
     expect(source).toContain("aria-expanded={expanded}");
     expect(source).toContain("expanded ? exception.reason : rationalePreview(exception.reason)");
-    expect(source).toContain('<Table className="table-fixed">');
+    expect(source).toContain('<Table className="ledger-stacked table-fixed" role="table" aria-label="Waiting cases">');
     expect(source).toContain('"truncate whitespace-nowrap"');
     expect(source).toContain("open Review to read the full trace and guide before recording a ruling");
     expect(source).toContain('exceptions.length === 0 ? "Queue cleared" : "No matches"');
-    expect(source).toContain("navigate(caseReviewUrl(ex.id, ex.capabilityGap)");
+    expect(source).toContain("<Link to={caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)}");
   });
 
   it("keeps a row-level review scoped to its case across refreshes", () => {
     expect(caseReviewUrl("case one", "policy_grounding")).toBe(
-      "/review?caseId=case+one&cluster=policy_grounding"
+      "/review?cluster=policy_grounding&caseId=case+one"
     );
     expect(
       selectReviewCaseIds({

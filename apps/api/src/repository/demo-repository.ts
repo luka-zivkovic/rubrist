@@ -337,9 +337,10 @@ export class DemoRepository implements RubristRepository {
   async getCaseDetail(
     projectId: string,
     caseId: string,
-    skillVersionId?: string | undefined
+    skillVersionId?: string | undefined,
+    criterionVersionId?: string | undefined
   ): Promise<ExceptionDetail | null> {
-    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId);
+    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId, criterionVersionId);
   }
 
   async promoteExceptionToGoldenSet(input: PromoteExceptionToGoldenSetInput): Promise<GoldenSetEntry> {
@@ -934,6 +935,10 @@ export class DemoRepository implements RubristRepository {
 
   async listBlockedIronsideFeedbackSyncJobs(projectId: string, integrationId: string): Promise<FeedbackSyncJob[]> {
     return this.judgeFeedbackRepository.listBlockedIronsideFeedbackSyncJobs(projectId, integrationId);
+  }
+
+  async listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]> {
+    return this.judgeFeedbackRepository.listSignedOffFeedbackSyncJobs(limit);
   }
 
   async createSkillVersion(skillId: string, input: CreateSkillVersionInput, context: CreateSkillVersionContext): Promise<{

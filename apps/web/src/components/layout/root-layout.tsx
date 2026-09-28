@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Sidebar } from "./sidebar";
@@ -8,44 +8,18 @@ import { Button } from "@/components/ui/button";
 import { SkipLink } from "@/components/skip-link";
 import { ImportTraceLauncher } from "@/components/import-trace-launcher";
 import { NoProjectLanding } from "@/components/project-create";
-import { ApiUnavailableScreen } from "@/screens/system";
+import { SectionLoadError } from "../rubrist/load-error.js";
+import { retryableStatus } from "../../lib/load-error.js";
+import { LoginScreen } from "@/screens/login";
+import { PageLoading } from "../page-loading.js";
 import { useMode } from "@/hooks/use-mode";
 import { useAppMode } from "@/lib/app-mode";
 import { DashboardProvider, useDashboard } from "@/lib/dashboard-context";
 import { CriterionProvider, useCriterion } from "@/lib/criterion-context";
 import { routeRequiresCriterionSelection } from "@/lib/criterion-selection";
 import { CriterionPicker } from "@/screens/criteria";
+import { contextualHref, observePageHeading, pageDocumentTitle, routeMetadata } from "../../lib/route-metadata.js";
 import { isBench, journeyActStates } from "@/lib/journey";
-
-const CRUMBS: Record<string, string[]> = {
-  "/":               ["Overview"],
-  "/traces":         ["Traces"],
-  "/exceptions":     ["Exceptions"],
-  "/reliability":    ["Reliability"],
-  "/production-calibration": ["Production calibration"],
-  "/review-queues":  ["Review queues"],
-  "/criteria":       ["Criteria"],
-  "/skill":          ["Skill"],
-  "/skill/versions": ["Skill versions"],
-  "/first-result":   ["First Result"],
-  "/golden":         ["Golden set"],
-  "/datasets":       ["Datasets"],
-  "/integrations":   ["Integrations"],
-  "/settings":       ["Settings"]
-};
-
-function crumbsFor(pathname: string, projectName: string, bench: boolean): string[] {
-  for (const [prefix, value] of Object.entries(CRUMBS)) {
-    if (pathname === prefix || (prefix !== "/" && pathname.startsWith(prefix))) {
-      if (prefix === "/exceptions" && pathname !== "/exceptions") {
-        return [projectName, "Exceptions", "Trace"];
-      }
-      if (bench && prefix === "/datasets") return [projectName, "Examples"];
-      return [projectName, ...value];
-    }
-  }
-  return [projectName];
-}
 
 export function RootLayout() {
   return (
@@ -60,9 +34,10 @@ export function RootLayout() {
 function RootLayoutInner() {
   const [mode] = useMode();
   const location = useLocation();
-  const { dashboard, errorKind, reload } = useDashboard();
+  const { dashboard, loading, errorKind, errorStatus, reload } = useDashboard();
   const {
     choices,
+    loading: criteriaLoading,
     selectedCriterionId,
     selectedChoice,
     selectCriterion,
@@ -73,7 +48,7 @@ function RootLayoutInner() {
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
 
   const bench = dashboard ? isBench(dashboard.project) : false;
-  const projectName = dashboard?.project.name ?? "Rubrist";
+  const projectName = dashboard?.project.name ?? (errorKind ? "Project unavailable" : loading ? "Loading project…" : "Project");
   // The bench subtitle doubles as the persistent honesty marker: no
   // production traces back these numbers, only supplied examples.
   const projectSource = dashboard
@@ -81,12 +56,24 @@ function RootLayoutInner() {
       ? `Judge a dataset · ${dashboard.project.importedTraceCount.toLocaleString()} examples · no production traces`
       : `Judge live traces · ${dashboard.project.traceProvider} · ${dashboard.project.importedTraceCount.toLocaleString()} traces`
     : "—";
-  const exceptionsCount = dashboard?.exceptions.length ?? 0;
-  const importedTotal = dashboard?.project.importedTraceCount ?? 0;
+  // null until the dashboard loads, and after it fails: an unknown count is
+  // shown as unknown, never as zero.
+  const exceptionsCount = dashboard?.exceptionsTotal ?? null;
+  const importedTotal = dashboard?.project.importedTraceCount ?? null;
   const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname);
   const showCriterionPicker = selectionRequired && criterionSelectionRequiredForRoute;
 
-  const crumbs = useMemo(() => crumbsFor(location.pathname, projectName, bench), [location.pathname, projectName, bench]);
+  const route = useMemo(() => routeMetadata(location.pathname, location.search, bench), [location.pathname, location.search, bench]);
+  const [pageHeading, setPageHeading] = useState("");
+  useEffect(() => observePageHeading(document.body, setPageHeading), [location.pathname]);
+  const pageTitle = pageHeading || route.crumbs.at(-1)?.label || "Rubrist";
+  useEffect(() => { document.title = pageDocumentTitle(pageTitle, projectName); }, [pageTitle, projectName]);
+  const crumbs = [
+    <Link key="project" to={contextualHref("/", location.search)}>{projectName}</Link>,
+    ...route.crumbs.map((crumb, index) => crumb.to
+      ? <Link key={crumb.to} to={crumb.to}>{crumb.label}</Link>
+      : <span key={index}>{pageHeading || crumb.label}</span>)
+  ];
 
   useEffect(() => {
     setNavigationOpen(false);
@@ -122,17 +109,15 @@ function RootLayoutInner() {
 
   // P0-2 shell taxonomy — these are different states and get different
   // screens. "Empty project" is NOT here: that's the day-0 journey, handled
-  // by the screens themselves. 401 is handled by AuthGate above the router.
+  // by the screens themselves. An API 401 can precede the session hook refresh.
   // (Hooks above must run unconditionally — keep these returns below them.)
   if (!dashboard && errorKind === "no-project") {
     return <NoProjectLanding />;
   }
-  if (!dashboard && errorKind === "unavailable") {
-    return (
-      <div className="min-h-screen grid place-items-center px-6">
-        <ApiUnavailableScreen retry={() => void reload()} />
-      </div>
-    );
+  if (errorKind === "unauthorized") {
+    // Render sign-in at the current URL. Successful login reloads that exact
+    // location, preserving the case/version and criterion query selection.
+    return <><p role="alert" className="px-6 pt-6 text-center">Your session expired. Sign in again to continue.</p><LoginScreen /></>;
   }
 
   return (
@@ -154,7 +139,7 @@ function RootLayoutInner() {
       <Sidebar
         projectName={projectName}
         projectSource={projectSource}
-        exceptionsCount={exceptionsCount}
+        exceptionsCount={exceptionsCount ?? 0}
         bench={bench}
         journeyActs={dashboard ? journeyActStates(dashboard) : undefined}
         goldenSetSize={dashboard?.goldenSetSize ?? 0}
@@ -196,9 +181,9 @@ function RootLayoutInner() {
                 <span className="font-mono text-[10px] text-ink-3">criterion · {selectedChoice.name}</span>
               ) : null}
               <div className="hidden font-mono text-[10.5px] text-ink-3 xl:block">
-                <b className="font-medium text-ink">{importedTotal.toLocaleString()}</b> {bench ? "examples" : "traces this week"}
+                <b className="font-medium text-ink">{importedTotal === null ? "—" : importedTotal.toLocaleString()}</b> {bench ? "examples" : "traces imported"}
                 <span className="text-ink-3"> · </span>
-                <b className={`font-medium ${exceptionsCount > 0 ? "text-signal" : "text-ink"}`}>{exceptionsCount}</b> exceptions
+                <b className={`font-medium ${exceptionsCount ? "text-signal" : "text-ink"}`}>{exceptionsCount ?? "—"}</b> exceptions
               </div>
               <div className="hidden sm:block"><TopbarPill>
                 {DISPLAY_MODE_BY_VALUE[mode].label} display
@@ -207,16 +192,22 @@ function RootLayoutInner() {
           }
         />
         <div className="min-w-0 w-full max-w-none px-5 pt-7 pb-20 sm:px-8 xl:px-12 xl:pt-9">
+          {!dashboard && errorKind === "unavailable" && !["/", "/exceptions", "/review"].includes(location.pathname) ? (
+            <SectionLoadError
+              title="Project overview unavailable"
+              failure={{ message: errorStatus ? `Request returned HTTP ${errorStatus}. Other page data can still load independently.` : "The project summary could not be loaded. Other page data can still load independently.", retryable: errorStatus == null || retryableStatus(errorStatus) }}
+              onRetry={() => void reload()}
+              className="mb-5"
+            />
+          ) : null}
           {showCriterionPicker ? (
             <CriterionPicker
               choices={choices}
               selectedCriterionId={selectedCriterionId}
               onSelect={selectCriterion}
             />
-          ) : !dashboard && criterionSelectionRequiredForRoute ? (
-            <div className="max-w-[1760px] rounded-sm border border-rule-soft bg-card p-12 text-center text-[12.5px] text-ink-3">
-              Loading the selected criterion’s evaluator and evidence…
-            </div>
+          ) : criteriaLoading && criterionSelectionRequiredForRoute ? (
+            <PageLoading title="Loading project" />
           ) : (
             <Outlet />
           )}

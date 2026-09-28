@@ -1,13 +1,16 @@
+import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eyebrow, MarginNote, SectionHead, Chip } from "@/components/rubrist";
+import { Eyebrow, MarginNote, PageLoadError, SectionHead, Chip } from "@/components/rubrist";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { TypedQuestionView } from "../components/typed-question-view.js";
 import { fetchCurrentSkill } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { measuredCount } from "@/lib/regression-gate";
 import { useDashboard } from "@/lib/dashboard-context";
 import { skillEditConsequence, skillVersionStateLabel } from "../lib/skill-presentation.js";
 import { cn } from "@/lib/utils";
@@ -36,7 +39,7 @@ export function SkillScreen() {
   const { dashboard, refresh: refreshDashboard } = useDashboard();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
   const [tab, setTab] = useState<Tab>("rubric");
 
   const load = useCallback(async () => {
@@ -45,7 +48,7 @@ export function SkillScreen() {
     try {
       setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(loadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -61,22 +64,23 @@ export function SkillScreen() {
 
   if (loading && !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="The artifact" title="Loading skill" />
-      </div>
+      <PageLoading title="Loading skill" shape="detail" />
     );
   }
 
   if (error || !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="The artifact" title="Could not load skill" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+      <PageLoadError
+        eyebrow="The artifact"
+        title="Couldn't load the skill"
+        failure={error ?? NO_SKILL_FAILURE}
+        onRetry={() => void load()}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
+      />
     );
   }
 
@@ -135,7 +139,7 @@ export function SkillScreen() {
       </details>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="flex flex-col gap-1 border-b border-rule-soft pb-4 lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
+        <aside className="order-2 flex flex-col gap-1 border-b border-rule-soft pb-4 lg:order-1 lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
           <Eyebrow>Skill</Eyebrow>
           {(typedQuestion ? TYPED_TABS : TABS).map((t) => (
             <button
@@ -165,7 +169,7 @@ export function SkillScreen() {
               </span>
             </button>
             <div className="px-2 py-1.5 font-mono text-[11px] text-ink-3">
-              Strict {v.tooStrictCount} · Lenient {v.tooLenientCount}
+              Strict {measuredCount(v, v.tooStrictCount)} · Lenient {measuredCount(v, v.tooLenientCount)}
             </div>
           </div>
 
@@ -180,7 +184,7 @@ export function SkillScreen() {
           </div>
         </aside>
 
-        <div className="min-w-0">
+        <div className="order-1 min-w-0 lg:order-2">
           {shownTab === "question" && typedQuestion ? <TypedQuestionView question={typedQuestion} threshold={v.decisionThreshold} /> : null}
           {shownTab === "rubric" ? <RubricView markdown={v.rubricMarkdown ?? ""} /> : null}
           {shownTab === "prompt" ? <PromptView prompt={v.prompt ?? ""} rubricMarkdown={v.rubricMarkdown ?? ""} /> : null}

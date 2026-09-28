@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, X, Sparkles } from "lucide-react";
+import { ThumbsUp, PencilLine, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -28,6 +28,10 @@ import {
   type VerdictRecord
 } from "@rubrist/shared";
 
+import { CaseEvidence } from "./case-evidence.js";
+import { TypedQuestionView } from "./typed-question-view.js";
+import { evidenceClaim, recordedTypedEvaluation, recordedVersionName } from "../lib/recorded-evaluation.js";
+
 export type TraceDecisionKind = "accept" | "override" | "promote";
 
 // Sequential review surfaces (the player) opt into keyboard shortcuts by
@@ -42,6 +46,7 @@ export interface TraceDetailShortcuts {
 }
 
 interface TraceDetailProps {
+  headingAs?: "h1" | "h2";
   detail: ExceptionDetail;
   // Called after a decision is recorded server-side, with which kind — hosts
   // use it to advance their cursor and tally a session summary.
@@ -58,6 +63,26 @@ const VERDICT_CHOICE_SCORES: Record<VerdictLabel, number> = {
 };
 
 const OVERRIDE_OPTIONS: ReadonlyArray<VerdictLabel> = ["pass", "fail", "ambiguous"];
+
+// Result colors describe the recorded label. Review action colors describe
+// agreement/change: agreeing with a FAIL must never look like recording PASS.
+const REVIEW_RESULT_TONES: Record<VerdictLabel, { card: string; header: string; chip: string }> = {
+  pass: {
+    card: "border-emerald-700 dark:border-emerald-500",
+    header: "bg-emerald-100 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100",
+    chip: "border-emerald-700 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-100"
+  },
+  fail: {
+    card: "border-red-700 dark:border-red-400",
+    header: "bg-red-100 text-red-950 dark:bg-red-950 dark:text-red-100",
+    chip: "border-red-700 bg-red-100 text-red-900 dark:border-red-400 dark:bg-red-950 dark:text-red-100"
+  },
+  ambiguous: {
+    card: "border-amber-700 dark:border-amber-400",
+    header: "bg-amber-100 text-amber-950 dark:bg-amber-950 dark:text-amber-100",
+    chip: "border-amber-700 bg-amber-100 text-amber-900 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100"
+  }
+};
 
 // the judge-named failing step for THIS case's latest judge run.
 // rawResponse is the structured verdict recordJudgeRun persisted — read it
@@ -228,15 +253,15 @@ function HumanRulingCard({
       : null;
   const agrees = priorEvaluatorLabel ? label === priorEvaluatorLabel : null;
   return (
-    <Card data-testid="human-ruling-card">
-      <CardHeader>
+    <Card data-testid="human-ruling-card" className={`border-2 ${REVIEW_RESULT_TONES[label].card}`}>
+      <CardHeader className={REVIEW_RESULT_TONES[label].header}>
         <div>
           <CardTitle>{ruling.source === "adjudicated" ? "Owner ruling" : "Recorded human ruling"}</CardTitle>
-          <CardDescription>
+          <CardDescription className="text-inherit">
             Ungoverned legacy review evidence. This is not governed human truth.
           </CardDescription>
         </div>
-        <VerdictChip verdict={label} />
+        <VerdictChip verdict={label} className={`px-3 py-2 text-[24px] font-semibold tracking-tight ${REVIEW_RESULT_TONES[label].chip}`} />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="text-[13px] text-ink-2">
@@ -268,12 +293,15 @@ function HumanRulingCard({
 
 function DecisionHistory({
   verdicts,
-  effectiveRulingId
+  effectiveRulingId,
+  detail
 }: {
   verdicts: VerdictRecord[];
   effectiveRulingId: string | null;
+  detail: ExceptionDetail;
 }) {
   if (verdicts.length === 0) return null;
+  const versionName = recordedVersionName(detail);
   const effective = verdicts.find((verdict) => verdict.id === effectiveRulingId) ?? null;
   return (
     <Card>
@@ -301,7 +329,10 @@ function DecisionHistory({
                     {(payloadRationale(verdict.payload) ?? "This evaluator states no rationale.") || "No rationale recorded."}
                   </div>
                   <div className="mt-1 font-mono text-[10.5px] text-ink-3">
-                    {verdictActor(verdict)} · {new Date(verdict.createdAt).toLocaleString()}
+                    {verdict.source === "llm_judge" ? `Model: ${verdict.observed?.model ?? "not recorded"}` : verdictActor(verdict)} · {new Date(verdict.createdAt).toLocaleString()}
+                    {verdict.skillVersionId ? (
+                      <div className="mt-1 break-all">Evaluator version {verdict.skillVersionId === detail.judgeRun.skillVersionId && versionName ? `v${versionName} · ` : ""}{verdict.skillVersionId}</div>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -313,8 +344,11 @@ function DecisionHistory({
   );
 }
 
-export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) {
+export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: TraceDetailProps) {
   const { exception, trace, judgeRun, rawRequest, rawResponse } = detail;
+  const typedEvaluation = recordedTypedEvaluation(detail);
+  const structuredEvidence = evidenceClaim(trace.input, trace.output);
+  const versionName = recordedVersionName(detail);
 
   const [decision, setDecision] = useState<Decision>(null);
   const [overrideChoice, setOverrideChoice] = useState<VerdictLabel>("fail");
@@ -554,39 +588,104 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
   return (
     <>
       <SectionHead
+        headingAs={headingAs}
         eyebrow={`Exception · ${exception.capabilityGap?.toLowerCase() ?? "uncategorized"}`}
         title={exception.title}
         sub={`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}
       />
 
-      <div className="grid grid-cols-1 gap-7 xl:grid-cols-[1.25fr_1fr]">
-        <div className="flex flex-col gap-5">
-          <Card>
-            <CardHeader>
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[1.25fr_1fr] xl:grid-rows-[auto_1fr]">
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-1">
+          {effectiveRuling ? (
+            <HumanRulingCard
+              ruling={effectiveRuling}
+              verdicts={verdictHistory}
+              currentJudgeRun={judgeRun}
+            />
+          ) : null}
+
+          <Card className={effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}>
+            <CardHeader className={effectiveRuling ? undefined : REVIEW_RESULT_TONES[exception.verdict].header}>
               <div>
-                <CardTitle>Conversation</CardTitle>
-                <CardDescription>Trace input and the agent's response.</CardDescription>
+                <CardTitle className="text-[16px] font-semibold">Latest evaluator opinion</CardTitle>
+                <CardDescription className={effectiveRuling ? undefined : "text-inherit"}>
+                  Model output from the latest judge run. A recorded human ruling takes precedence in this view.
+                </CardDescription>
               </div>
-              <div className="flex-1" />
-              <div className="font-mono text-[11px] text-ink-3">{transcript.length} turns</div>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {transcript.map((turn) => (
-                <div key={turn.role}>
-                  <div
-                    className={`mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] ${
-                      turn.role === "user" ? "text-ink-3" : "text-ink-2"
-                    }`}
-                  >
-                    {turn.label}
-                  </div>
-                  <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[12px] leading-[1.6] text-ink">
-                    {turn.body}
-                  </pre>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <VerdictChip verdict={exception.verdict} className={`${REVIEW_RESULT_TONES[exception.verdict].chip} ${effectiveRuling ? "text-[14px]" : "px-3 py-2 text-[24px] font-semibold tracking-tight"}`} />
+                <span className="text-[14px] font-medium text-ink">
+                  {typedEvaluation?.probability != null
+                    ? `Probability answer is true: ${(typedEvaluation.probability * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+                    : `score ${judgeRun.score.toFixed(2)}`}
+                </span>
+                {effectiveRulingLabel ? (
+                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with ruling" : "overridden by ruling"}</Chip>
+                ) : null}
+              </div>
+
+              <div className="text-[11.5px] text-ink-3">
+                Model: {judgeRun.providerMetadata?.model ?? "not recorded"}
+                <div className="mt-1 break-all">Evaluator version {versionName ? `v${versionName}` : judgeRun.skillVersionId}</div>
+              </div>
+              {typedEvaluation ? (
+                <div className="text-[12px] text-ink-3">
+                  {typedEvaluation.probability !== null
+                    ? `True means pass. This version passes when the probability is at least ${typedEvaluation.threshold}. This is a model estimate, not measured accuracy.`
+                    : "The recorded probability and threshold could not be verified from this call; inspect the raw evaluator record."}
                 </div>
-              ))}
+              ) : null}
+              <Separator />
+
+              <div>
+                <Eyebrow>Reasoning</Eyebrow>
+                <div className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
+                  {judgeRun.reasoning === null
+                    ? <span className="text-ink-3">{typedEvaluation ? "This evaluator returns a probability and does not provide an explanation." : "This evaluator states no rationale."}</span>
+                    : judgeRun.reasoning || <span className="text-ink-3">No rationale recorded.</span>}
+                </div>
+              </div>
+
+              {exception.capabilityGap ? <div>
+                <Eyebrow>Capability gap</Eyebrow>
+                <div className="mt-1 font-mono text-[12px] text-ink-2">
+                  {exception.capabilityGap}
+                </div>
+              </div> : null}
             </CardContent>
           </Card>
+        </div>
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
+          {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} /> : (
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Conversation</CardTitle>
+                  <CardDescription>Trace input and the agent's response.</CardDescription>
+                </div>
+                <div className="flex-1" />
+                <div className="font-mono text-[11px] text-ink-3">{transcript.length} turns</div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                {transcript.map((turn) => (
+                  <div key={turn.role}>
+                    <div
+                      className={`mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] ${
+                        turn.role === "user" ? "text-ink-3" : "text-ink-2"
+                      }`}
+                    >
+                      {turn.label}
+                    </div>
+                    <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[12px] leading-[1.6] text-ink">
+                      {turn.body}
+                    </pre>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {trace.steps && trace.steps.length > 0 ? (
             <StepLedger
@@ -610,112 +709,47 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-5">
-          {effectiveRuling ? (
-            <HumanRulingCard
-              ruling={effectiveRuling}
-              verdicts={verdictHistory}
-              currentJudgeRun={judgeRun}
-            />
-          ) : null}
-
-          <Card>
+        <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-2">
+          <Card className="border-rule-strong">
             <CardHeader>
               <div>
-                <CardTitle>Latest evaluator opinion</CardTitle>
-                <CardDescription>
-                  Model output from the latest judge run. A recorded human ruling takes precedence in this view.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <div className="flex items-baseline gap-3">
-                <VerdictChip verdict={exception.verdict} />
-                <span className="font-mono text-[11px] text-ink-3">
-                  score {judgeRun.score.toFixed(2)}
-                </span>
-                {effectiveRulingLabel ? (
-                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with ruling" : "overridden by ruling"}</Chip>
-                ) : null}
-              </div>
-
-              <Separator />
-
-              <div>
-                <Eyebrow>Reasoning</Eyebrow>
-                <div className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
-                  {judgeRun.reasoning === null
-                    ? <span className="text-ink-3">This evaluator states no rationale.</span>
-                    : judgeRun.reasoning || <span className="text-ink-3">No rationale recorded.</span>}
-                </div>
-              </div>
-
-              <div>
-                <Eyebrow>Capability gap</Eyebrow>
-                <div className="mt-1 font-mono text-[12px] text-ink-2">
-                  {exception.capabilityGap ?? "—"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <JudgeCallPanel
-            meta={judgeCallMeta}
-            compiledPrompt={compiledPrompt}
-            rawRequest={rawRequestStr}
-            rawResponse={rawResponseStr}
-          />
-
-          <DecisionHistory
-            verdicts={verdictHistory}
-            effectiveRulingId={effectiveRuling?.id ?? null}
-          />
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>{effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
                 <CardDescription>
                   {effectiveRuling
                     ? "The ruling is saved on this case. Record another review or add it as a separate regression reference."
-                    : "Accept the evaluator opinion, record a different ruling, or add a regression reference."}
+                    : `The evaluator said ${exception.verdict.toUpperCase()}. Agree to record the same ruling, or disagree to choose another.`}
                 </CardDescription>
               </div>
               {goldenSetEntry ? <Chip>in golden set</Chip> : null}
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {!effectiveRuling ? (
                   <Button
-                    variant={decision === "accept" ? "primary" : "default"}
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal border-blue-200 bg-blue-50 px-3 py-2 text-left text-ink hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:border-blue-400/25 dark:bg-blue-500/10 dark:hover:bg-blue-500/15 [&_svg]:text-blue-700 dark:[&_svg]:text-blue-300"
                     onClick={() => void handleAccept()}
                     disabled={submitting}
                   >
-                    <Check /> Accept evaluator opinion
+                    <ThumbsUp aria-hidden="true" />
+                    <span>
+                      <span className="block text-[13px] font-medium">{submitting && decision === "accept" ? "Recording agreement…" : "Agree with evaluator"}</span>
+                      <span className="block text-[11px] text-ink-3">Record {exception.verdict.toUpperCase()} as my ruling</span>
+                    </span>
                   </Button>
                 ) : null}
                 <Button
-                  variant={decision === "override" ? "signal" : "default"}
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-amber-200 bg-amber-50 px-3 py-2 text-left text-ink hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:border-amber-400/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/15 [&_svg]:text-amber-800 dark:[&_svg]:text-amber-300"
                   onClick={openReviewForm}
                   disabled={submitting}
                 >
-                  <X /> {effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Record different ruling"}
-                </Button>
-                <Button
-                  variant={decision === "promote" ? "primary" : "default"}
-                  onClick={() => {
-                    setDecision("promote");
-                    resetForms();
-                    setResultText(null);
-                  }}
-                  disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
-                  title={goldenSetEntry
-                    ? "This case is already an active golden-set regression reference."
-                    : promoteEligible ? undefined : "Only pass/fail verdicts can be added."}
-                >
-                  <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}
+                  <PencilLine aria-hidden="true" />
+                  <span>
+                    <span className="block text-[13px] font-medium">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Disagree with evaluator"}</span>
+                    <span className="block text-[11px] text-ink-3">Choose a different ruling and explain why</span>
+                  </span>
                 </Button>
               </div>
+
 
               {decision === "override" ? (
                 <div className="fadeUp flex flex-col gap-2">
@@ -763,7 +797,7 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
                       onClick={() => void handleOverrideSubmit()}
                       disabled={submitting || !overrideReason.trim()}
                     >
-                      Record review
+                      Record {overrideChoice.toUpperCase()} ruling
                     </Button>
                     <Button
                       variant="ghost"
@@ -776,6 +810,23 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
                   </div>
                 </div>
               ) : null}
+
+              <div className="border-t border-rule-soft pt-3">
+                <Button
+                  variant={decision === "promote" ? "primary" : "ghost"}
+                  onClick={() => {
+                    setDecision("promote");
+                    resetForms();
+                    setResultText(null);
+                  }}
+                  disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
+                  title={goldenSetEntry
+                    ? "This case is already an active golden-set regression reference."
+                    : promoteEligible ? undefined : "Only pass/fail verdicts can be added."}
+                >
+                  <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}
+                </Button>
+              </div>
 
               {decision === "promote" ? (
                 <div className="fadeUp flex flex-col gap-2">
@@ -835,6 +886,31 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
               {shortcuts ? <KeyLegend hasRuling={Boolean(effectiveRuling)} inGoldenSet={Boolean(goldenSetEntry)} /> : null}
             </CardContent>
           </Card>
+          {typedEvaluation ? (
+            <details key={`question-${exception.id}-${judgeRun.id}`} className="rounded-sm border border-rule-soft bg-card">
+              <summary className="cursor-pointer px-[18px] py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2">Typed question and decision threshold</summary>
+              <div className="border-t border-rule-soft px-[18px] py-4">
+                <TypedQuestionView question={typedEvaluation.question} threshold={typedEvaluation.threshold} />
+              </div>
+            </details>
+          ) : null}
+
+          <details key={`call-${exception.id}-${judgeRun.id}`} className="rounded-sm border border-rule-soft bg-card">
+            <summary className="cursor-pointer px-[18px] py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2">Judge call and version details</summary>
+            <div className="px-[18px] pb-3 text-[11.5px] text-ink-3 break-all">Evaluator version {judgeRun.skillVersionId}</div>
+            <JudgeCallPanel
+              meta={judgeCallMeta}
+              compiledPrompt={compiledPrompt}
+              rawRequest={rawRequestStr}
+              rawResponse={rawResponseStr}
+            />
+          </details>
+
+          <DecisionHistory
+            verdicts={verdictHistory}
+            effectiveRulingId={effectiveRuling?.id ?? null}
+            detail={detail}
+          />
         </div>
       </div>
     </>
@@ -850,11 +926,11 @@ function KeyLegend({ hasRuling, inGoldenSet }: { hasRuling: boolean; inGoldenSet
       <div className="flex justify-between gap-3">
         {!hasRuling ? (
           <span className={item}>
-            <span className={kb}>A</span> accept
+            <span className={kb}>A</span> agree
           </span>
         ) : null}
         <span className={item}>
-          <span className={kb}>O</span> {hasRuling ? "review again" : "different ruling"}
+          <span className={kb}>O</span> {hasRuling ? "review again" : "disagree"}
         </span>
         {!inGoldenSet ? (
           <span className={item}>

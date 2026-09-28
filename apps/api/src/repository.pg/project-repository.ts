@@ -23,7 +23,7 @@ export interface PgProjectRepositoryDependencies {
   getCurrentSkill(projectId: string): Promise<Skill>;
   getCurrentSkillForCriterion(projectId: string, criterionId: string): Promise<Skill>;
   listGoldenSet(projectId: string, criterionVersionId?: string | undefined): Promise<GoldenSetEntry[]>;
-  listExceptionCases(projectId: string, criterionVersionId?: string | undefined): Promise<ExceptionCase[]>;
+  getExceptionSummary(projectId: string, criterionVersionId?: string | undefined): Promise<{ exceptions: ExceptionCase[]; total: number }>;
 }
 // Internal PostgreSQL project lifecycle and project-scoped read-model slice.
 // The facade constructs it once with the exact application pool and lazy
@@ -308,7 +308,7 @@ export class PgProjectRepository implements ProjectRepositoryPort {
       : await this.dependencies.getCurrentSkill(projectId);
     const criterionVersionId = skill.currentVersion.criterionVersionId;
     const goldenSet = await this.dependencies.listGoldenSet(projectId, criterionVersionId);
-    const exceptions = await this.dependencies.listExceptionCases(projectId, criterionVersionId);
+    const { exceptions, total: exceptionsTotal } = await this.dependencies.getExceptionSummary(projectId, criterionVersionId);
     // P1-4 dashboard honesty: one vote per case — the skill's LATEST verdict
     // on each judged case. Counting every judge_runs row inflated the chart
     // with superseded versions and repeat probes (observed: 102 verdicts over
@@ -350,6 +350,7 @@ export class PgProjectRepository implements ProjectRepositoryPort {
       currentVersionResultCount,
       verdictDistribution,
       exceptions,
+      exceptionsTotal,
       topCapabilityGaps: capabilityGapsFromExceptions(exceptions),
       goldenSetSize: goldenSet.length,
       // Repository default; the /api/dashboard route overwrites this with the

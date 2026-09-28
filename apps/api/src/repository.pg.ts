@@ -232,8 +232,8 @@ export class PgRepository implements RubristRepository {
         this.getCurrentSkillForCriterion(projectId, criterionId),
       listGoldenSet: (projectId, criterionVersionId) =>
         this.listGoldenSet(projectId, criterionVersionId),
-      listExceptionCases: (projectId, criterionVersionId) =>
-        this.listExceptionCases(projectId, criterionVersionId)
+      getExceptionSummary: (projectId, criterionVersionId) =>
+        this.caseEvidenceRepository.getExceptionSummary(projectId, criterionVersionId)
     });
     this.reviewQueueRepository = new PgReviewQueueRepository(
       pool,
@@ -438,9 +438,10 @@ export class PgRepository implements RubristRepository {
   async getCaseDetail(
     projectId: string,
     caseId: string,
-    skillVersionId?: string | undefined
+    skillVersionId?: string | undefined,
+    criterionVersionId?: string | undefined
   ): Promise<ExceptionDetail | null> {
-    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId);
+    return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId, criterionVersionId);
   }
 
   async promoteExceptionToGoldenSet(input: PromoteExceptionToGoldenSetInput): Promise<GoldenSetEntry> {
@@ -1121,6 +1122,10 @@ export class PgRepository implements RubristRepository {
     integrationId: string
   ): Promise<FeedbackSyncJob[]> {
     return this.judgeFeedbackRepository.listBlockedIronsideFeedbackSyncJobs(projectId, integrationId);
+  }
+
+  async listSignedOffFeedbackSyncJobs(limit: number): Promise<FeedbackSyncJob[]> {
+    return this.judgeFeedbackRepository.listSignedOffFeedbackSyncJobs(limit);
   }
 
   async createSkillVersion(skillId: string, input: CreateSkillVersionInput, context: CreateSkillVersionContext): Promise<{

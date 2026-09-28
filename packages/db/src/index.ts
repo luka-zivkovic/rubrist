@@ -306,6 +306,7 @@ export function getDemoDashboardSummary(): DashboardSummary {
       ambiguous: 38
     },
     exceptions: demoExceptions,
+    exceptionsTotal: demoExceptions.length,
     topCapabilityGaps: demoCapabilityGaps,
     goldenSetSize: 50
   };

@@ -129,6 +129,14 @@ export function SkillVersionEditor({
         }
       />
 
+      {!selectedProviderOption?.available ? (
+        <MarginNote tone="signal" who="Provider unavailable" className="mb-5">
+          The saved {selectedProviderOption?.label ?? provider} binding is kept. This project cannot currently use that provider.
+          Add its key in <button type="button" className="underline" onClick={() => navigate("/settings")}>Settings</button>,
+          or explicitly choose another provider and model before saving.
+        </MarginNote>
+      ) : null}
+
       <SkillEditFlow
         phase={phase}
         baseVersion={v.version}
@@ -325,7 +333,7 @@ export function SkillVersionEditor({
           <Field label="Provider">
             <select
               aria-label="Provider"
-              value={selectedProviderOption ? provider : ""}
+              value={provider}
               disabled={availableProviderOptions.length === 0}
               onChange={(event) => {
                 const next = event.target.value as JudgeProviderId;
@@ -337,14 +345,14 @@ export function SkillVersionEditor({
               }}
               className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 text-[12.5px] text-ink focus-visible:border-ink"
             >
-              {availableProviderOptions.length === 0 ? <option value="">Configure a provider in Settings</option> : null}
-              {/* A version whose provider has no key starts on none, so every listed provider is a real choice. */}
-              {availableProviderOptions.length > 0 && !selectedProviderOption ? <option value="" disabled>Choose a provider</option> : null}
+              {!selectedProviderOption?.available ? (
+                <option value={provider} disabled>{selectedProviderOption?.label ?? provider} · unavailable</option>
+              ) : null}
               {availableProviderOptions.map((option) => (
                 <option key={option.provider} value={option.provider}>{option.label}</option>
               ))}
             </select>
-            {selectedProviderOption ? (
+            {selectedProviderOption?.available ? (
               <span className="text-[11px] text-ink-3">
                 {selectedProviderOption.credentialSource === "project"
                   ? "Using this project's saved key."
@@ -378,10 +386,11 @@ export function SkillVersionEditor({
                 }}
                 className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 font-mono text-[12px] text-ink focus-visible:border-ink disabled:opacity-60"
               >
-                {modelsLoading ? <option value="">Loading models…</option> : null}
-                {!modelsLoading && models.length === 0 ? <option value="">No models available</option> : null}
-                {pinnedModelMissing ? (
-                  <option value={modelId}>{modelId} · configured (not in catalog)</option>
+                {!modelId && models.length > 0 ? <option value="" disabled>Choose a model</option> : null}
+                {modelsLoading && !modelId ? <option value="">Loading models…</option> : null}
+                {!modelsLoading && models.length === 0 && !modelId ? <option value="">No models available</option> : null}
+                {modelId && !models.some((model) => model.id === modelId) ? (
+                  <option value={modelId}>{modelId} · configured{pinnedModelMissing ? " (not in catalog)" : ""}</option>
                 ) : null}
                 {models.map((model) => (
                   <option key={model.id} value={model.id}>

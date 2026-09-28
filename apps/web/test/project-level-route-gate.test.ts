@@ -18,7 +18,8 @@ vi.mock("@/components/ui/button", () => ({
 vi.mock("@/components/skip-link", () => ({ SkipLink: () => null }));
 vi.mock("@/components/import-trace-launcher", () => ({ ImportTraceLauncher: () => null }));
 vi.mock("@/components/project-create", () => ({ NoProjectLanding: () => null }));
-vi.mock("@/screens/system", () => ({ ApiUnavailableScreen: () => null }));
+vi.mock("@/screens/login", () => ({ LoginScreen: () => null }));
+vi.mock("../src/components/rubrist/load-error.js", () => ({ SectionLoadError: () => null }));
 vi.mock("@/hooks/use-mode", () => ({ useMode: () => ["pm"] }));
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: false }) }));
 vi.mock("@/lib/dashboard-context", () => ({

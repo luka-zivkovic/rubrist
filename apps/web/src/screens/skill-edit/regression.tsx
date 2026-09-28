@@ -1,9 +1,11 @@
+import { CheckWait } from "../../components/check-wait.js";
 import { ArrowLeft, Clock, LoaderCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Chip, Eyebrow, KPI, KPIRow, MarginNote, RegressionDiffTable, SectionHead } from "@/components/rubrist";
 import { SkillEditFlow, type SkillEditOutcome } from "@/components/skill-edit-flow";
 import type { CompletedSkillVersionResult } from "@/lib/api";
+import type { LoadFailure } from "@/lib/load-error";
 import { cn } from "@/lib/utils";
 import {
   regressionDirectionCounts,
@@ -74,6 +76,7 @@ export function RegressionRunning({
   firstRun,
   criterionVersion,
   referenceCount,
+  referenceCountUnavailable,
   pollError,
   onOpenHistory
 }: {
@@ -83,9 +86,16 @@ export function RegressionRunning({
   firstRun: boolean;
   criterionVersion: CriterionVersion | null;
   referenceCount: number | null;
-  pollError: string | null;
+  referenceCountUnavailable: boolean;
+  pollError: LoadFailure | null;
   onOpenHistory: () => void;
 }) {
+  // The page stopped following the check: its last status refresh failed in a
+  // way retrying can't fix. The check itself may still be running.
+  const stopped = pollError !== null && !pollError.retryable;
+  const statusIcon = stopped
+    ? <Clock className="size-5 text-ink-3" aria-hidden="true" />
+    : <LoaderCircle className="size-5 animate-spin text-ink-2" />;
   if (firstRun) {
     return (
       <div className="fadeUp mx-auto max-w-[900px]">
@@ -103,7 +113,7 @@ export function RegressionRunning({
               </div>
               <CardDescription>The exact quality question bound to Check v{version.version}</CardDescription>
             </div>
-            <LoaderCircle className="size-5 animate-spin text-ink-2" />
+            {statusIcon}
           </CardHeader>
           <CardContent>
             <p className="font-serif text-[21px] leading-7 text-ink">
@@ -114,9 +124,13 @@ export function RegressionRunning({
             </p>
           </CardContent>
         </Card>
+        <CheckWait createdAt={version.createdAt} stopped={stopped} />
         {pollError ? (
           <MarginNote tone="signal" who="Status refresh" className="mb-4">
-            {pollError} The Check is still saved; this page will keep checking.
+            {pollError.message}{" "}
+            {pollError.retryable
+              ? "The Check is still saved; this page will keep checking."
+              : "The Check is still saved. Open the saved version to follow it."}
           </MarginNote>
         ) : null}
         <div className="flex justify-end">
@@ -149,20 +163,29 @@ export function RegressionRunning({
 
       <Card className="mb-5">
         <CardContent className="flex items-start gap-3 py-5">
-          <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-ink-2" />
+          <span className="mt-0.5 shrink-0">{statusIcon}</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium text-ink">Regression check running</div>
+            <div className="text-[13px] font-medium text-ink">
+              {stopped ? "Regression check status unavailable" : "Regression check running"}
+            </div>
             <p className="mt-1 max-w-[72ch] text-[12px] leading-5 text-ink-2">
               Rubrist records the full outcome only after every case in the pinned revision finishes.
               Until then this version is not presented as passed or current.
             </p>
+            <CheckWait createdAt={version.createdAt} stopped={stopped} />
             <dl className="mt-4 grid grid-cols-1 gap-y-1 text-[11.5px] sm:grid-cols-[150px_1fr] sm:gap-y-2">
               <dt className="text-ink-3">Immutable version</dt>
               <dd className="font-mono">v{version.version} · {version.id}</dd>
               <dt className="text-ink-3">Pinned revision</dt>
               <dd className="break-all font-mono">{version.regressionDatasetRevisionId ?? "not available"}</dd>
               <dt className="text-ink-3">Cases in revision</dt>
-              <dd>{referenceCount == null ? "Loading exact count…" : referenceCount}</dd>
+              <dd>
+                {referenceCount != null
+                  ? referenceCount
+                  : referenceCountUnavailable
+                    ? "Count unavailable"
+                    : "Loading exact count…"}
+              </dd>
             </dl>
           </div>
         </CardContent>
@@ -171,7 +194,10 @@ export function RegressionRunning({
       {pollError ? (
         <div role="status" aria-live="polite">
           <MarginNote tone="signal" who="Status refresh" className="mb-5">
-            {pollError} The version is still recorded; this page will keep retrying.
+            {pollError.message}{" "}
+            {pollError.retryable
+              ? "The version is still recorded; this page will keep retrying."
+              : "The version is still recorded. Open Version history to follow it."}
           </MarginNote>
         </div>
       ) : null}
@@ -382,7 +408,7 @@ export function RegressionResult({
           <div className="text-ink-3">Version</div>
           <div className="font-mono">{result.version.version}</div>
           <div className="text-ink-3">Model</div>
-          <div className="font-mono">
+          <div className="min-w-0 break-all font-mono">
             {describeExecutionBinding(result.version.executionBinding)}
           </div>
           <div className="text-ink-3">Known-failure agreement</div>
@@ -438,13 +464,14 @@ export function RegressionResult({
               placeholder="Why is this regression acceptable? (e.g. the regressed cases reflect an old tone policy we're intentionally changing — they'll be retired this week.)"
               className="min-h-[120px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-signal"
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" onClick={onBackToEdit} disabled={submitting}>
                 <ArrowLeft /> Back to edit
               </Button>
               <div className="flex-1" />
               <Button
                 variant="signal"
+                className="h-auto min-h-8 max-w-full whitespace-normal"
                 onClick={onPublishOverride}
                 disabled={submitting || overrideReason.trim().length < 8}
               >
@@ -454,7 +481,7 @@ export function RegressionResult({
           </CardContent>
         </Card>
       ) : failed ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" onClick={onBackToEdit}>
             <ArrowLeft /> Back to edit
           </Button>
@@ -463,7 +490,7 @@ export function RegressionResult({
           </Button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {overridden ? (
             <MarginNote tone="signal" who="Override on file" className="flex-1">
               {run.overrideReason ?? overrideReason ?? "—"}

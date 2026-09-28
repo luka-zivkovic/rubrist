@@ -3,41 +3,30 @@ import { Ban, Star } from "lucide-react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { GOLDEN_GATE_RECOMMENDED, type SkillVersion } from "@rubrist/shared";
+import { GOLDEN_GATE_RECOMMENDED } from "@rubrist/shared";
+import { GATE_LABEL, isGateState, type GateState } from "@/lib/regression-gate";
 
-// P1-2 · one vocabulary for evaluator-version regression, used in Versions,
-// the editor, and run comparisons.
-export type GateState = "clean" | "blocked" | "error" | "override" | "inactive" | "first";
+export { gateStateForVersion, type GateState } from "@/lib/regression-gate";
 
-const GATE_META: Record<GateState, { label: string; variant: BadgeProps["variant"] }> = {
-  clean:    { label: "regression · clean",            variant: "pass" },
-  blocked:  { label: "regression · found",            variant: "fail" },
-  error:    { label: "regression · error",            variant: "fail" },
-  override: { label: "regression · override recorded", variant: "ambig" },
-  inactive: { label: "regression · inactive",         variant: "provisional" },
-  first:    { label: "regression · no baseline",      variant: "outline" }
+const GATE_VARIANT: Record<GateState, BadgeProps["variant"]> = {
+  clean: "pass",
+  blocked: "fail",
+  error: "fail",
+  override: "ambig",
+  inactive: "provisional",
+  first: "outline",
+  running: "outline",
+  unrecorded: "outline",
+  unavailable: "outline",
+  loading: "outline"
 };
 
-// Derive the regression state for a version from its recorded fields:
-//   regressing                      → known-failure regression (audit history)
-//   never measured against golden   → no comparison baseline
-//   approved despite regressions    → a human override is on file
-//   approved, no regressions        → clean
-export function gateStateForVersion(v: SkillVersion): GateState {
-  if (v.status === "failed") return "error";
-  if (v.status === "regressing") return "blocked";
-  if (v.goldenSetAgreement === null || v.knownLimitations.some((l) => l.includes("no golden-set cases"))) {
-    return "first";
-  }
-  if (v.knownLimitations.some((l) => l.includes("regressed on one or more"))) return "override";
-  return "clean";
-}
-
 export function GateChip({ state, title, className }: { state: GateState; title?: string; className?: string }) {
-  const m = GATE_META[state] ?? GATE_META.clean;
+  // An unknown state reads as unavailable, never as clean.
+  const known = isGateState(state) ? state : "unavailable";
   return (
-    <Badge variant={m.variant} className={cn("normal-case", className)} title={title}>
-      {m.label}
+    <Badge variant={GATE_VARIANT[known]} className={cn("normal-case", className)} title={title}>
+      {GATE_LABEL[known]}
     </Badge>
   );
 }

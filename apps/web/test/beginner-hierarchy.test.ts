@@ -74,7 +74,7 @@ describe("beginner-first hierarchy", () => {
     ]);
     expect(app).toContain('{ path: "settings", element: <SettingsScreen /> }');
     expect(rootLayout).toContain("const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname)");
-    expect(rootLayout).toContain("!dashboard && criterionSelectionRequiredForRoute");
+    expect(rootLayout).toContain("criteriaLoading && criterionSelectionRequiredForRoute");
     expect(sidebar.match(/{ to: "\/settings",\s+label: "Settings",\s+icon: SettingsIcon }/g)).toHaveLength(2);
   });
 
@@ -141,7 +141,7 @@ describe("beginner-first hierarchy", () => {
     expect(firstResult).toContain("ensured.dispatchPending");
     expect(firstResult).toContain("Your first Result is ready");
     expect(firstResult).toContain("The first Result could not be produced");
-    expect(firstResult).toContain('navigate("/skill/edit")');
+    expect(firstResult).toContain('navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")');
     expect(firstResult).not.toContain("navigate(firstRunEditorPath())");
     expect(firstResult).toContain('aria-live={urgent ? "assertive" : "polite"}');
     expect(provisional).toContain('navigate(owner ? firstRunEditorPath() : "/skill")');

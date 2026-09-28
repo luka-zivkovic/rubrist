@@ -131,11 +131,11 @@ export function MarkdownPreview({
           remarkPlugins={[remarkGfm]}
           urlTransform={(url) => safeMarkdownHref(url) ?? ""}
           components={{
-            h1: ({ children }) => <h1 className="font-serif text-[24px] font-semibold tracking-[-0.015em] text-ink">{children}</h1>,
-            h2: ({ children }) => <h2 className="font-serif text-[20px] font-semibold tracking-[-0.015em] text-ink">{children}</h2>,
-            h3: ({ children }) => <h3 className="font-serif text-[16px] font-semibold tracking-[-0.015em] text-ink">{children}</h3>,
-            h4: ({ children }) => <h4 className="font-serif text-[14px] font-semibold text-ink">{children}</h4>,
-            h5: ({ children }) => <h5 className="font-serif text-[13px] font-semibold text-ink">{children}</h5>,
+            h1: ({ children }) => <h3 className="font-serif text-[24px] font-semibold tracking-[-0.015em] text-ink">{children}</h3>,
+            h2: ({ children }) => <h4 className="font-serif text-[20px] font-semibold tracking-[-0.015em] text-ink">{children}</h4>,
+            h3: ({ children }) => <h5 className="font-serif text-[16px] font-semibold tracking-[-0.015em] text-ink">{children}</h5>,
+            h4: ({ children }) => <h6 className="font-serif text-[14px] font-semibold text-ink">{children}</h6>,
+            h5: ({ children }) => <h6 className="font-serif text-[13px] font-semibold text-ink">{children}</h6>,
             h6: ({ children }) => <h6 className="font-serif text-[12px] font-semibold uppercase tracking-wide text-ink">{children}</h6>,
             p: ({ children }) => <p className="leading-[1.65] text-ink-2">{children}</p>,
             ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
