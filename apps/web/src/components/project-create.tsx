@@ -80,7 +80,11 @@ function useCreateProject(onCreated?: () => void) {
   }
 
   function continueAfterSavingKey() {
-    if (!pendingProject || !confirmProjectSwitch()) return;
+    if (!pendingProject) return;
+    // This button acknowledges saving the key even if the subsequent switch is
+    // cancelled. The user must then be able to return to their original draft.
+    setPendingProject({ ...pendingProject, canDismiss: true });
+    if (!confirmProjectSwitch()) return;
     selectProject(pendingProject.projectId);
     window.location.assign("/");
   }

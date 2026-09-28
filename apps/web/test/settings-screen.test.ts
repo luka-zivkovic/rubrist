@@ -8,11 +8,11 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const { createRoot } = await import("react-dom/client");
 const { createMemoryRouter, RouterProvider } = await import("react-router-dom");
 const api = vi.hoisted(() => ({ fetchProjectSettings: vi.fn(), updateProjectSettings: vi.fn(), pruneExpiredTraces: vi.fn(), fetchJudgeKeys: vi.fn(), fetchJudgeProviders: vi.fn(), setJudgeKey: vi.fn(), deleteJudgeKey: vi.fn(), fetchApiKeys: vi.fn(), createApiKey: vi.fn(), revokeApiKey: vi.fn(), deleteProject: vi.fn(), selectProject: vi.fn(), createProject: vi.fn() }));
-const state = vi.hoisted(() => ({ demoMode: false, signOut: vi.fn(), purge: vi.fn(), clipboard: vi.fn() }));
+const state = vi.hoisted(() => ({ demoMode: false, canRememberKey: true, signOut: vi.fn(), purge: vi.fn(), clipboard: vi.fn() }));
 vi.mock("@/lib/api", () => api);
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: state.demoMode }) }));
 vi.mock("@/lib/auth-client", () => ({ useSession: () => ({ data: { user: { name: "Owner", email: "owner@example.com" } } }), authClient: { signOut: state.signOut } }));
-vi.mock("@/lib/journey", () => ({ forgetFirstProjectKey: vi.fn(), rememberFirstProjectKey: vi.fn(() => true) }));
+vi.mock("@/lib/journey", () => ({ forgetFirstProjectKey: vi.fn(), rememberFirstProjectKey: vi.fn(() => state.canRememberKey) }));
 vi.mock("@/lib/production-calibration-api", () => ({ purgeProductionApiKeyRecords: state.purge }));
 vi.mock("@/lib/clipboard", () => ({ copyTextToClipboard: state.clipboard }));
 vi.mock("../src/lib/clipboard.js", () => ({ copyTextToClipboard: state.clipboard }));
@@ -36,7 +36,7 @@ let root: ReturnType<typeof createRoot>;
 let router: ReturnType<typeof createMemoryRouter>;
 
 beforeEach(() => {
-  vi.clearAllMocks(); localStorage.clear(); state.demoMode = false;
+  vi.clearAllMocks(); localStorage.clear(); state.demoMode = false; state.canRememberKey = true;
   api.fetchProjectSettings.mockResolvedValue(settings);
   api.fetchJudgeKeys.mockResolvedValue([]); api.fetchJudgeProviders.mockResolvedValue({ providers: [] }); api.fetchApiKeys.mockResolvedValue([]);
   api.updateProjectSettings.mockImplementation(async (input) => ({ ...settings, ...input }));
@@ -148,6 +148,21 @@ describe("settings interaction", () => {
     expect((container.querySelector("#trace-retention-days") as HTMLInputElement).value).toBe("14");
     expect(button("Save period").matches(":disabled")).toBe(false);
     expect(api.selectProject).not.toHaveBeenCalled();
+  });
+  it("allows staying after acknowledging an unstored project key and cancelling the switch", async () => {
+    state.canRememberKey = false;
+    api.createProject.mockResolvedValue({ projectId: "project_2", apiKey: { ...key, key: "unstored-project-key" } });
+    await mount(true); await fill("trace-retention-days", "14");
+    await click("Set project draft", document.body); await click("Create project", document.body);
+    expect(document.body.textContent).not.toContain("Stay in current project");
+    vi.mocked(window.confirm).mockReturnValue(false);
+    await click("I saved it — continue", document.body);
+    expect(api.selectProject).not.toHaveBeenCalled();
+    await click("Stay in current project", document.body);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect((container.querySelector("#trace-retention-days") as HTMLInputElement).value).toBe("14");
+    expect(button("Save period").matches(":disabled")).toBe(false);
+    expect(api.createProject).toHaveBeenCalledTimes(1);
   });
   it("freezes forms and project switching while sign-out is pending, and restores failed sessions", async () => {
     const signOut = deferred<any>(); state.signOut.mockReturnValueOnce(signOut.promise);
