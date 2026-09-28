@@ -141,7 +141,7 @@ describe("beginner-first hierarchy", () => {
     expect(firstResult).toContain("ensured.dispatchPending");
     expect(firstResult).toContain("Your first Result is ready");
     expect(firstResult).toContain("The first Result could not be produced");
-    expect(firstResult).toContain('navigate("/skill/edit")');
+    expect(firstResult).toContain('navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")');
     expect(firstResult).not.toContain("navigate(firstRunEditorPath())");
     expect(firstResult).toContain('aria-live={urgent ? "assertive" : "polite"}');
     expect(provisional).toContain('navigate(owner ? firstRunEditorPath() : "/skill")');

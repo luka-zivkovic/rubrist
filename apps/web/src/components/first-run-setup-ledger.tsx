@@ -18,7 +18,7 @@ export function FirstRunSetupLedger({
   const imported = project.importedTraceCount;
   const judged = dashboard.currentVersionResultCount;
   const owner = dashboard.viewerRole === "owner";
-  const editPath = skill.isStarter ? firstRunEditorPath() : "/skill/edit";
+  const editPath = owner ? skill.isStarter ? firstRunEditorPath() : "/skill/edit" : "/skill";
 
   return (
     <SetupLedger
@@ -37,7 +37,7 @@ export function FirstRunSetupLedger({
                   : "Connect LangSmith or Langfuse, or paste one run. Rubrist reads the record; it does not replay your AI.",
                 cta: bench ? "Add an example" : "Add a recorded run",
                 onCta: () => navigate(bench ? "/datasets?add=1" : "/traces"),
-                secondaryCta: "Set up without a run",
+                secondaryCta: owner ? "Set up without a run" : "View evaluator",
                 onSecondaryCta: () => navigate(editPath)
               })
         },
