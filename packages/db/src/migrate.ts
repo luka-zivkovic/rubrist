@@ -22,8 +22,8 @@ export async function runMigrations(pool: Pool): Promise<void> {
     if (unknownIds.length > 0) {
       throw new Error(
         `Database migration history is newer than or incompatible with this release ` +
-        `(unknown migrations: ${unknownIds.join(", ")}). This pre-launch release supports ` +
-        "clean installations only; recreate the disposable database.",
+        `(unknown migrations: ${unknownIds.join(", ")}). This release requires ` +
+        "a compatible migration history; preserve this database and use the matching release or a reviewed forward migration.",
       );
     }
 
@@ -41,7 +41,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
         if (recorded !== checksum) {
           throw new Error(
             `Applied migration ${id} checksum does not match this release. ` +
-            "This pre-launch release supports clean installations only; recreate the disposable database.",
+            "This release requires a compatible migration history; preserve this database and use the matching release or a reviewed forward migration.",
           );
         }
         continue;

@@ -20,6 +20,7 @@
     "apps/api/src/repository.pg/mappers.ts",
     "apps/api/src/repository.pg/project-counter-commands.ts",
     "apps/api/src/repository.pg/project-repository.ts",
+    "apps/api/src/repository.pg/queue-review-write.ts",
     "apps/api/src/repository.pg/regression-run-commands.ts",
     "apps/api/src/repository.pg/review-queue-repository.ts",
     "apps/api/src/repository.pg/run-comparison-repository.ts",
@@ -96,6 +97,33 @@
         "try :: commit",
         "catch :: rollback",
         "finally :: release"
+      ],
+      "reachableConnectionOwners": []
+    },
+    {
+      "method": "apps/api/src/repository.pg/case-evidence-repository.ts#PgCaseEvidenceRepository.recordVerdict",
+      "kind": "transaction",
+      "commandCounts": {
+        "begin": 1,
+        "commit": 1,
+        "rollback": 1
+      },
+      "releaseCount": 1,
+      "boundaryEvents": [
+        "if.then :: connect",
+        "if.then>try :: begin",
+        "if.then>try :: client_command:apps/api/src/repository.pg/queue-review-write.ts#recordQueueReview",
+        "if.then>try :: commit",
+        "if.then>catch :: rollback",
+        "if.then>finally :: release",
+        "if.then :: pool_query",
+        "if.then>if.then :: repository_call:apps/api/src/repository.pg/mappers.ts#rowToVerdictRecord",
+        "if.then>if.then :: pool_query",
+        "if.then>if.else :: pool_query",
+        "if.then>if.else :: pool_query",
+        "root :: pool_query",
+        "if.then :: pool_query",
+        "root :: repository_call:apps/api/src/repository.pg/mappers.ts#rowToVerdictRecord"
       ],
       "reachableConnectionOwners": []
     },
@@ -537,7 +565,7 @@
         "root :: pool_query",
         "root :: pool_query",
         "nested_function :: repository_call:apps/api/src/repository.pg/review-queue-repository.ts#PgReviewQueueRepository.resolveReviewCriterionVersion",
-        "root :: pool_query",
+        "nested_function :: repository_call:apps/api/src/repository.pg/review-queue-repository.ts#PgReviewQueueRepository.resolveEvidencePin",
         "root :: connect",
         "try :: begin",
         "try>loop>if.then :: repository_call:apps/api/src/repository.pg/mappers.ts#rowToReviewQueueItem",
@@ -559,6 +587,7 @@
       "boundaryEvents": [
         "root :: repository_call:apps/api/src/repository.pg/review-queue-repository.ts#PgReviewQueueRepository.resolveReviewCriterionVersion",
         "root :: pool_query",
+        "nested_function :: repository_call:apps/api/src/repository.pg/review-queue-repository.ts#PgReviewQueueRepository.resolveEvidencePin",
         "root :: connect",
         "try :: begin",
         "try :: commit",
@@ -902,6 +931,17 @@
       ],
       "callers": [
         "apps/api/src/repository.pg/project-repository.ts#PgProjectRepository.pruneExpiredTraces"
+      ]
+    },
+    {
+      "method": "apps/api/src/repository.pg/queue-review-write.ts#recordQueueReview",
+      "scope": "internal_module_function",
+      "isPrivate": true,
+      "clientParameterIndexes": [
+        0
+      ],
+      "callers": [
+        "apps/api/src/repository.pg/case-evidence-repository.ts#PgCaseEvidenceRepository.recordVerdict"
       ]
     },
     {

@@ -28,7 +28,8 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
     const criterionVersionId = await this.resolveReviewCriterionVersion(
       input.projectId,
-      input.criterionVersionId
+      input.criterionVersionId,
+      input.skillVersionId
     );
     // Reject case IDs that don't belong to this project. DemoRepo's tenancy
     // model: all cases live in the demo project; PG enforces via FK.
@@ -37,6 +38,9 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
         throw new Error(`Case not found in project: ${caseId}`);
       }
     }
+    const pins = new Map(input.caseIds.map((caseId) =>
+      [caseId, this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId)]
+    ));
     const id = `revq_${randomUUID()}`;
     const createdAt = new Date().toISOString();
     this.store.reviewQueues.push({
@@ -59,6 +63,7 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
         queueId: id,
         caseId,
         criterionVersionId,
+        ...pins.get(caseId)!,
         status: "pending",
         position,
         assignedToUserId: null,
@@ -148,17 +153,21 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
       ...item,
       criterionVersionId: await this.resolveReviewCriterionVersion(
         input.projectId,
-        item.criterionVersionId
+        item.criterionVersionId,
+        item.skillVersionId
       )
     })));
+    const pinnedItems = resolvedItems.map((item) => ({
+      ...item, ...this.resolveEvidencePin(input.projectId, item.caseId, item.criterionVersionId, item.skillVersionId)
+    }));
     // Position continues where the existing items end so new rows append in
     // FIFO order.
     let position = this.store.reviewQueueItems.filter((existing) => existing.queueId === input.queueId).length;
     const createdAt = new Date().toISOString();
     const added: ReviewQueueItem[] = [];
     const seen = new Set<string>();
-    for (const item of resolvedItems) {
-      const dedupKey = `${item.caseId}__${item.criterionVersionId}__${item.assignedToUserId ?? ""}`;
+    for (const item of pinnedItems) {
+      const dedupKey = `${item.caseId}__${item.criterionVersionId}__${item.judgeRunId ?? ""}__${item.assignedToUserId ?? ""}`;
       // Within this call: dedup on (case, criterion, assignee) — the same tuple twice is
       // pointless. Across calls: the unique index on PG enforces the same.
       if (seen.has(dedupKey)) continue;
@@ -169,6 +178,7 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
           existing.queueId === input.queueId &&
           existing.caseId === item.caseId &&
           existing.criterionVersionId === item.criterionVersionId &&
+          (existing.judgeRunId ?? null) === item.judgeRunId &&
           (existing.assignedToUserId ?? "") === (item.assignedToUserId ?? "")
       );
       if (alreadyExists) continue;
@@ -177,6 +187,8 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
         queueId: input.queueId,
         caseId: item.caseId,
         criterionVersionId: item.criterionVersionId,
+        skillVersionId: item.skillVersionId,
+        judgeRunId: item.judgeRunId,
         status: "pending",
         position,
         assignedToUserId: item.assignedToUserId ?? null,
@@ -190,10 +202,27 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
     return added;
   }
 
+  private resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string) {
+    if (!skillVersionId) return { skillVersionId: null, judgeRunId: null };
+    const run = [...this.store.judgeRuns].filter((run) => run.projectId === projectId && run.caseId === caseId
+      && run.skillVersionId === skillVersionId && this.store.skillVersionCriteria.get(skillVersionId) === criterionVersionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+    if (!run) throw new DatasetRevisionConflictError(`No recorded result for case ${caseId} and selected evaluator version`);
+    return { skillVersionId, judgeRunId: run.id };
+  }
+
   private async resolveReviewCriterionVersion(
     projectId: string,
-    requested?: string | undefined
+    requested?: string | undefined,
+    skillVersionId?: string | undefined
   ): Promise<string> {
+    if (skillVersionId) {
+      const criterion = this.store.skillVersionCriteria.get(skillVersionId);
+      if (!criterion || (requested && requested !== criterion) || !this.store.criterionVersions.some((v) => v.id === criterion && v.projectId === projectId)) {
+        throw new DatasetRevisionConflictError("Evaluator version does not match this project and criterion");
+      }
+      return criterion;
+    }
     if (requested) {
       const criterionVersion = this.store.criterionVersions.find((candidate) =>
         candidate.projectId === projectId && candidate.id === requested

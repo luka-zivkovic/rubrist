@@ -93,6 +93,22 @@ class `ungoverned_legacy`; they never become governed evidence. Agreement
 diagnostics over this ledger keep undefined kappa explicit when expected
 agreement is one.
 
+CURRENT: saved review tasks created with `skillVersionId` pin both the evaluator
+and its latest existing recorded judge-run ID at creation. Queue reads retain
+that exact run across later evaluations. The UI requires an evaluator selection;
+criterion-only API callers remain explicitly unpinned for compatibility, as do
+preexisting tasks. Missing selected results fail without calling a provider.
+Task reviews submit a queue item, displayed run and idempotency UUID; the server
+validates ownership and assignment, derives the evaluator version, and appends
+the ruling together with completion of only that task in one transaction.
+Corrections append another attributed ruling. Ordinary case reviews do not
+complete pinned tasks. Older unpinned tasks remain clearly labeled and retain
+their historical records. Account erasure anonymizes historical actors and
+unassigns pending tasks; those tasks still require a new explicit human review.
+An internal stable assignment key prevents anonymization from colliding with an
+existing unassigned task. The additive migration preserves the hosted benchmark
+under the narrow exception recorded in ADR-0011.
+
 ### Sealed binary calibration
 
 In Postgres mode, an owner launches an explicit single-trial run bound to one

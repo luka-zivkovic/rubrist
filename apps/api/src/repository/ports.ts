@@ -258,7 +258,7 @@ export interface GoldenEvidenceRepositoryPort {
   // generic case detail (any verdict). Null when the case has no judge
   // run. Used by surfaces (e.g. the regression diff) that link to a case which
   // may not be a current exception.
-  getCaseDetail(projectId: string, caseId: string, skillVersionId?: string | undefined, criterionVersionId?: string | undefined): Promise<ExceptionDetail | null>;
+  getCaseDetail(projectId: string, caseId: string, skillVersionId?: string | undefined, criterionVersionId?: string | undefined, judgeRunId?: string | undefined): Promise<ExceptionDetail | null>;
   promoteExceptionToGoldenSet(input: PromoteExceptionToGoldenSetInput): Promise<GoldenSetEntry>;
   retireGoldenSetEntry(input: RetireGoldenSetEntryInput): Promise<void>;
   // Golden traces (keyed by caseId) supply the input half of each derived

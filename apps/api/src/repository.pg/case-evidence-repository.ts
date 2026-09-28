@@ -1,3 +1,4 @@
+import { recordQueueReview } from "./queue-review-write.js";
 import { randomUUID } from "node:crypto";
 import {
   type ConvergenceAuditPage,
@@ -108,6 +109,18 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
   }
 
   async recordVerdict(input: RecordVerdictInput): Promise<VerdictRecord> {
+    if (input.reviewContext) {
+      const client = await this.pool.connect();
+      try {
+        await client.query("begin");
+        const verdict = await recordQueueReview(client, input);
+        await client.query("commit");
+        return verdict;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally { client.release(); }
+    }
     if (input.externalRunId) {
       const existing = await this.pool.query(
         `select * from verdicts
@@ -197,6 +210,7 @@ export class PgCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
            and rq.project_id = $1
            and rqi.case_id = $2
            and rqi.status = 'pending'
+           and rqi.judge_run_id is null
            and rqi.criterion_version_id = (
              select criterion_version_id
              from skill_versions

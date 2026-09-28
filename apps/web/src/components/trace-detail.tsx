@@ -46,6 +46,8 @@ export interface TraceDetailShortcuts {
 }
 
 interface TraceDetailProps {
+  reviewQueueItemId?: string | undefined;
+  reviewTaskPending?: boolean;
   headingAs?: "h1" | "h2";
   detail: ExceptionDetail;
   // Called after a decision is recorded server-side, with which kind — hosts
@@ -246,7 +248,9 @@ function HumanRulingCard({
     .sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
     )[0];
-  const priorEvaluatorLabel = priorEvaluatorVerdict
+  const priorEvaluatorLabel = ruling.reviewContext
+    ? (ruling.reviewContext.judgeRunId === currentJudgeRun.id ? currentJudgeRun.verdict : null)
+    : priorEvaluatorVerdict
     ? verdictLabelFromPayload(priorEvaluatorVerdict.payload)
     : currentJudgeRun.createdAt <= ruling.createdAt &&
         (!ruling.skillVersionId || currentJudgeRun.skillVersionId === ruling.skillVersionId)
@@ -267,7 +271,7 @@ function HumanRulingCard({
       <CardContent className="flex flex-col gap-3">
         <div className="text-[13px] text-ink-2">
           {agrees === null
-            ? "No evaluator output was recorded before this ruling."
+            ? ruling.reviewContext ? "This ruling refers to another recorded evaluator result." : "No evaluator output was recorded before this ruling."
             : agrees
               ? `At review time, agreed with the evaluator's ${priorEvaluatorLabel} output.`
               : `At review time, overrode the evaluator's ${priorEvaluatorLabel} output.`}
@@ -331,6 +335,7 @@ function DecisionHistory({
                   </div>
                   <div className="mt-1 font-mono text-[10.5px] text-ink-3">
                     {verdict.source === "llm_judge" ? `Model: ${verdict.observed?.model ?? "not recorded"}` : verdictActor(verdict)} · {new Date(verdict.createdAt).toLocaleString()}
+                    {verdict.reviewContext ? <div className="mt-1 break-all">Review task {verdict.reviewContext.queueItemId} · recorded result {verdict.reviewContext.judgeRunId}</div> : null}
                     {verdict.skillVersionId ? (
                       <div className="mt-1 break-all">Evaluator version {verdict.skillVersionId === detail.judgeRun.skillVersionId && versionName ? `v${versionName} · ` : ""}{verdict.skillVersionId}</div>
                     ) : null}
@@ -345,7 +350,7 @@ function DecisionHistory({
   );
 }
 
-export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = false, headingAs = "h1" }: TraceDetailProps) {
+export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, detail, onChanged, shortcuts, openRulingOnMount = false, headingAs = "h1" }: TraceDetailProps) {
   const { exception, trace, judgeRun, rawRequest, rawResponse } = detail;
   const typedEvaluation = recordedTypedEvaluation(detail);
   const structuredEvidence = evidenceClaim(trace.input, trace.output);
@@ -448,6 +453,15 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
     return typeof request?.prompt?.content === "string" ? request.prompt.content : undefined;
   }, [rawRequest]);
 
+  // Keep the same key after a lost response; a changed payload starts a new submission.
+  const pendingSubmission = useRef<{ payload: string; id: string } | null>(null);
+  const reviewContext = (payload: VerdictPayload) => {
+    if (!reviewQueueItemId) return undefined;
+    const key = JSON.stringify([reviewQueueItemId, judgeRun.id, payload]);
+    if (pendingSubmission.current?.payload !== key) pendingSubmission.current = { payload: key, id: crypto.randomUUID() };
+    return { queueItemId: reviewQueueItemId, judgeRunId: judgeRun.id, submissionId: pendingSubmission.current.id };
+  };
+
   const resetForms = () => {
     setOverrideReason("");
     setPromoteReason(promoteReasonPrefill);
@@ -455,7 +469,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
   };
 
   const openReviewForm = () => {
-    const currentLabel = effectiveRulingLabel ?? exception.verdict;
+    const currentLabel = reviewQueueItemId ? exception.verdict : effectiveRulingLabel ?? exception.verdict;
     setOverrideChoice(currentLabel === "fail" ? "pass" : currentLabel === "pass" ? "fail" : "pass");
     setDecision("override");
     resetForms();
@@ -468,13 +482,13 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
     setSubmitting(true);
     setResultText(null);
     try {
+      const payload = categoricalPayload(exception.verdict, "Reviewer accepted skill verdict.");
       const verdict = await recordHumanVerdict(
-        exception.id,
-        categoricalPayload(exception.verdict, "Reviewer accepted skill verdict."),
-        judgeRun.skillVersionId,
+        exception.id, payload, judgeRun.skillVersionId, reviewContext(payload),
       );
+      pendingSubmission.current = null;
       setVerdictHistory((current) => [verdict, ...current.filter((item) => item.id !== verdict.id)]);
-      setResultText("Verdict accepted. Recorded as a human verdict on the case.");
+      setResultText(reviewQueueItemId ? "Review saved for this task. Earlier rulings remain in the case history." : "Verdict accepted. Recorded as a human verdict on the case.");
       onChanged?.("accept");
     } catch (err) {
       // Roll the button back so it doesn't stay primary-styled with no retry
@@ -492,7 +506,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
       return;
     }
     const currentLabel = effectiveRulingLabel ?? exception.verdict;
-    if (overrideChoice === currentLabel) {
+    if (!reviewQueueItemId && overrideChoice === currentLabel) {
       setSubmitError(`Pick a different verdict than the current ${effectiveRuling ? "human ruling" : "evaluator opinion"}.`);
       return;
     }
@@ -500,11 +514,11 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
     setSubmitError(null);
     setResultText(null);
     try {
+      const payload = categoricalPayload(overrideChoice, overrideReason.trim());
       const verdict = await recordHumanVerdict(
-        exception.id,
-        categoricalPayload(overrideChoice, overrideReason.trim()),
-        judgeRun.skillVersionId,
+        exception.id, payload, judgeRun.skillVersionId, reviewContext(payload),
       );
+      pendingSubmission.current = null;
       setVerdictHistory((current) => [verdict, ...current.filter((item) => item.id !== verdict.id)]);
       setResultText(effectiveRuling?.source === "adjudicated"
         ? "Additional human review recorded. The owner ruling still takes precedence."
@@ -566,7 +580,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
     if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.tagName === "SELECT" || target.isContentEditable)) return;
 
     const key = e.key.toLowerCase();
-    if (key === "a" && !submitting && !effectiveRuling) void handleAccept();
+    if (key === "a" && !submitting && (!effectiveRuling || reviewQueueItemId)) void handleAccept();
     else if (key === "o" && !submitting) {
       openReviewForm();
     } else if (key === "p" && !submitting && promoteEligible && !goldenSetEntry) {
@@ -612,9 +626,9 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
           <Card className={effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}>
             <CardHeader className={effectiveRuling ? undefined : REVIEW_RESULT_TONES[exception.verdict].header}>
               <div>
-                <CardTitle className="text-[16px] font-semibold">Latest evaluator opinion</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{reviewQueueItemId ? "Recorded evaluator opinion" : "Latest evaluator opinion"}</CardTitle>
                 <CardDescription className={effectiveRuling ? undefined : "text-inherit"}>
-                  Model output from the latest judge run. A recorded human ruling takes precedence in this view.
+                  {reviewQueueItemId ? "Model output from the recorded result for this task." : "Model output from the latest judge run."} A recorded human ruling takes precedence in this view.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -718,9 +732,11 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
           <Card className="border-rule-strong">
             <CardHeader>
               <div>
-                <CardTitle className="text-[16px] font-semibold">{effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{reviewTaskPending ? "Record your review" : effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
                 <CardDescription>
-                  {effectiveRuling
+                  {reviewTaskPending
+                    ? "Earlier rulings are case history. Record your review of this result to complete this task."
+                    : effectiveRuling
                     ? "The ruling is saved on this case. Record another review or add it as a separate regression reference."
                     : `The evaluator said ${exception.verdict.toUpperCase()}. Agree to record the same ruling, or disagree to choose another.`}
                 </CardDescription>
@@ -729,7 +745,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {!effectiveRuling ? (
+                {!effectiveRuling || reviewQueueItemId ? (
                   <Button
                     className="h-auto min-h-11 w-full justify-start whitespace-normal border-blue-200 bg-blue-50 px-3 py-2 text-left text-ink hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:border-blue-400/25 dark:bg-blue-500/10 dark:hover:bg-blue-500/15 [&_svg]:text-blue-700 dark:[&_svg]:text-blue-300"
                     onClick={() => void handleAccept()}
@@ -761,7 +777,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
                   <Eyebrow>{effectiveRuling ? "Choose the new review verdict" : "Choose your ruling"}</Eyebrow>
                   <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Human ruling">
                     {OVERRIDE_OPTIONS.map((opt) => {
-                      const isCurrent = opt === (effectiveRulingLabel ?? exception.verdict);
+                      const isCurrent = !reviewQueueItemId && opt === (effectiveRulingLabel ?? exception.verdict);
                       const active = overrideChoice === opt;
                       return (
                         <button
@@ -785,7 +801,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = 
                   </div>
                   <textarea
                     className="min-h-[88px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-ink"
-                    placeholder={effectiveRuling ? "Why are you recording a different review? (required)" : "Why is your ruling different from the evaluator? (required)"}
+                    placeholder={reviewQueueItemId ? "Explain your ruling on this recorded result (required)" : effectiveRuling ? "Why are you recording a different review? (required)" : "Why is your ruling different from the evaluator? (required)"}
                     value={overrideReason}
                     onChange={(e) => setOverrideReason(e.target.value)}
                   />

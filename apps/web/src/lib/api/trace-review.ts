@@ -52,8 +52,8 @@ import {
 // The canonical case-detail fetcher — resolves any judged case, exception or
 // not, so links from the regression diff to a still-passing golden case don't
 // 404 and the exceptions queue drills into the same endpoint.
-export async function fetchCaseDetail(caseId: string, skillVersionId?: string, criterionVersionId?: string): Promise<ExceptionDetail> {
-  const response = await apiFetch(queryPath(`${API_BASE}/api/cases/${caseId}`, { skillVersionId, criterionVersionId }), { credentials: "include" });
+export async function fetchCaseDetail(caseId: string, skillVersionId?: string, criterionVersionId?: string, judgeRunId?: string): Promise<ExceptionDetail> {
+  const response = await apiFetch(queryPath(`${API_BASE}/api/cases/${caseId}`, { skillVersionId, criterionVersionId, judgeRunId }), { credentials: "include" });
   if (!response.ok) throw await apiErrorFromResponse(response, "Case detail request failed");
   return ExceptionDetailSchema.parse(await response.json());
 }
@@ -213,12 +213,13 @@ export async function recordHumanVerdict(
   caseId: string,
   payload: VerdictPayload,
   skillVersionId?: string,
+  reviewContext?: import("@rubrist/shared").ReviewContext,
 ): Promise<VerdictRecord> {
   const response = await apiFetch(`${API_BASE}/api/cases/${caseId}/verdicts`, {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ payload, ...(skillVersionId ? { skillVersionId } : {}) })
+    body: JSON.stringify({ payload, ...(skillVersionId ? { skillVersionId } : {}), ...(reviewContext ? { reviewContext } : {}) })
   });
   const body = await response.json().catch(() => null) as { verdict?: unknown; error?: string } | null;
   if (response.ok && body?.verdict) return VerdictRecordSchema.parse(body.verdict);
@@ -274,6 +275,7 @@ export async function fetchReviewQueueDetail(queueId: string): Promise<ReviewQue
 }
 
 export async function createReviewQueue(input: {
+  skillVersionId?: string;
   name: string;
   description?: string;
   caseIds: string[];

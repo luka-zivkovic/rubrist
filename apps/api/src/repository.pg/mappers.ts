@@ -877,6 +877,7 @@ function toImportJobStatus(value: unknown): ImportJobStatus {
 export function rowToVerdictRecord(row: Record<string, unknown>): VerdictRecord {
   return VerdictRecordSchema.parse({
     id: String(row.id),
+    ...(row.review_queue_item_id ? { reviewContext: { queueItemId: String(row.review_queue_item_id), judgeRunId: String(row.reviewed_judge_run_id), submissionId: String(row.review_submission_id) } } : {}),
     projectId: String(row.project_id),
     caseId: String(row.case_id),
     skillVersionId: row.skill_version_id === null || row.skill_version_id === undefined ? null : String(row.skill_version_id),
@@ -913,6 +914,8 @@ export function rowToReviewQueueItem(row: Record<string, unknown>): ReviewQueueI
   const status = rawStatus === "completed" ? "completed" : "pending";
   return {
     id: String(row.id),
+    skillVersionId: row.skill_version_id == null ? null : String(row.skill_version_id),
+    judgeRunId: row.judge_run_id == null ? null : String(row.judge_run_id),
     queueId: String(row.queue_id),
     caseId: String(row.case_id),
     criterionVersionId: String(row.criterion_version_id),

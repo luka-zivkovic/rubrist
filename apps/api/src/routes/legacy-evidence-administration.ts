@@ -9,6 +9,7 @@ import {
   PromoteGoldenSetInputSchema,
   RetireGoldenSetEntryInputSchema,
   ReviewQueueStatusSchema,
+  ReviewContextSchema,
   VERDICT_LIST_MAX_LIMIT,
   VerdictSourceSchema,
   payloadRationale
@@ -60,17 +61,19 @@ export function registerLegacyEvidenceAdministrationRoutes(
     const caseId = c.req.param("caseId");
     const query = z.object({
       skillVersionId: z.string().min(1).optional(),
-      criterionVersionId: z.string().min(1).optional()
+      criterionVersionId: z.string().min(1).optional(),
+      judgeRunId: z.string().min(1).optional()
     }).strict().safeParse({
       skillVersionId: c.req.query("skillVersionId") ?? undefined,
-      criterionVersionId: c.req.query("criterionVersionId") ?? undefined
+      criterionVersionId: c.req.query("criterionVersionId") ?? undefined,
+      judgeRunId: c.req.query("judgeRunId") ?? undefined
     });
     if (!query.success) {
       return c.json({ error: "Invalid case-detail query", details: z.treeifyError(query.error) }, 400);
     }
     let detail;
     try {
-      detail = await repository.getCaseDetail(projectId, caseId, query.data.skillVersionId, query.data.criterionVersionId);
+      detail = await repository.getCaseDetail(projectId, caseId, query.data.skillVersionId, query.data.criterionVersionId, query.data.judgeRunId);
     } catch (error) {
       if (error instanceof AmbiguousProjectSkillError) {
         return c.json({ error: error.message, code: "skill_version_required" }, 409);
@@ -78,7 +81,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
       throw error;
     }
     if (!detail) {
-      return query.data.criterionVersionId
+      return query.data.criterionVersionId || query.data.judgeRunId
         ? c.json({ code: "case_evaluation_unavailable", error: "No recorded evaluator result is available for this case and criterion version." }, 404)
         : c.json({ error: "Case not found" }, 404);
     }
@@ -149,6 +152,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
     const body = await c.req.json().catch(() => null);
     const parsed = z.object({
       payload: HumanVerdictPayloadSchema,
+      reviewContext: ReviewContextSchema.optional(),
       skillVersionId: z.string().min(1).optional()
     }).strict().safeParse(body);
     if (!parsed.success) {
@@ -167,6 +171,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
         projectId,
         caseId,
         source: "human",
+        reviewContext: parsed.data.reviewContext,
         payload: parsed.data.payload,
         skillVersionId: parsed.data.skillVersionId,
         actorUserId: user?.id
@@ -178,6 +183,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
         }
       }, 201);
     } catch (error) {
+      if (error instanceof DatasetRevisionConflictError) return c.json({ error: error.message, code: "review_task_conflict" }, 409);
       if (error instanceof CaseNotFoundError) {
         return c.json({ error: "Case not found in this project" }, 404);
       }
@@ -576,6 +582,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
       const queue = await repository.createReviewQueue({
         projectId: c.get("projectId"),
         name: parsed.data.name,
+        skillVersionId: parsed.data.skillVersionId,
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
         ...(parsed.data.criterionVersionId !== undefined
           ? { criterionVersionId: parsed.data.criterionVersionId }

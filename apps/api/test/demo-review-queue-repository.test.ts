@@ -207,6 +207,7 @@ describe("Demo review-queue repository slice", () => {
     )).toEqual([
       "Constructor",
       ...EXPECTED_PUBLIC_METHODS.map((name) => `MethodDeclaration:${name}`),
+      "MethodDeclaration:resolveEvidencePin",
       "MethodDeclaration:resolveReviewCriterionVersion",
       "MethodDeclaration:toReviewQueue"
     ]);

@@ -21,7 +21,8 @@ run("clean-install database baseline", () => {
         {
           id: "0001_baseline",
           checksum: "ad6cc2bd761ed324fead34d8db59a50d0d2ed21a6ae17223ad7eee40c608ae83",
-        }
+        },
+        { id: "0002_review_queue_evidence_pins", checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }
       ]);
     } finally {
       await cleanup();
@@ -98,11 +99,12 @@ run("clean-install database baseline", () => {
         "insert into rubrist_migrations (id, checksum) values ('0055_evaluator_lifecycle', 'unknown')",
       );
       await expect(runMigrations(pool)).rejects.toThrow(
-        /migration history is newer than or incompatible.*0055_evaluator_lifecycle.*recreate the disposable database/s,
+        /migration history is newer than or incompatible.*0055_evaluator_lifecycle.*preserve this database/s,
       );
       const applied = await pool.query<{ id: string }>("select id from rubrist_migrations order by id");
       expect(applied.rows).toEqual([
         { id: "0001_baseline" },
+        { id: "0002_review_queue_evidence_pins" },
         { id: "0055_evaluator_lifecycle" },
       ]);
     } finally {
@@ -118,7 +120,7 @@ run("clean-install database baseline", () => {
       await pool.query("update rubrist_migrations set checksum = null where id = '0001_baseline'");
 
       await expect(runMigrations(pool)).rejects.toThrow(
-        /Applied migration 0001_baseline checksum does not match.*recreate the disposable database/s,
+        /Applied migration 0001_baseline checksum does not match.*preserve this database/s,
       );
     } finally {
       await cleanup();

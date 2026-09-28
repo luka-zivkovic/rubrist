@@ -10,6 +10,23 @@ deployments. Until an external user or a production declaration reaches the
 exit condition below, `0001_baseline.sql` remains the single current schema and
 test instances are recreated when it changes.
 
+## Hosted review preservation exception — 2026-09-28
+
+The founder authorized continuing the review-correctness checklist while
+preserving the hosted benchmark and its human reviews. For this work, the
+existing `0001_baseline.sql` bytes and checksum are retained and the review
+pinning schema is added in `0002_review_queue_evidence_pins.sql`. Existing
+criterion-only tasks are not assigned guessed evidence pins.
+
+This is a narrow preservation exception, not a declaration of external
+production launch or global exit from the policy. This installation must use
+forward changes compatible with its recorded migration history; no baseline
+reset or checksum rewrite is authorized. Verify clean installation, restored
+baseline upgrade, repeat migration, and preservation of existing evidence.
+Drain application writes during deployment so older writers cannot bypass the
+new task attribution. Roll back application images only with compatible writers;
+prefer a forward fix and retain a restorable pre-deployment backup.
+
 ## Context
 
 Rubrist has no external users, production data, or deployed database that must

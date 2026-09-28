@@ -301,7 +301,7 @@ exports[`repository ports > partition the complete facade into exact, disjoint m
     },
     {
       "kind": "MethodSignature",
-      "signature": "getCaseDetail(projectId: string, caseId: string, skillVersionId?: string | undefined, criterionVersionId?: string | undefined): Promise<ExceptionDetail | null>;",
+      "signature": "getCaseDetail(projectId: string, caseId: string, skillVersionId?: string | undefined, criterionVersionId?: string | undefined, judgeRunId?: string | undefined): Promise<ExceptionDetail | null>;",
     },
     {
       "kind": "MethodSignature",

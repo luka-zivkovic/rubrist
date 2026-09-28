@@ -393,10 +393,12 @@ export interface AddQueueItemsInputDb {
     caseId: string;
     criterionVersionId?: string | undefined;
     assignedToUserId?: string | undefined;
+    skillVersionId?: string | undefined;
   }>;
 }
 
 export interface CreateReviewQueueInputDb {
+  skillVersionId?: string | undefined;
   projectId: string;
   name: string;
   description?: string | undefined;
@@ -406,6 +408,7 @@ export interface CreateReviewQueueInputDb {
 }
 
 export interface RecordVerdictInput {
+  reviewContext?: import("@rubrist/shared").ReviewContext | undefined;
   projectId: string;
   caseId: string;
   source: VerdictSource;

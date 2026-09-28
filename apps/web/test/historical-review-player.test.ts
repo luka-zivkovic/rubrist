@@ -116,7 +116,7 @@ afterEach(async () => { if (root) await act(async () => root?.unmount()); root =
   dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } };
   dashboard.loading = false; dashboard.error = null; dashboard.errorStatus = null;
   vi.clearAllMocks(); });
-async function mount(items = [{ key: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", completed: false }]) {
+async function mount(items: import("../src/components/review-player.js").ReviewPlayerItem[] = [{ key: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", completed: false }]) {
   const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   await act(async () => root!.render(createElement(ReviewPlayer, {
     eyebrow: "Review queue", name: "Old development examples", items,
@@ -125,6 +125,36 @@ async function mount(items = [{ key: "item_1", caseId: "case_1", criterionVersio
   return container;
 }
 describe("historical review player", () => {
+  it("loads a pinned result, preserves it across refresh, and records the task even when a prior human agrees", async () => {
+    const prior = { id: "prior", projectId: "project_1", caseId: "case_1", skillVersionId: "skillv_other", source: "human" as const, actorUserId: null,
+      payload: { kind: "binary" as const, pass: false, rationale: "Previous review" }, externalRunId: null, createdAt: "2026-08-26T10:00:00Z" };
+    api.fetchCaseDetail.mockResolvedValue({ ...detail, verdictHistory: [prior] });
+    api.recordHumanVerdict.mockResolvedValue({ ...prior, id: "new_review", skillVersionId: "skillv_1" });
+    const items = [{ key: "item_1", queueItemId: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", skillVersionId: "skillv_1", judgeRunId: detail.judgeRun.id, completed: false }];
+    const container = await mount(items);
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", "skillv_1", "criterionv_1", detail.judgeRun.id);
+    expect(container.textContent).toContain("Recorded evaluator opinion");
+    const accept = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with evaluator"));
+    expect(accept).toBeDefined();
+    await act(async () => accept!.click());
+    expect(api.recordHumanVerdict).toHaveBeenCalledWith("case_1", expect.objectContaining({ choice: "fail" }), "skillv_1",
+      { queueItemId: "item_1", judgeRunId: detail.judgeRun.id, submissionId: expect.any(String) });
+    await act(async () => root!.unmount()); root = undefined;
+    await mount(items);
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", "skillv_1", "criterionv_1", detail.judgeRun.id);
+  });
+
+  it("reuses a submission ID after a lost response without completing another task", async () => {
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockRejectedValueOnce(new Error("Connection lost")).mockResolvedValueOnce({ id: "saved" });
+    const container = await mount([{ key: "item_1", queueItemId: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", skillVersionId: "skillv_1", judgeRunId: detail.judgeRun.id, completed: false }]);
+    const accept = () => [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with evaluator"))!;
+    await act(async () => accept().click());
+    expect(container.textContent).toContain("Connection lost");
+    await act(async () => accept().click());
+    expect(api.recordHumanVerdict.mock.calls[1]![3]).toEqual(api.recordHumanVerdict.mock.calls[0]![3]);
+  });
+
   it("opens the requested queue position and preserves its exact definition when navigating", async () => {
     route.search = "criterionId=c1&at=item_2&cluster=scope";
     api.fetchCaseDetail.mockResolvedValue(detail);
@@ -132,10 +162,10 @@ describe("historical review player", () => {
       { key: "item_1", caseId: "case_1", criterionVersionId: "old", completed: false },
       { key: "item_2", caseId: "case_2", criterionVersionId: "other", completed: false }
     ]);
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Prev")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old", undefined);
     const update = route.setSearch.mock.calls.at(-1)![0];
     const params = update(new URLSearchParams(route.search));
     expect(params.get("at")).toBe("item_1");
@@ -152,7 +182,7 @@ describe("historical review player", () => {
     expect(new URLSearchParams(route.search).get("criterionVersionId")).toBe("criterionv_1");
     expect(route.state).toBeNull();
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Next")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
   });
 
@@ -162,7 +192,7 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
@@ -174,7 +204,7 @@ describe("historical review player", () => {
       { key: "item_1", caseId: "case_1", criterionVersionId: "old", completed: true },
       { key: "item_2", caseId: "case_2", criterionVersionId: "other", completed: true }
     ]);
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
   });
 
@@ -196,9 +226,9 @@ describe("historical review player", () => {
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
     expect(container.textContent).toContain("Case 1: ruling recorded");
     expect(dashboard.refresh).toHaveBeenCalledTimes(1);
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1", undefined);
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Change ruling")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.querySelector("textarea")).not.toBeNull();
     expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
   });
@@ -270,7 +300,7 @@ describe("historical review player", () => {
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(new URLSearchParams(route.search).getAll("caseId")).toEqual(["case_1", "case_2"]);
     expect(new URLSearchParams(route.search).get("criterionVersionId")).toBe("criterionv_1");
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1", undefined);
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Session summary")!.click());
     expect(container.textContent).toContain("1 of 2 cases reviewed this session");
     expect(container.textContent).toContain("1 cases were not reviewed in this session");
@@ -290,7 +320,7 @@ describe("historical review player", () => {
     expect(container.textContent).toContain("Case 1: ruling recorded");
     route.search = "caseId=case_1&caseId=case_2&criterionVersionId=criterionv_2";
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2", undefined);
     expect(container.textContent).not.toContain("ruling recorded");
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Session summary")!.click());
     expect(container.textContent).toContain("0 of 2 cases reviewed this session");
@@ -345,7 +375,7 @@ describe("historical review player", () => {
     dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } };
     dashboard.error = null; dashboard.errorStatus = null;
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, entry === "partially pinned URL" ? "old_definition" : "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, entry === "partially pinned URL" ? "old_definition" : "criterionv_1", undefined);
     expect(container.textContent).toContain("Agree with evaluator");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
@@ -356,11 +386,11 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition", undefined);
     expect(container.textContent).toContain("Agree with evaluator");
     expect(container.textContent).not.toContain("HTTP 503");
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition", undefined);
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
 
@@ -369,7 +399,7 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.textContent).toContain("Agree with evaluator");
   });
 
@@ -378,10 +408,10 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 1 of 2");
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition", undefined);
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
   });
 
@@ -422,22 +452,22 @@ describe("historical review player", () => {
     });
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(QueueDetailScreen)));
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1", undefined);
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2", undefined);
   });
 
   it.each(["pass", "fail", "ambiguous"] as const)("agreeing with %s records that displayed label and its historical evaluator", async (label) => {
     api.fetchCaseDetail.mockResolvedValue({ ...detail, exception: { ...detail.exception, verdict: label }, judgeRun: { ...detail.judgeRun, verdict: label } });
     api.recordHumanVerdict.mockResolvedValue({ id: "human_new", skillVersionId: "skillv_1", source: "human", actorName: "Reviewer", payload: { kind: "categorical", choice: label, choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 }, rationale: "Accepted" }, createdAt: "2026-09-28T00:00:00Z" });
     const container = await mount();
-    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.textContent).toContain("The answer omitted a direct link.");
     const accept = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Agree with evaluator"));
     expect(accept).toBeDefined();
     expect(accept!.textContent).toContain(`Record ${label.toUpperCase()} as my ruling`);
     await act(async () => accept!.click());
-    expect(api.recordHumanVerdict).toHaveBeenCalledWith("case_1", expect.objectContaining({ choice: label }), "skillv_1");
+    expect(api.recordHumanVerdict).toHaveBeenCalledWith("case_1", expect.objectContaining({ choice: label }), "skillv_1", undefined);
   });
 
 
@@ -460,7 +490,7 @@ describe("historical review player", () => {
     expect(container.textContent).not.toContain("Agree with evaluator");
     api.fetchCaseDetail.mockResolvedValue(detail);
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry")!.click());
-    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.textContent).toContain("Agree with evaluator");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
