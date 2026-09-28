@@ -16,8 +16,11 @@ export interface ReviewPlayerItem {
   // in ad-hoc mode).
   key: string;
   caseId: string;
-  // Persisted queues freeze a criterion definition, not the current evaluator.
+  // Saved tasks may pin an exact recorded result; older tasks are explicitly unpinned.
   criterionVersionId?: string;
+  skillVersionId?: string | undefined;
+  judgeRunId?: string | undefined;
+  queueItemId?: string | undefined;
   completed: boolean;
 }
 
@@ -107,14 +110,13 @@ export function ReviewPlayer({
   const criterionVersionId = current?.criterionVersionId ?? dashboardCriterionVersionId(dashboard);
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
-  const loadIdentity = `${current?.key}:${criterionVersionId}`;
+  const loadIdentity = `${current?.key}:${criterionVersionId}:${current?.skillVersionId}:${current?.judgeRunId}`;
   const [detailError, setDetailError] = useState<string | null>(null);
   // Bumping retryTick refetches the current case after a failed load.
   const [retryTick, setRetryTick] = useState(0);
 
-  // Read the latest recorded judgment for the task's exact criterion. A new
-  // evaluator need not have re-judged this older case. Cancel stale reads on
-  // case/criterion changes; host item-array churn alone does not refetch.
+  // Read exact saved evidence; criterion-only legacy tasks remain explicitly
+  // unpinned. Cancel stale reads on task/scope changes, not host array churn.
   useEffect(() => {
     if (!current) return;
     setDetail(null);
@@ -122,7 +124,7 @@ export function ReviewPlayer({
     const targetCaseId = current.caseId;
     let cancelled = false;
     if (!criterionVersionId) return;
-    fetchCaseDetail(targetCaseId, undefined, criterionVersionId)
+    fetchCaseDetail(targetCaseId, current.skillVersionId, criterionVersionId, current.judgeRunId)
       .then((d) => {
         if (!cancelled) { setDetail(d); setLoadedFor(loadIdentity); }
       })
@@ -132,7 +134,7 @@ export function ReviewPlayer({
     return () => {
       cancelled = true;
     };
-  }, [current?.key, current?.caseId, criterionVersionId, retryTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.key, current?.caseId, criterionVersionId, current?.skillVersionId, current?.judgeRunId, retryTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prev = useCallback(() => pick(cursor - 1), [pick, cursor]);
   const next = useCallback(() => pick(cursor + 1), [pick, cursor]);
@@ -215,7 +217,12 @@ export function ReviewPlayer({
               Case {cursor + 1} of {total}. {marginNote.text}
             </MarginNote>
           ) : null}
+          {current.queueItemId && !current.judgeRunId ? (
+            <p className="mb-4 text-sm text-ink-2">This older task has no pinned evaluator result. It shows the latest recorded result for its criterion; your new ruling records exactly the result shown.</p>
+          ) : null}
           <TraceDetail
+            reviewQueueItemId={current.queueItemId}
+            reviewTaskPending={Boolean(current.queueItemId && !current.completed)}
             headingAs="h2"
             key={`${current.key}:${detail.judgeRun.id}`}
             detail={detail}

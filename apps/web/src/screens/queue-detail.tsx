@@ -130,6 +130,9 @@ function QueueDetailBody({ detail, reload }: { detail: ReviewQueueDetail; reload
         key: item.id,
         caseId: item.caseId,
         criterionVersionId: item.criterionVersionId,
+        skillVersionId: item.skillVersionId ?? undefined,
+        judgeRunId: item.judgeRunId ?? undefined,
+        queueItemId: item.id,
         completed: item.status === "completed"
       })),
     [ordered]

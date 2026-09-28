@@ -1,3 +1,4 @@
+import { ReviewEvaluatorPicker, useReviewEvaluator } from "./review-evaluator-picker";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
@@ -29,7 +30,8 @@ export function SaveQueueModal({
 }) {
   const navigate = useNavigate();
   const { dashboard } = useDashboard();
-  const criterionVersionId = dashboardCriterionVersionId(dashboard);
+  const evaluator = useReviewEvaluator(dashboard?.skill ?? null);
+  const criterionVersionId = evaluator.selected?.criterionVersionId ?? dashboardCriterionVersionId(dashboard);
   const [name, setName] = useState(defaultName);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +46,14 @@ export function SaveQueueModal({
       setError("Give the queue a name.");
       return;
     }
+    if (busy) return;
+    if (!evaluator.selected) { setError("Choose an evaluator version to review."); return; }
     setBusy(true);
     setError(null);
     try {
       const queue = await createReviewQueue({
         name: trimmed,
+        skillVersionId: evaluator.selected.id,
         description: context,
         caseIds: capped,
         ...(criterionVersionId ? { criterionVersionId } : {}),
@@ -84,6 +89,7 @@ export function SaveQueueModal({
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3.5">
+          <ReviewEvaluatorPicker selection={evaluator} disabled={busy} />
           <div className="flex flex-col gap-1.5">
             <label htmlFor="save-queue-name" className="eyebrow">Queue name</label>
             <Input
@@ -109,7 +115,7 @@ export function SaveQueueModal({
               Cancel
             </Button>
             <div className="flex-1" />
-            <Button variant="primary" disabled={busy || capped.length === 0} onClick={() => void submit()}>
+            <Button variant="primary" disabled={busy || capped.length === 0 || !evaluator.selected} onClick={() => void submit()}>
               {busy ? "Creating…" : `Create queue · ${capped.length}`}
             </Button>
           </div>

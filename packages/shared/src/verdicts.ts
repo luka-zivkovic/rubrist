@@ -100,7 +100,15 @@ export function payloadRationale(payload: VerdictPayload): string | null {
   return "rationale" in payload ? payload.rationale : null;
 }
 
+export const ReviewContextSchema = z.object({
+  queueItemId: z.string().min(1),
+  judgeRunId: z.string().min(1),
+  submissionId: z.string().uuid()
+}).strict();
+export type ReviewContext = z.infer<typeof ReviewContextSchema>;
+
 export const VerdictRecordSchema = z.object({
+  reviewContext: ReviewContextSchema.nullable().optional(),
   id: z.string(),
   projectId: z.string(),
   caseId: z.string(),

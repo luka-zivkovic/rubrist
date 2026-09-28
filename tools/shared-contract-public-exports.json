@@ -882,6 +882,8 @@
     "RetentionPruneResultSchema",
     "RetireGoldenSetEntryInput",
     "RetireGoldenSetEntryInputSchema",
+    "ReviewContext",
+    "ReviewContextSchema",
     "ReviewQueue",
     "ReviewQueueDetail",
     "ReviewQueueDetailSchema",

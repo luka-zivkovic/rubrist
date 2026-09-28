@@ -60,7 +60,8 @@ export class DemoProjectRepository implements ProjectRepositoryPort {
       deletedCases: 0,
       deletedRawTraces: 0,
       skippedActiveGoldenCases: 0,
-      skippedImmutableRevisionCases: 0
+      skippedImmutableRevisionCases: 0,
+      skippedReviewCases: 0
     };
   }
 

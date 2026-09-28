@@ -231,6 +231,7 @@ describe("PostgreSQL review-queue repository slice", () => {
     )).toEqual([
       "Constructor",
       ...EXPECTED_METHODS.map((name) => `MethodDeclaration:${name}`),
+      "MethodDeclaration:resolveEvidencePin",
       "MethodDeclaration:resolveReviewCriterionVersion"
     ]);
     expect(reviewQueueRepository.members.filter(ts.isConstructorDeclaration).map((constructor) =>
@@ -365,13 +366,13 @@ describe("PostgreSQL review-queue repository slice", () => {
       queue.id,
       "case-1",
       "criterionv-current",
-      0
+      0, null, null
     ]);
     expect(clientQueries[3]?.values?.slice(1)).toEqual([
       queue.id,
       "case-2",
       "criterionv-current",
-      1
+      1, null, null
     ]);
     expect(client.release).toHaveBeenCalledOnce();
 
@@ -468,6 +469,7 @@ describe("PostgreSQL review-queue repository slice", () => {
       query: vi.fn(async (sql: string, values?: unknown[]) => {
         const normalizedSql = sql.replace(/\s+/g, " ").trim();
         clientCalls.push({ sql: normalizedSql, values });
+        if (normalizedSql.includes("max(position)")) return { rows: [{ position: 2 }], rowCount: 1 };
         if (!normalizedSql.includes("insert into review_queue_items")) return { rows: [], rowCount: 1 };
         insertAttempt += 1;
         if (insertAttempt === 2) return { rows: [], rowCount: 0 };
@@ -516,12 +518,15 @@ describe("PostgreSQL review-queue repository slice", () => {
     const inserts = clientCalls.filter((call) => call.sql.includes("insert into review_queue_items"));
     expect(inserts.every((call) => call.sql.includes("on conflict do nothing"))).toBe(true);
     expect(inserts.map((call) => call.values?.slice(1))).toEqual([
-      ["revq-1", "case-1", "criterionv-1", 2, "user-1"],
-      ["revq-1", "case-2", "criterionv-1", 3, "user-1"],
-      ["revq-1", "case-3", "criterionv-1", 3, "user-2"]
+      ["revq-1", "case-1", "criterionv-1", 2, "user-1", null, null],
+      ["revq-1", "case-2", "criterionv-1", 3, "user-1", null, null],
+      ["revq-1", "case-3", "criterionv-1", 3, "user-2", null, null]
     ]);
     expect(clientCalls.map((call) => call.sql)).toEqual([
       "begin",
+      expect.stringContaining("from projects where id=$1 for key share"),
+      expect.stringContaining("for update"),
+      expect.stringContaining("max(position)"),
       expect.stringContaining("insert into review_queue_items"),
       expect.stringContaining("insert into review_queue_items"),
       expect.stringContaining("insert into review_queue_items"),
@@ -558,6 +563,9 @@ describe("PostgreSQL review-queue repository slice", () => {
     })).rejects.toThrow("item insert failed");
     expect(failureEvents).toEqual([
       "begin",
+      expect.stringContaining("from projects where id=$1 for key share"),
+      expect.stringContaining("for update"),
+      expect.stringContaining("max(position)"),
       expect.stringContaining("insert into review_queue_items"),
       "rollback",
       "release"

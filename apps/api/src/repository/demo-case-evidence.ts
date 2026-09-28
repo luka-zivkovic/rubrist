@@ -28,6 +28,7 @@ import type { DemoRepositoryStore } from "./demo-store.js";
 import {
   AmbiguousProjectSkillError,
   CaseNotFoundError,
+  DatasetRevisionConflictError,
   InvalidConvergenceCursorError
 } from "./errors.js";
 import {
@@ -81,6 +82,28 @@ export class DemoCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
       if (existing) return existing;
     }
     let skillVersionId = input.skillVersionId;
+    let reviewTask: (typeof this.store.reviewQueueItems)[number] | undefined;
+    if (input.reviewContext) {
+      const context = input.reviewContext;
+      reviewTask = this.store.reviewQueueItems.find((item) => item.id === context.queueItemId);
+      const queue = this.store.reviewQueues.find((queue) => queue.id === reviewTask?.queueId && queue.projectId === input.projectId);
+      const run = this.store.judgeRuns.find((run) => run.id === context.judgeRunId && run.projectId === input.projectId && run.caseId === input.caseId);
+      if (input.source !== "human" || !reviewTask || !queue || !run || reviewTask.caseId !== input.caseId
+        || (reviewTask.assignedToUserId && reviewTask.assignedToUserId !== input.actorUserId)
+        || (reviewTask.judgeRunId && reviewTask.judgeRunId !== run.id)
+        || (skillVersionId && skillVersionId !== run.skillVersionId)
+        || this.store.skillVersionCriteria.get(run.skillVersionId) !== reviewTask.criterionVersionId) {
+        throw new DatasetRevisionConflictError("Review task, assignment or recorded result does not match");
+      }
+      const existing = this.store.verdicts.find((v) => v.reviewContext?.queueItemId === context.queueItemId && v.reviewContext.submissionId === context.submissionId);
+      if (existing) {
+        if (JSON.stringify(existing.payload) !== JSON.stringify(input.payload) || existing.actorUserId !== (input.actorUserId ?? null)
+          || existing.reviewContext?.judgeRunId !== context.judgeRunId) throw new DatasetRevisionConflictError("Review submission ID already used for a different ruling");
+        return existing;
+      }
+      if (queue.status !== "open") throw new DatasetRevisionConflictError("This review queue is closed");
+      skillVersionId = run.skillVersionId;
+    }
     if (input.source === "human" || input.source === "adjudicated") {
       const criterionCount = this.store.criteria.filter((criterion) => criterion.projectId === input.projectId).length;
       const definitionCount = this.store.criterionVersions.filter((version) => version.projectId === input.projectId).length;
@@ -112,6 +135,7 @@ export class DemoCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
       actorUserId: input.actorUserId ?? null,
       payload: input.payload,
       externalRunId: input.externalRunId ?? null,
+      ...(input.reviewContext ? { reviewContext: input.reviewContext } : {}),
       observed: input.observed ?? null,
       evaluatorScore: input.evaluatorScore ?? null,
       createdAt
@@ -123,12 +147,15 @@ export class DemoCaseEvidenceRepository implements CaseEvidenceRepositoryPort {
     //   - items assigned specifically to this verdict's actor.
     // Items assigned to OTHER reviewers stay pending — they're the κ-overlap
     // partner row and must wait for that reviewer's own verdict.
-    if (input.source === "human") {
+    if (reviewTask) {
+      reviewTask.status = "completed";
+      reviewTask.completedAt ??= createdAt;
+    } else if (input.source === "human") {
       const criterionVersionId = skillVersionId
         ? this.store.skillVersionCriteria.get(skillVersionId)
         : undefined;
       for (const item of this.store.reviewQueueItems) {
-        if (item.caseId !== input.caseId || item.status !== "pending") continue;
+        if (item.judgeRunId || item.caseId !== input.caseId || item.status !== "pending") continue;
         if (!criterionVersionId || item.criterionVersionId !== criterionVersionId) continue;
         const isMine = item.assignedToUserId === null || item.assignedToUserId === input.actorUserId;
         if (!isMine) continue;

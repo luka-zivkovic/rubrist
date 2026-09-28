@@ -19,7 +19,7 @@ import {
   rowToReviewQueueItem
 } from "./mappers.js";
 
-// PostgreSQL persistence for owner-curated governed review queues. This slice
+// PostgreSQL persistence for owner-curated ungoverned review queues. This slice
 // schedules explicit human attention; it does not make release decisions.
 export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
   constructor(
@@ -30,7 +30,8 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
     const criterionVersionId = await this.resolveReviewCriterionVersion(
       input.projectId,
-      input.criterionVersionId
+      input.criterionVersionId,
+      input.skillVersionId
     );
     // Validate every case belongs to this project before we open a transaction;
     // a missing case should fail fast with a typed error, not a generic FK
@@ -46,6 +47,9 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
       throw new Error(`Cases not found in project: ${missing.join(", ")}`);
     }
 
+    const pins = new Map(await Promise.all(distinctCaseIds.map(async (caseId) =>
+      [caseId, await this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId)] as const
+    )));
     const queueId = `revq_${randomUUID()}`;
     const client = await this.pool.connect();
     try {
@@ -58,9 +62,9 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
       let position = 0;
       for (const caseId of distinctCaseIds) {
         await client.query(
-          `insert into review_queue_items (id, queue_id, case_id, criterion_version_id, position)
-           values ($1,$2,$3,$4,$5)`,
-          [`revqi_${randomUUID()}`, queueId, caseId, criterionVersionId, position]
+          `insert into review_queue_items (id, queue_id, case_id, criterion_version_id, position, skill_version_id, judge_run_id)
+           values ($1,$2,$3,$4,$5,$6,$7)`,
+          [`revqi_${randomUUID()}`, queueId, caseId, criterionVersionId, position, pins.get(caseId)!.skillVersionId, pins.get(caseId)!.judgeRunId]
         );
         position += 1;
       }
@@ -173,28 +177,33 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
       ...item,
       criterionVersionId: await this.resolveReviewCriterionVersion(
         input.projectId,
-        item.criterionVersionId
+        item.criterionVersionId,
+        item.skillVersionId
       )
     })));
 
-    // Compute the starting position from the existing item count.
-    const countRow = await this.pool.query(
-      `select count(*)::int as count from review_queue_items where queue_id = $1`,
-      [input.queueId]
-    );
-    let position = Number(countRow.rows[0]?.count ?? 0);
+    const pinnedItems = await Promise.all(resolvedItems.map(async (item) => ({
+      ...item,
+      ...await this.resolveEvidencePin(input.projectId, item.caseId, item.criterionVersionId, item.skillVersionId)
+    })));
 
     const added: ReviewQueueItem[] = [];
     const client = await this.pool.connect();
     try {
       await client.query("begin");
-      for (const item of resolvedItems) {
+      // Serialize with retention before taking any queue/task/run locks.
+      await client.query(`select id from projects where id=$1 for key share`, [input.projectId]);
+      const lockedQueue = await client.query(`select id from review_queues where id=$1 and project_id=$2 and status='open' for update`, [input.queueId, input.projectId]);
+      if (!lockedQueue.rowCount) throw new DatasetRevisionConflictError("Review queue is missing or closed");
+      const positionRow = await client.query(`select coalesce(max(position)+1,0)::int as position from review_queue_items where queue_id=$1`, [input.queueId]);
+      let position = Number(positionRow.rows[0]?.position ?? 0);
+      for (const item of pinnedItems) {
         // ON CONFLICT DO NOTHING deduplicates the exact
         // (queue, case, criterion version, assignee) tuple.
         const result = await client.query(
           `insert into review_queue_items
-             (id, queue_id, case_id, criterion_version_id, position, assigned_to_user_id)
-           values ($1, $2, $3, $4, $5, $6)
+             (id, queue_id, case_id, criterion_version_id, position, assigned_to_user_id, skill_version_id, judge_run_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
            on conflict do nothing
            returning *`,
           [
@@ -203,7 +212,9 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
             item.caseId,
             item.criterionVersionId,
             position,
-            item.assignedToUserId ?? null
+            item.assignedToUserId ?? null,
+            item.skillVersionId,
+            item.judgeRunId
           ]
         );
         if (result.rows[0]) {
@@ -255,10 +266,37 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
     return detail ? detail.queue : null;
   }
 
+  private async resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string) {
+    // Omission retains the older criterion-only API contract, explicitly unpinned.
+    if (!skillVersionId) return { skillVersionId: null, judgeRunId: null };
+    const result = await this.pool.query(
+      `select run.id from judge_runs run
+       join skill_versions version on version.id = run.skill_version_id and version.project_id = run.project_id
+       where run.project_id = $1 and run.case_id = $2 and run.skill_version_id = $3
+         and version.criterion_version_id = $4
+       order by run.created_at desc, run.id desc limit 1`,
+      [projectId, caseId, skillVersionId, criterionVersionId]
+    );
+    if (!result.rows[0]) throw new DatasetRevisionConflictError(`No recorded result for case ${caseId} and selected evaluator version`);
+    return { skillVersionId, judgeRunId: String(result.rows[0].id) };
+  }
+
   private async resolveReviewCriterionVersion(
     projectId: string,
-    requested?: string | undefined
+    requested?: string | undefined,
+    skillVersionId?: string | undefined
   ): Promise<string> {
+    if (skillVersionId) {
+      const result = await this.pool.query(
+        `select criterion_version_id from skill_versions where project_id = $1 and id = $2`,
+        [projectId, skillVersionId]
+      );
+      const criterion = result.rows[0]?.criterion_version_id;
+      if (!criterion || (requested && requested !== criterion)) {
+        throw new DatasetRevisionConflictError("Evaluator version does not match this project and criterion");
+      }
+      return String(criterion);
+    }
     if (requested) {
       const result = await this.pool.query(
         `select version.id

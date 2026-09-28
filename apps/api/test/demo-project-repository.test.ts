@@ -286,7 +286,8 @@ describe("Demo project repository slice", () => {
       deletedCases: 0,
       deletedRawTraces: 0,
       skippedActiveGoldenCases: 0,
-      skippedImmutableRevisionCases: 0
+      skippedImmutableRevisionCases: 0,
+      skippedReviewCases: 0
     });
     await expect(repository.deleteProject(demoProject.id, { confirmProjectName: "wrong" }))
       .rejects.toThrow("Project confirmation did not match");

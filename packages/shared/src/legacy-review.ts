@@ -24,6 +24,8 @@ export const ReviewQueueItemSchema = z.object({
   caseId: z.string(),
   // Immutable criterion definition this review task governs.
   criterionVersionId: z.string(),
+  skillVersionId: z.string().nullable().optional(),
+  judgeRunId: z.string().nullable().optional(),
   status: ReviewQueueItemStatusSchema,
   position: z.number().int().nonnegative(),
   // per-item assignment. null = unassigned (any reviewer can pull);
@@ -43,6 +45,7 @@ export const AddReviewQueueItemsInputSchema = z.object({
       z.object({
         caseId: z.string().min(1),
         criterionVersionId: z.string().min(1).optional(),
+        skillVersionId: z.string().min(1).optional(),
         assignedToUserId: z.string().min(1).optional()
       })
     )
@@ -156,6 +159,7 @@ export const ReviewQueueDetailSchema = z.object({
 export type ReviewQueueDetail = z.infer<typeof ReviewQueueDetailSchema>;
 
 export const CreateReviewQueueInputSchema = z.object({
+  skillVersionId: z.string().min(1).optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   criterionVersionId: z.string().min(1).optional(),

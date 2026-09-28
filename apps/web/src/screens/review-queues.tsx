@@ -1,3 +1,4 @@
+import { ReviewEvaluatorPicker, useReviewEvaluator } from "@/components/review-evaluator-picker";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Plus, RefreshCcw } from "lucide-react";
@@ -11,7 +12,7 @@ import { journeyStage } from "@/lib/journey";
 import { dashboardCriterionVersionId } from "@/lib/criterion-scope";
 import { cn } from "@/lib/utils";
 import { useDialogFocus } from "@/hooks/use-dialog-focus";
-import type { ReviewQueue } from "@rubrist/shared";
+import type { ReviewQueue, Skill } from "@rubrist/shared";
 
 export function ReviewQueuesScreen() {
   const navigate = useNavigate();
@@ -126,6 +127,7 @@ export function ReviewQueuesScreen() {
       {showNew ? (
         <NewQueueModal
           criterionVersionId={criterionVersionId}
+          skill={dashboard?.skill ?? null}
           onCancel={() => setShowNew(false)}
           onCreated={(queue) => {
             setShowNew(false);
@@ -258,14 +260,17 @@ function EmptyQueues({
 }
 
 function NewQueueModal({
+  skill,
   criterionVersionId,
   onCancel,
   onCreated
 }: {
+  skill: Skill | null;
   criterionVersionId: string | null;
   onCancel: () => void;
   onCreated: (queue: ReviewQueue) => void;
 }) {
+  const evaluator = useReviewEvaluator(skill);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [ids, setIds] = useState("");
@@ -277,16 +282,19 @@ function NewQueueModal({
     .split(/[\s,]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const canSubmit = name.trim().length > 0 && parsedIds.length > 0 && !submitting;
+  const canSubmit = name.trim().length > 0 && parsedIds.length > 0 && Boolean(evaluator.selected) && !submitting;
 
   const submit = async () => {
     setError(null);
     setSubmitting(true);
     try {
       const trimmedDesc = description.trim();
+      if (!evaluator.selected) throw new Error("Choose an evaluator version to review.");
+      const selectedCriterion = evaluator.selected.criterionVersionId ?? criterionVersionId;
       const queue = await createReviewQueue({
+        skillVersionId: evaluator.selected.id,
         name: name.trim(),
-        ...(criterionVersionId ? { criterionVersionId } : {}),
+        ...(selectedCriterion ? { criterionVersionId: selectedCriterion } : {}),
         ...(trimmedDesc ? { description: trimmedDesc } : {}),
         caseIds: parsedIds
       });
@@ -320,6 +328,7 @@ function NewQueueModal({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <ReviewEvaluatorPicker selection={evaluator} disabled={submitting} />
           <div className="flex flex-col gap-1.5">
             <label htmlFor="new-queue-name" className="eyebrow">Name</label>
             <input

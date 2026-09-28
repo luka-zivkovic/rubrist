@@ -118,17 +118,18 @@ export class PgGoldenEvidenceRepository implements GoldenEvidenceRepositoryPort 
     projectId: string,
     caseId: string,
     skillVersionId?: string | undefined,
-    criterionVersionId?: string | undefined
+    criterionVersionId?: string | undefined,
+    judgeRunId?: string | undefined
   ): Promise<ExceptionDetail | null> {
-    return this.loadCaseDetail(projectId, caseId, { exceptionsOnly: false, skillVersionId, criterionVersionId });
+    return this.loadCaseDetail(projectId, caseId, { exceptionsOnly: false, skillVersionId, criterionVersionId, judgeRunId });
   }
 
   private async loadCaseDetail(
     projectId: string,
     caseId: string,
-    opts: { exceptionsOnly: boolean; skillVersionId?: string | undefined; criterionVersionId?: string | undefined }
+    opts: { exceptionsOnly: boolean; skillVersionId?: string | undefined; criterionVersionId?: string | undefined; judgeRunId?: string | undefined }
   ): Promise<ExceptionDetail | null> {
-    if (!opts.skillVersionId && !opts.criterionVersionId) await this.dependencies.assertSingletonCriterion(projectId);
+    if (!opts.judgeRunId && !opts.skillVersionId && !opts.criterionVersionId) await this.dependencies.assertSingletonCriterion(projectId);
     const result = await this.pool.query(
       `select jr.*,
               version.criterion_version_id,
@@ -144,10 +145,11 @@ export class PgGoldenEvidenceRepository implements GoldenEvidenceRepositoryPort 
        where jr.project_id = $1 and jr.case_id = $2
          and ($3::text is null or jr.skill_version_id = $3)
          and ($4::text is null or version.criterion_version_id = $4)
+         and ($5::text is null or jr.id = $5)
          ${opts.exceptionsOnly ? "and jr.verdict <> 'pass'" : ""}
        order by jr.created_at desc, jr.id desc
        limit 1`,
-      [projectId, caseId, opts.skillVersionId ?? null, opts.criterionVersionId ?? null]
+      [projectId, caseId, opts.skillVersionId ?? null, opts.criterionVersionId ?? null, opts.judgeRunId ?? null]
     );
     const row = result.rows[0];
     if (!row) return null;
