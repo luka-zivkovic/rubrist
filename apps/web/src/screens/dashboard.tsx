@@ -1,7 +1,9 @@
+import { queueReviewUrl } from "../lib/exception-queue.js";
+import { contextualHref } from "../lib/route-metadata.js";
 import { PageLoading } from "../components/page-loading.js";
 import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, RefreshCcw, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -30,6 +32,7 @@ const QUEUE_VOLUME: Record<CapabilityGap["severity"], string> = {
 };
 
 export function DashboardScreen() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { dashboard, loading, error, errorStatus, reload } = useDashboard();
   const [mode] = useMode();
@@ -425,14 +428,14 @@ export function DashboardScreen() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => navigate("/review", { state: { caseIds: exceptions.map((ex) => ex.id) } })}
+              asChild
             >
-              Review {exceptions.length} loaded cases <ArrowRight />
+              <Link to={queueReviewUrl(exceptions, location.search)}>Review {exceptions.length} loaded cases <ArrowRight /></Link>
             </Button>
           ) : null}
-          <Button variant="default" size="sm" onClick={() => navigate("/exceptions")}>
+          <Button variant="default" size="sm" asChild><Link to={contextualHref("/exceptions", location.search)}>
             Open queue <ArrowRight />
-          </Button>
+          </Link></Button>
         </CardHeader>
         <Table>
           <thead>

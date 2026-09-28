@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FileCheck2, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { fetchCaseDetail, fetchTraceTests } from "@/lib/api";
 import { intentForVerdict, type TraceTestIntent } from "@/lib/trace-test-flow";
 import { dismissTraceTestPrompt, traceTestPromptDismissed } from "@/lib/trace-test-pilot";
 import { useDashboard } from "@/lib/dashboard-context";
+import { contextualHref } from "../lib/route-metadata.js";
 import { dashboardCriterionVersionId } from "@/lib/criterion-scope";
 import { type ExceptionDetail, type TraceTestSummary } from "@rubrist/shared";
 
@@ -21,7 +22,7 @@ interface TraceScreenProps {
 
 function TraceScreenBase({ fetcher, backTo, backLabel }: TraceScreenProps) {
   const { id: caseId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const location = useLocation();
   const { refresh } = useDashboard();
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,9 +108,9 @@ function TraceScreenBase({ fetcher, backTo, backLabel }: TraceScreenProps) {
     return (
       <div className="fadeUp">
         <div className="mb-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(backTo)}>
+          <Button variant="ghost" size="sm" asChild><Link to={contextualHref(backTo, location.search)}>
             <ArrowLeft /> {backLabel}
-          </Button>
+          </Link></Button>
         </div>
         <SectionHead eyebrow="Trace drill-down" title="Could not load trace" />
         <Card>
@@ -124,12 +125,12 @@ function TraceScreenBase({ fetcher, backTo, backLabel }: TraceScreenProps) {
   return (
     <div className="fadeUp">
       <div className="mb-3 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => navigate(backTo)}>
+        <Button variant="ghost" size="sm" asChild><Link to={contextualHref(backTo, location.search)}>
           <ArrowLeft /> {backLabel}
-        </Button>
+        </Link></Button>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <ViewInIronside caseId={caseId} />
-          <div className="font-mono text-[11px] text-ink-3">
+          <div className="dev-only font-mono text-[11px] text-ink-3">
             {detail.exception.id} · {detail.trace.id}
           </div>
         </div>
@@ -176,7 +177,7 @@ const ENTRY_COPY: Record<TraceTestIntent, { title: string; body: string }> = {
 };
 
 function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
-  const navigate = useNavigate();
+  const location = useLocation();
   const [tests, setTests] = useState<TraceTestSummary[]>([]);
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const [draftsError, setDraftsError] = useState(false);
@@ -211,10 +212,13 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
     setPromptDismissed(traceTestPromptDismissed(detail.exception.id));
   }, [detail.exception.id]);
 
-  const openBuilder = (suffix: string) => navigate(
-    `/cases/${detail.exception.id}/make-test${suffix}`,
-    { state: { backTo: `/cases/${detail.exception.id}`, backLabel: "Back to conversation" } }
-  );
+  const builderHref = (suffix: string) => {
+    // The builder must read the exact evaluation currently displayed, even
+    // when the evaluator's latest version has changed since this case ran.
+    const params = new URLSearchParams(suffix);
+    params.set("skillVersionId", detail.judgeRun.skillVersionId);
+    return contextualHref(`/cases/${detail.exception.id}/make-test?${params}`, location.search, ["from"]);
+  };
   const drafts = tests.filter((test) => test.lifecycle === "draft" || test.hasUnpublishedChanges);
   const enabled = tests.filter((test) => test.enabledRevision !== null);
   const latestDraft = drafts[0];
@@ -235,8 +239,8 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
           <div className="font-serif text-[15px] font-medium text-ink">This conversation is protected</div>
           <div className="mt-0.5 text-[12px] leading-[1.5] text-ink-3">{enabled.length} enabled test{enabled.length === 1 ? "" : "s"} keep the saved behavior available for future runs.</div>
         </div>
-        <Button variant="outline" onClick={() => navigate("/datasets")}>View test runs</Button>
-        <Button variant="ghost" onClick={() => openBuilder(`?intent=${intent}`)}>Make another test</Button>
+        <Button variant="outline" asChild><Link to={contextualHref("/datasets", location.search)}>View test runs</Link></Button>
+        <Button variant="ghost" asChild><Link to={builderHref(`?intent=${intent}`)}>Make another test</Link></Button>
       </div>
     );
   }
@@ -245,9 +249,9 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
     return (
       <div className="mb-5 flex flex-wrap items-center justify-end gap-2 text-[11.5px] text-ink-3">
         <span>Start a draft rerunnable test from this conversation.</span>
-        <Button variant="ghost" size="sm" onClick={() => openBuilder(`?intent=${intent}`)}>
+        <Button variant="ghost" size="sm" asChild><Link to={builderHref(`?intent=${intent}`)}>
           <ShieldCheck /> {copy.title}
-        </Button>
+        </Link></Button>
       </div>
     );
   }
@@ -265,13 +269,13 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
             : draftsError ? "Rubrist could not check this conversation for saved drafts. Retry before starting another." : copy.body}
         </div>
       </div>
-      <Button
-        variant="primary"
-        disabled={!draftsLoaded}
-        onClick={() => draftsError ? setDraftsReload((value) => value + 1) : openBuilder(latestDraft ? `?draft=${encodeURIComponent(latestDraft.id)}` : `?intent=${intent}`)}
-      >
-        {draftsError ? "Retry" : latestDraft ? "Resume draft" : copy.title}
-      </Button>
+      {draftsError ? (
+        <Button variant="primary" onClick={() => setDraftsReload((value) => value + 1)}>Retry</Button>
+      ) : (
+        <Button variant="primary" asChild><Link to={builderHref(latestDraft ? `?draft=${encodeURIComponent(latestDraft.id)}` : `?intent=${intent}`)}>
+          {latestDraft ? "Resume draft" : copy.title}
+        </Link></Button>
+      )}
       {!latestDraft && !draftsError ? (
         <Button
           variant="ghost"
@@ -286,9 +290,9 @@ function TraceTestEntry({ detail }: { detail: ExceptionDetail }) {
           <summary className="inline-flex min-h-6 cursor-pointer items-center text-[11.5px] text-ink-3">Choose another saved draft</summary>
           <div className="mt-2 flex flex-wrap gap-2">
             {drafts.slice(1).map((draft) => (
-              <Button key={draft.id} variant="ghost" size="xs" onClick={() => openBuilder(`?draft=${encodeURIComponent(draft.id)}`)}>
+              <Button key={draft.id} variant="ghost" size="xs" asChild><Link to={builderHref(`?draft=${encodeURIComponent(draft.id)}`)}>
                 {new Date(draft.updatedAt).toLocaleString()}
-              </Button>
+              </Link></Button>
             ))}
           </div>
         </details>
@@ -322,8 +326,8 @@ export function CaseScreen() {
   return (
     <TraceScreenBase
       fetcher={fetcher}
-      backTo={state.backTo ?? "/traces"}
-      backLabel={state.backLabel ?? "Back to Traces"}
+      backTo={searchParams.get("from") === "exceptions" ? "/exceptions" : state.backTo ?? "/traces"}
+      backLabel={searchParams.get("from") === "exceptions" ? "Back to queue" : state.backLabel ?? "Back to Traces"}
     />
   );
 }

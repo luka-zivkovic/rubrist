@@ -46,6 +46,7 @@ export interface TraceDetailShortcuts {
 }
 
 interface TraceDetailProps {
+  headingAs?: "h1" | "h2";
   detail: ExceptionDetail;
   // Called after a decision is recorded server-side, with which kind — hosts
   // use it to advance their cursor and tally a session summary.
@@ -323,7 +324,7 @@ function DecisionHistory({
   );
 }
 
-export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) {
+export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: TraceDetailProps) {
   const { exception, trace, judgeRun, rawRequest, rawResponse } = detail;
   const typedEvaluation = recordedTypedEvaluation(detail);
   const structuredEvidence = evidenceClaim(trace.input, trace.output);
@@ -567,13 +568,14 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
   return (
     <>
       <SectionHead
+        headingAs={headingAs}
         eyebrow={`Exception · ${exception.capabilityGap?.toLowerCase() ?? "uncategorized"}`}
         title={exception.title}
         sub={`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}
       />
 
       <div className="grid grid-cols-1 gap-7 xl:grid-cols-[1.25fr_1fr]">
-        <div className="flex flex-col gap-5">
+        <div className="min-w-0 flex flex-col gap-5">
           {typedEvaluation ? (
             <Card>
               <CardContent className="pt-5">
@@ -632,7 +634,7 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="min-w-0 flex flex-col gap-5">
           {effectiveRuling ? (
             <HumanRulingCard
               ruling={effectiveRuling}

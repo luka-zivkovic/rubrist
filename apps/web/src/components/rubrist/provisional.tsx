@@ -24,16 +24,15 @@ export function ProvBanner({ text, cta, cta2, className }: ProvBannerProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-sm border border-dashed border-gold bg-gold-tint px-3.5 py-2.5 text-[12.5px] text-ink-2",
+        "flex flex-wrap items-center gap-3 rounded-sm border border-dashed border-gold bg-gold-tint px-3.5 py-2.5 text-[12.5px] text-ink-2",
         className
       )}
     >
       <span className="grid place-items-center text-gold">
         <Ban className="h-3.5 w-3.5" />
       </span>
-      <span className="flex-1">{text}</span>
-      {cta2}
-      {cta}
+      <span className="min-w-0 basis-[calc(100%-2rem)] flex-1 sm:basis-0">{text}</span>
+      {cta2 || cta ? <div className="flex max-w-full flex-wrap items-center gap-2 [&_button]:h-auto [&_button]:min-h-8 [&_button]:max-w-full [&_button]:whitespace-normal [&_a]:h-auto [&_a]:min-h-8 [&_a]:max-w-full [&_a]:whitespace-normal">{cta2}{cta}</div> : null}
     </div>
   );
 }

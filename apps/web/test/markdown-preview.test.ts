@@ -30,7 +30,8 @@ describe("MarkdownPreview", () => {
       createElement(MarkdownPreview, { markdown })
     );
 
-    expect(html).toContain("<h1");
+    expect(html).toContain("<h3");
+    expect(html).not.toMatch(/<h[12]\b/);
     expect(html).toContain("<strong");
     expect(html).toContain("<code");
     expect(html).toContain("<ul");

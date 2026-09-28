@@ -17,6 +17,7 @@ export function DashboardWelcome({ dashboard, canPairAgent }: DashboardWelcomePr
 
   return (
     <div className="fadeUp max-w-[1760px]">
+      <FirstProjectKeyCard project={project} className="mb-5" />
       <SectionHead
         eyebrow="New project · no runs yet"
         title="Get your first Check result"
@@ -27,7 +28,6 @@ export function DashboardWelcome({ dashboard, canPairAgent }: DashboardWelcomePr
         <FirstRunSetupLedger dashboard={dashboard} />
 
         <div className="min-w-0 flex flex-col gap-4">
-          <FirstProjectKeyCard project={project} />
           {canPairAgent ? <AgentSetupPairingCard emphasizeAction={false} /> : null}
 
           <Card className="bg-paper-2">
@@ -38,7 +38,7 @@ export function DashboardWelcome({ dashboard, canPairAgent }: DashboardWelcomePr
                 its guide, every Result is provisional—and even sign-off does not show that it agrees
                 with people.
               </div>
-              <div className="mt-3.5 flex items-center gap-2">
+              <div className="mt-3.5 flex flex-wrap items-center gap-2">
                 <ProvChip />
                 <span className="font-mono text-[11px] text-ink-4">→</span>
                 <VerdictChip verdict="pass" />

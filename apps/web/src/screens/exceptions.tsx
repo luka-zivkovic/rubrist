@@ -1,7 +1,7 @@
 import { PageLoading } from "../components/page-loading.js";
 import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronDown, ChevronRight, Clock, Inbox } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,8 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { dashboardCriterionVersionId, dashboardSkillVersionId } from "@/lib/criterion-scope";
 import { isBench, journeyStage } from "@/lib/journey";
 import { resolvedDecisions, type ResolvedDecision } from "@/lib/resolved";
-import { caseReviewUrl, rationalePreview } from "@/lib/exception-queue";
+import { caseReviewUrl, queueReviewUrl, rationalePreview } from "@/lib/exception-queue";
+import { contextualHref } from "../lib/route-metadata.js";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { isVerdictLabel, type DisagreementCase, type ExceptionCase, type VerdictLabel } from "@rubrist/shared";
 
@@ -48,17 +49,23 @@ export interface SessionReceiptState {
   promote: number;
 }
 
+function exceptionCaseHref(exception: ExceptionCase, search: string): string {
+  const params = new URLSearchParams({ from: "exceptions" });
+  if (exception.criterionVersionId) params.set("criterionVersionId", exception.criterionVersionId);
+  return contextualHref(`/cases/${exception.id}?${params}`, search);
+}
+
 export function ExceptionQueueRow({
   exception,
   provisional,
   onOpen,
-  onReview,
+  search = "",
   onCategory
 }: {
   exception: ExceptionCase;
   provisional: boolean;
   onOpen: () => void;
-  onReview: () => void;
+  search?: string;
   onCategory: (category: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -66,11 +73,11 @@ export function ExceptionQueueRow({
   const hasNote = Boolean(exception.reason.trim() || exception.rejudgedSince?.reason.trim());
 
   return (
-    <tr className="row-link row-signal" onClick={onOpen}>
-      <td>
+    <tr role="row" className="row-link row-signal" onClick={onOpen}>
+      <td role="cell" data-label="Case">
         <div className="flex min-w-[180px] items-center">
           <RowLink
-            to={`/cases/${exception.id}`}
+            to={exceptionCaseHref(exception, search)}
             state={{ backTo: "/exceptions", backLabel: "Back to queue" }}
             title={exception.title}
             className="block min-w-0 max-w-[280px] flex-1 truncate font-medium"
@@ -82,7 +89,7 @@ export function ExceptionQueueRow({
           {formatTimestamp(exception.createdAt)} · {exception.traceId}
         </span>
       </td>
-      <td>
+      <td role="cell" data-label="Judge category">
         {exception.capabilityGap ? (
           <Ref
             kind="category"
@@ -93,8 +100,8 @@ export function ExceptionQueueRow({
           <span className="text-[11.5px] text-ink-4">Uncategorized</span>
         )}
       </td>
-      <td>
-        <div className="flex items-center gap-1.5">
+      <td role="cell" data-label="Evaluator">
+        <div className="flex flex-wrap items-center gap-1.5">
           <VerdictChip verdict={exception.verdict} />
           {provisional ? <ProvChip /> : null}
         </div>
@@ -105,7 +112,7 @@ export function ExceptionQueueRow({
           </div>
         ) : null}
       </td>
-      <td>
+      <td role="cell" data-label="Judge note">
         <div
           id={noteId}
           className={cn(
@@ -122,12 +129,13 @@ export function ExceptionQueueRow({
           </div>
         ) : null}
       </td>
-      <td>
-        <div className="flex justify-end gap-1">
+      <td role="cell" data-label="Actions">
+        <div className="flex flex-wrap justify-start gap-1 md:justify-end">
           {hasNote ? <Button
             type="button"
             variant="ghost"
             size="xs"
+            className="min-h-10 md:min-h-0"
             aria-expanded={expanded}
             aria-controls={noteId}
             onClick={(event) => {
@@ -139,16 +147,14 @@ export function ExceptionQueueRow({
             {expanded ? "Hide note" : "Full note"}
           </Button> : null}
           <Button
-            type="button"
+            asChild
             variant="default"
             size="xs"
-            aria-label={`Review ${exception.title}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onReview();
-            }}
+            className="min-h-10 md:min-h-0"
           >
-            Review <ArrowRight />
+            <Link to={caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)} aria-label={`Review ${exception.title}`} onClick={(event) => event.stopPropagation()}>
+              Review <ArrowRight />
+            </Link>
           </Button>
         </div>
       </td>
@@ -312,9 +318,9 @@ export function ExceptionsScreen() {
             </span>
           }
           cta={
-            <Button size="sm" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
+            <Button size="sm" asChild><Link to={contextualHref(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill", location.search)}>
               {dashboard?.viewerRole === "owner" ? "Open rubric alongside" : "View evaluator"}
-            </Button>
+            </Link></Button>
           }
         />
       ) : null}
@@ -330,14 +336,9 @@ export function ExceptionsScreen() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => {
-                // The filtered list rides along as state; the legacy
-                // ?cluster= category key survives refresh/deep links.
-                const q = category !== ALL_CATEGORIES ? `?cluster=${encodeURIComponent(category)}` : "";
-                navigate(`/review${q}`, { state: { caseIds: list.map((ex) => ex.id) } });
-              }}
+              asChild
             >
-              Review all {list.length} <ArrowRight />
+              <Link to={queueReviewUrl(list, location.search, category !== ALL_CATEGORIES ? category : null)}>Review all {list.length} <ArrowRight /></Link>
             </Button>
           ) : null
         }
@@ -355,11 +356,11 @@ export function ExceptionsScreen() {
           </div>
           <div className="flex-1" />
           {category !== ALL_CATEGORIES && list.length > 0 ? (
-            <Button variant="ghost" size="sm" onClick={() => setQueueModalOpen(true)}>
+            <Button className="h-auto min-h-8 max-w-full whitespace-normal" variant="ghost" size="sm" onClick={() => setQueueModalOpen(true)}>
               <Inbox /> Save this category as a queue · {list.length}
             </Button>
           ) : null}
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {VERDICT_OPTIONS.map((v) => (
               <FilterChip key={v} active={v === verdict} onClick={() => setVerdict(v)}>
                 {v}
@@ -389,9 +390,9 @@ export function ExceptionsScreen() {
               </CardDescription>
             </div>
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={() => navigate("/reliability")}>
+            <Button variant="ghost" size="sm" asChild><Link to={contextualHref("/reliability", location.search)}>
               Compare and resolve <ArrowRight />
-            </Button>
+            </Link></Button>
           </CardHeader>
           <Table>
             <tbody>
@@ -468,33 +469,29 @@ export function ExceptionsScreen() {
             </div>
           </div>
         ) : (
-          <Table className="table-fixed">
-            <thead>
-              <tr>
-                <th style={{ width: 240 }}>Case</th>
-                <th style={{ width: 150 }}>Judge category</th>
-                <th style={{ width: 110 }}>Evaluator</th>
-                <th>Judge note</th>
-                <th style={{ width: 160 }}></th>
+          <Table className="ledger-stacked table-fixed" role="table" aria-label="Waiting cases">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader" style={{ width: 240 }}>Case</th>
+                <th scope="col" role="columnheader" style={{ width: 150 }}>Judge category</th>
+                <th scope="col" role="columnheader" style={{ width: 110 }}>Evaluator</th>
+                <th scope="col" role="columnheader">Judge note</th>
+                <th scope="col" role="columnheader" style={{ width: 160 }}></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {list.map((ex) => (
                 <ExceptionQueueRow
                   key={ex.id}
                   exception={ex}
                   provisional={stage === "provisional"}
                   onOpen={() =>
-                    navigate(`/cases/${ex.id}`, {
+                    navigate(exceptionCaseHref(ex, location.search), {
                       state: { backTo: "/exceptions", backLabel: "Back to queue" }
                     })
                   }
                   onCategory={updateCategory}
-                  onReview={() =>
-                    navigate(caseReviewUrl(ex.id, ex.capabilityGap), {
-                      state: { caseIds: [ex.id] }
-                    })
-                  }
+                  search={location.search}
                 />
               ))}
             </tbody>
@@ -607,7 +604,7 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-6 items-center rounded-sm border px-2 text-[11.5px] transition-colors cursor-pointer",
+        "inline-flex min-h-8 max-w-full items-center whitespace-normal rounded-sm border px-2 text-[11.5px] transition-colors cursor-pointer",
         active
           ? "border-ink bg-ink text-paper"
           : "border-rule-soft bg-transparent text-ink-2 hover:bg-paper-3"

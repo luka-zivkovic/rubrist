@@ -11,6 +11,7 @@ const Element = ({ children, ...props }: { children?: unknown }) =>
   createElement("div", props, children as never);
 
 vi.mock("react-router-dom", () => ({
+  useLocation: () => ({ search: "" }),
   Link: ({ children, to }: { children?: unknown; to: string }) =>
     createElement("a", { href: to }, children as never),
   useNavigate: () => vi.fn()

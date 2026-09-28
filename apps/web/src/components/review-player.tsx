@@ -171,6 +171,7 @@ export function ReviewPlayer({
             </MarginNote>
           ) : null}
           <TraceDetail
+            headingAs="h2"
             key={`${current.key}:${detail.judgeRun.id}`}
             detail={detail}
             shortcuts={shortcuts}
@@ -208,14 +209,14 @@ function Topbar({
   return (
     <div className="sticky top-0 z-10 -mx-5 -mt-7 mb-6 border-b border-rule-soft bg-paper/85 px-5 pt-3 pb-3 backdrop-blur sm:-mx-8 sm:px-8 xl:-mx-12 xl:-mt-9 xl:px-12">
       <div className="flex flex-wrap items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
+        <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
+          <div className="flex flex-wrap items-baseline gap-2">
             <Eyebrow>{eyebrow}</Eyebrow>
-            {idTag ? <span className="font-mono text-[10.5px] text-ink-3">· {idTag}</span> : null}
+            {idTag ? <span className="min-w-0 break-all font-mono text-[10.5px] text-ink-3">· {idTag}</span> : null}
           </div>
-          <div className="mt-0.5 truncate font-serif text-[16px] font-medium tracking-[-0.012em]">
+          <h1 aria-label={`Case ${cursor + 1} of ${total} · ${name}`} className="mt-0.5 break-words font-serif sm:truncate text-[16px] font-medium tracking-[-0.012em]">
             {name}
-          </div>
+          </h1>
           <div className="mt-1.5 flex items-center gap-3">
             <div className="h-[3px] flex-1 max-w-[420px] rounded-sm bg-paper-3">
               <div className="h-full rounded-sm bg-ink" style={{ width: `${pct}%` }} />
@@ -249,14 +250,14 @@ function NavStrip({
   onNext: () => void;
 }) {
   return (
-    <div className="mb-4 flex items-center gap-3 border-b border-rule-soft pb-3">
+    <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-rule-soft pb-3">
       <Button variant="ghost" size="sm" disabled={cursor === 0} onClick={onPrev}>
         <ChevronLeft /> Prev
       </Button>
       <Button variant="default" size="sm" disabled={cursor >= items.length - 1} onClick={onNext}>
         Next <ArrowRight />
       </Button>
-      <div className="ml-2 flex flex-1 flex-wrap items-center gap-[3px]">
+      <div className="ml-2 flex min-w-0 flex-1 flex-wrap items-center gap-[3px]">
         {items.map((item, i) => {
           const isCurrent = i === cursor;
           const cls = isCurrent ? "bg-ink" : item.completed ? "bg-ink-2" : "bg-rule-soft group-hover:bg-gold";

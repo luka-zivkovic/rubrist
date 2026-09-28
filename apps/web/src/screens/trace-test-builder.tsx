@@ -1,3 +1,4 @@
+import { contextualHref } from "../lib/route-metadata.js";
 import {
   useEffect,
   useMemo,
@@ -97,9 +98,9 @@ export function TraceTestBuilderScreen() {
   const navigate = useNavigate();
   const { selectedCriterionId } = useCriterion();
   const { dashboard } = useDashboard();
-  const skillVersionId = dashboardSkillVersionId(dashboard);
+  const skillVersionId = searchParams.get("skillVersionId") || dashboardSkillVersionId(dashboard);
   const routeState = (location.state ?? {}) as { backTo?: string; backLabel?: string };
-  const backTo = routeState.backTo ?? (caseId ? `/cases/${caseId}` : "/traces");
+  const backTo = routeState.backTo ?? contextualHref(caseId ? `/cases/${caseId}` : "/traces", location.search, ["from", "skillVersionId", "criterionVersionId"]);
   const backLabel = routeState.backLabel ?? "Back to conversation";
   const requestedDraftId = searchParams.get("draft");
 

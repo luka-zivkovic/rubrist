@@ -1100,6 +1100,15 @@ findings but were not in the open questions.
 
 ## Implementation status
 
+CURRENT update, 2026-09-28: wave 1 stages the full waiting count and the
+exact-version sign-off hold/confirmation (O12/O14). See
+[evidence counts](evidence-counts-closeout.md) and
+[feedback recovery](provisional-feedback-closeout.md). G1 is resolved by
+PostgreSQL tests with injected upstream writers; no real upstream feedback
+was sent during verification. Wave 2 addresses S1–S3, S4's breadcrumb, S6,
+and O10; integration/browser verification is pending. The earlier PR #159
+snapshot below is retained as history, not the latest completion claim.
+
 As of PR #159 (slice 1, "missing evidence never reads as a result"). The finding
 above keeps its as-audited text; this section records what changed in CURRENT
 behavior since `2c82321`.

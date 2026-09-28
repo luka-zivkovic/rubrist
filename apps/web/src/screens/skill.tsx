@@ -139,7 +139,7 @@ export function SkillScreen() {
       </details>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="flex flex-col gap-1 border-b border-rule-soft pb-4 lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
+        <aside className="order-2 flex flex-col gap-1 border-b border-rule-soft pb-4 lg:order-1 lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
           <Eyebrow>Skill</Eyebrow>
           {(typedQuestion ? TYPED_TABS : TABS).map((t) => (
             <button
@@ -184,7 +184,7 @@ export function SkillScreen() {
           </div>
         </aside>
 
-        <div className="min-w-0">
+        <div className="order-1 min-w-0 lg:order-2">
           {shownTab === "question" && typedQuestion ? <TypedQuestionView question={typedQuestion} threshold={v.decisionThreshold} /> : null}
           {shownTab === "rubric" ? <RubricView markdown={v.rubricMarkdown ?? ""} /> : null}
           {shownTab === "prompt" ? <PromptView prompt={v.prompt ?? ""} rubricMarkdown={v.rubricMarkdown ?? ""} /> : null}

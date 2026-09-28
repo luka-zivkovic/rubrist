@@ -323,20 +323,20 @@ export function CompareVersionsScreen() {
                 </>
               ) : null}
             </CardHeader>
-            <Table>
-              <thead>
-                <tr>
-                  <th style={{ width: 180 }}>Run</th>
-                  <th style={{ width: 170 }}>Regression check</th>
-                  <th style={{ width: 170 }}>Pinned corpus</th>
-                  <th style={{ width: 100 }} className="text-right">Regressed</th>
-                  <th style={{ width: 100 }} className="text-right">Improved</th>
-                  <th>On the record</th>
+            <Table className="ledger-stacked" role="table" aria-label="Recorded comparison runs">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col" role="columnheader" style={{ width: 180 }}>Run</th>
+                  <th scope="col" role="columnheader" style={{ width: 170 }}>Regression check</th>
+                  <th scope="col" role="columnheader" style={{ width: 170 }}>Pinned corpus</th>
+                  <th scope="col" role="columnheader" style={{ width: 100 }} className="text-right">Regressed</th>
+                  <th scope="col" role="columnheader" style={{ width: 100 }} className="text-right">Improved</th>
+                  <th scope="col" role="columnheader">On the record</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {steps === null ? (
-                  <tr>
+                  <tr role="row">
                     <td colSpan={6} className="text-center text-ink-3">Loading recorded runs…</td>
                   </tr>
                 ) : (
@@ -347,36 +347,37 @@ export function CompareVersionsScreen() {
                     const measured = run !== null && runCompared(run);
                     return (
                       <tr
+                        role="row"
                         key={version.id}
                         className="row-link"
                         onClick={() => navigate(`/skill/versions/${version.id}`)}
                       >
-                        <td>
+                        <td role="cell" data-label="Run">
                           <RowLink to={`/skill/versions/${version.id}`} className="font-mono">
                             v{version.version}
                           </RowLink>
                         </td>
-                        <td>
+                        <td role="cell" data-label="Regression check">
                           <GateChip
                             state={gateStateForVersion(version, chainStepRun(step))}
                             title={version.knownLimitations.join(" · ")}
                           />
                         </td>
-                        <td
+                        <td role="cell" data-label="Pinned corpus"
                           className="font-mono text-[10px] text-ink-3"
                           title={run?.datasetRevisionId ?? version.regressionDatasetRevisionId ?? undefined}
                         >
                           {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId)?.slice(0, 18) ?? "not pinned"}
                           {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId) ? "…" : ""}
                         </td>
-                        <td
-                          className="text-right font-mono tabular-nums"
+                        <td role="cell" data-label="Regressed"
+                          className="text-left font-mono md:text-right tabular-nums"
                           style={measured && run.regressed ? { color: "var(--signal)" } : undefined}
                         >
                           {measured ? run.regressed : "—"}
                         </td>
-                        <td className="text-right font-mono tabular-nums">{measured && totals?.improvementsCountedBySave[index] ? run.improved : "—"}</td>
-                        <td className="text-[12.5px] text-ink-3">
+                        <td role="cell" data-label="Improved" className="text-left font-mono md:text-right tabular-nums">{measured && totals?.improvementsCountedBySave[index] ? run.improved : "—"}</td>
+                        <td role="cell" data-label="On the record" className="text-[12.5px] text-ink-3">
                           {step.status === "failed" ? (
                             <span className="text-signal">
                               Couldn't load this save's run · {step.error}

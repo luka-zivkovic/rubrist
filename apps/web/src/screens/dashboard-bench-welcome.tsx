@@ -18,6 +18,7 @@ export function DashboardBenchWelcome({ dashboard, canPairAgent }: DashboardBenc
 
   return (
     <div className="fadeUp max-w-[1760px]">
+      <FirstProjectKeyCard project={project} className="mb-5" />
       <SectionHead
         eyebrow="New project · no runs yet"
         title="Get your first Check result"
@@ -28,7 +29,6 @@ export function DashboardBenchWelcome({ dashboard, canPairAgent }: DashboardBenc
         <FirstRunSetupLedger dashboard={dashboard} />
 
         <div className="min-w-0 flex flex-col gap-4">
-          <FirstProjectKeyCard project={project} />
           {canPairAgent ? <AgentSetupPairingCard emphasizeAction={false} /> : null}
 
           <Card className="bg-paper-2">

@@ -707,3 +707,16 @@ These are design decisions for implementing this audit, not product authority.
 3. Traces list and import.
 4. Analyze and Human truth, which needs Postgres 17.
 5. Settings.
+
+
+## Implementation status
+
+CURRENT update, 2026-09-28: wave 1 stages full waiting counts, exact historical
+criterion/evaluator pins, complete readable case evidence, and explicit
+recorded TypeSafe model/question/probability context. See
+[evidence counts](evidence-counts-closeout.md),
+[historical review](historical-review-closeout.md), and
+[readable evidence](2026-09-28-readable-evidence.md). These bounded fixes do
+not complete slice 6. Wave 2 addresses T5/T9/T10 and makes the queue's own
+error recovery reachable; integration/browser verification is pending.
+Vocabulary/display proposals remain deferred under G2.
