@@ -726,7 +726,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {!effectiveRuling ? (
                   <Button
-                    className="h-auto min-h-11 w-full justify-start whitespace-normal border-rule bg-card-2 px-3 py-2 text-left text-ink hover:bg-paper-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal border-blue-200 bg-blue-50 px-3 py-2 text-left text-ink hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:border-blue-400/25 dark:bg-blue-500/10 dark:hover:bg-blue-500/15 [&_svg]:text-blue-700 dark:[&_svg]:text-blue-300"
                     onClick={() => void handleAccept()}
                     disabled={submitting}
                   >
@@ -738,7 +738,7 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
                   </Button>
                 ) : null}
                 <Button
-                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-rule bg-transparent px-3 py-2 text-left text-ink hover:bg-paper-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  className="h-auto min-h-11 w-full justify-start whitespace-normal border-amber-200 bg-amber-50 px-3 py-2 text-left text-ink hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:border-amber-400/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/15 [&_svg]:text-amber-800 dark:[&_svg]:text-amber-300"
                   onClick={openReviewForm}
                   disabled={submitting}
                 >
