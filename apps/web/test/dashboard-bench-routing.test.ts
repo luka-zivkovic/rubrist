@@ -148,3 +148,26 @@ describe("Skill Bench dashboard routing", () => {
     expect(html).toContain("bench-welcome");
   });
 });
+
+
+it("shows the full backlog while distinguishing the loaded review batch", async () => {
+  const { DashboardScreen } = await import("../src/screens/dashboard.js");
+  state.dashboard = productionBench({ judged: 200, golden: 5 });
+  state.dashboard.exceptionsTotal = 137;
+  state.dashboard.exceptions = Array.from({ length: 50 }, (_, index) => ({
+    id: `case_${index}`, title: `Case ${index}`, traceId: `trace_${index}`,
+    verdict: "fail" as const, reason: "A failure", createdAt: "2026-09-01T00:00:00Z",
+    capabilityGap: null, rejudgedSince: null
+  }));
+  const html = renderToStaticMarkup(createElement(DashboardScreen));
+  expect(html).toContain("137 are waiting on a person");
+  expect(html).toMatch(/Showing 5 of 137 waiting cases/);
+  expect(html).toMatch(/Review 50 loaded cases/);
+  expect(html).not.toContain("Review all 50");
+  expect(html).not.toContain("50 are waiting on a person");
+
+  delete state.dashboard.exceptionsTotal;
+  const unknown = renderToStaticMarkup(createElement(DashboardScreen));
+  expect(unknown).toContain("Review backlog total unavailable");
+  expect(unknown).not.toContain("50 are waiting on a person");
+});

@@ -335,7 +335,7 @@ export function ExceptionsScreen() {
       ) : null}
 
       <SectionHead
-        eyebrow={`Exception queue · ${exceptions.length} waiting${
+        eyebrow={`Exception queue · ${dashboard.exceptionsTotal ?? "Total unavailable"}${dashboard.exceptionsTotal === undefined ? "" : " waiting"}${
           resolved !== null ? ` · ${resolvedTotal} resolved this week` : ""
         }`}
         title="Cases that need human review"
@@ -455,16 +455,21 @@ export function ExceptionsScreen() {
         </Card>
       ) : null}
 
+      <p className="mb-4 text-sm text-ink-2">
+        Showing {exceptions.length} of {dashboard.exceptionsTotal ?? "an unknown number of"} waiting cases.
+        {" "}Filters apply to these loaded cases. The queue loads up to 50 at a time, newest flagged first.
+        {" "}After reviewing cases, return to the queue to load the next waiting cases.
+      </p>
       <Card className="mb-4">
         <CardHeader>
           <div>
             <CardTitle>Waiting on a human</CardTitle>
             <CardDescription>
               {list.length > 0
-                ? `${list.length} ${list.length === 1 ? "case matches" : "cases match"} the current filters. Expand the evaluator note here, or open Review to read the full trace and guide before recording a ruling.`
+                ? `${list.length} ${list.length === 1 ? "case matches" : "cases match"} the current filters among the loaded cases. Expand the evaluator note here, or open Review to read the full trace and guide before recording a ruling.`
                 : exceptions.length === 0
                   ? "No cases are waiting for a ruling. Resolved cases remain available in the history below."
-                  : "No cases match the current filters. Change a filter to see the rest of the queue."}
+                  : "No loaded cases match the current filters. Change a filter to see the other loaded cases."}
             </CardDescription>
           </div>
         </CardHeader>

@@ -341,7 +341,7 @@ export function CompareVersionsScreen() {
                     <td colSpan={6} className="text-center text-ink-3">Loading recorded runs…</td>
                   </tr>
                 ) : (
-                  steps.map((step) => {
+                  steps.map((step, index) => {
                     const { version } = step;
                     const run = step.status === "recorded" ? step.run : null;
                     // A failed or empty check recorded zeros it never measured.
@@ -376,7 +376,7 @@ export function CompareVersionsScreen() {
                         >
                           {measured ? run.regressed : "—"}
                         </td>
-                        <td className="text-right font-mono tabular-nums">{measured ? run.improved : "—"}</td>
+                        <td className="text-right font-mono tabular-nums">{measured && totals?.improvementsCountedBySave[index] ? run.improved : "—"}</td>
                         <td className="text-[12.5px] text-ink-3">
                           {step.status === "failed" ? (
                             <span className="text-signal">

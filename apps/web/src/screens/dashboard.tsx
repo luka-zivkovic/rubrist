@@ -163,7 +163,7 @@ export function DashboardScreen() {
   const bench = isBench(project);
   const importedTotal = project.importedTraceCount;
   const autoJudged = dashboard.currentVersionResultCount;
-  const exceptionsTotal = exceptions.length;
+  const exceptionsTotal = dashboard.exceptionsTotal ?? null;
   const syncBackPct = Math.round(project.syncBackCoverage * 100);
   const agreement = skill.currentVersion.goldenSetAgreement;
   const agreementPct = agreement == null ? null : Math.round(agreement * 100);
@@ -207,7 +207,7 @@ export function DashboardScreen() {
         The Check evaluated {autoJudged.toLocaleString()} of {importedTotal.toLocaleString()}{" "}
         {bench ? "supplied examples" : "traces"}.{" "}
         <Link className="border-b border-ink-3 text-inherit no-underline hover:border-ink" to="/exceptions">
-          {exceptionsTotal} {exceptionsTotal === 1 ? "is" : "are"} waiting on a person
+          {exceptionsTotal === null ? "Review backlog total unavailable" : `${exceptionsTotal} ${exceptionsTotal === 1 ? "is" : "are"} waiting on a person`}
         </Link>
         {legacyHumanChecked !== null ? (
           <>
@@ -255,7 +255,7 @@ export function DashboardScreen() {
         />
         <KPI
           label="Exceptions"
-          num={exceptionsTotal}
+          num={exceptionsTotal ?? "—"}
           delta={exceptionsTotal === 0 ? "queue clear" : "Waiting on a reviewer"}
           deltaKind={exceptionsTotal === 0 ? "default" : "signal"}
           foot="Humans next"
@@ -327,18 +327,18 @@ export function DashboardScreen() {
             <div>
               <CardTitle>Check categories</CardTitle>
               <CardDescription>
-                Exact failure categories supplied by the Check. They filter cases; they do not imply similarity.
+                Exact failure categories supplied by the Check, counted within the loaded cases. They filter those cases; they do not imply similarity.
               </CardDescription>
             </div>
             <div className="flex-1" />
-            <div className="font-mono text-[11px] text-ink-3">current run</div>
+            <div className="font-mono text-[11px] text-ink-3">loaded queue</div>
           </CardHeader>
           <Table>
             <thead>
               <tr>
                 <th>Category</th>
                 <th style={{ width: 80 }}>Cases</th>
-                <th>Queue volume</th>
+                <th>Loaded queue volume</th>
               </tr>
             </thead>
             <tbody>
@@ -437,7 +437,7 @@ export function DashboardScreen() {
         <CardHeader>
           <div>
             <CardTitle>Exceptions waiting</CardTitle>
-            <CardDescription>Cases the evaluator marked failed or ambiguous, or sent for human review.</CardDescription>
+            <CardDescription>Showing {Math.min(exceptions.length, 5)} of {exceptionsTotal ?? "an unknown number of"} waiting cases. The review queue loads up to 50 at a time.</CardDescription>
           </div>
           <div className="flex-1" />
           {exceptions.length > 0 ? (
@@ -446,7 +446,7 @@ export function DashboardScreen() {
               size="sm"
               onClick={() => navigate("/review", { state: { caseIds: exceptions.map((ex) => ex.id) } })}
             >
-              Review all {exceptions.length} <ArrowRight />
+              Review {exceptions.length} loaded cases <ArrowRight />
             </Button>
           ) : null}
           <Button variant="default" size="sm" onClick={() => navigate("/exceptions")}>
