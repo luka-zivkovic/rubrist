@@ -422,6 +422,16 @@ A later draft does not rewrite or disable the last enabled revision.
 
 ## Authorization boundaries
 
+CURRENT settings use Project, Connections and Your account sections. GET
+`/api/project/settings` supplies a required session-scoped `viewerRole` alongside
+persisted settings, without a dashboard/criterion lookup; missing access metadata
+fails closed. Member and demo views are read-only. Trace retention saves the
+period separately from confirmed manual deletion; production records retain
+their separate controls. Credential changes serialize within each card. Drafts,
+pending actions and uncopied one-time keys guard navigation, refresh and project
+switching before the request's stored project pin changes. Sign-out freezes forms
+until completion. Existing mutation authorization remains authoritative.
+
 Session-authenticated `/api/*` routes resolve a project membership before accessing project data. Owner-only operations include invitations, credential management, retention changes, destructive project actions, gate overrides, and binary-calibration launch. `/api/v1/*` judge routes use project-scoped API keys instead of browser sessions. Binary-calibration artifact and current-status reads are an explicit exception to that path convention: they require a project-owner browser session and reject project API keys and member sessions.
 
 ## Database migrations

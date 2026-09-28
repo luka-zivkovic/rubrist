@@ -27,6 +27,12 @@ export const ProjectSettingsSchema = z.object({
 });
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 
+// Session-scoped access metadata; never persisted as project configuration.
+export const ProjectSettingsViewSchema = ProjectSettingsSchema.extend({
+  viewerRole: z.enum(["owner", "member"])
+});
+export type ProjectSettingsView = z.infer<typeof ProjectSettingsViewSchema>;
+
 export const UpdateProjectSettingsInputSchema = z.object({
   traceRetentionDays: z.number().int().positive().max(3650).nullable(),
   mode: ProjectModeSchema.optional()

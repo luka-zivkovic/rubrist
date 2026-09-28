@@ -1,3 +1,4 @@
+import { confirmProjectSwitch } from "../lib/project-switch.js";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -25,7 +26,7 @@ function useCreateProject(onCreated?: () => void) {
   const [mode, setMode] = useState<ProjectMode | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingProject, setPendingProject] = useState<{ projectId: string; apiKey: CreatedApiKey } | null>(null);
+  const [pendingProject, setPendingProject] = useState<{ projectId: string; apiKey: CreatedApiKey | null; canDismiss: boolean } | null>(null);
 
   async function submit() {
     // Enter in the name field bypasses the disabled button — without this
@@ -51,7 +52,12 @@ function useCreateProject(onCreated?: () => void) {
       // acknowledges the key, or the old dashboard would issue requests for
       // the newly-created project while this notice is still on screen.
       if (apiKey && !rememberFirstProjectKey(projectId, apiKey)) {
-        setPendingProject({ projectId, apiKey });
+        setPendingProject({ projectId, apiKey, canDismiss: false });
+        setBusy(false);
+        return;
+      }
+      if (!confirmProjectSwitch()) {
+        setPendingProject({ projectId, apiKey, canDismiss: true });
         setBusy(false);
         return;
       }
@@ -75,6 +81,10 @@ function useCreateProject(onCreated?: () => void) {
 
   function continueAfterSavingKey() {
     if (!pendingProject) return;
+    // This button acknowledges saving the key even if the subsequent switch is
+    // cancelled. The user must then be able to return to their original draft.
+    setPendingProject({ ...pendingProject, canDismiss: true });
+    if (!confirmProjectSwitch()) return;
     selectProject(pendingProject.projectId);
     window.location.assign("/");
   }
@@ -87,9 +97,8 @@ function createCta(mode: ProjectMode | null, busy: boolean): string {
   return busy ? PROJECT_TASK_COPY[mode].busyCta : PROJECT_TASK_COPY[mode].cta;
 }
 
-// Rendered only when sessionStorage is unavailable: the one moment this
-// active credential's plaintext exists client-side. Copy, then continue
-// (the button renders only where this notice is the whole screen).
+// Retain the new key when storage is unavailable or a project switch was
+// cancelled. The server stores only its hash; copy before continuing.
 export function OneTimeKeyNotice({ apiKey, onContinue }: { apiKey: CreatedApiKey; onContinue?: () => void }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -97,8 +106,8 @@ export function OneTimeKeyNotice({ apiKey, onContinue }: { apiKey: CreatedApiKey
     <div className="flex flex-col gap-2 rounded-sm border border-gold-tint bg-ambig-bg px-3 py-2.5">
       <div className="text-[12.5px] font-medium text-ink">Copy your project API key now</div>
       <div className="text-[11.5px] leading-[1.5] text-ink-3">
-        The project was created and this key is live, but your browser blocks the storage that would show it
-        again on the next screen. Only its hash is stored server-side — this is the one time it can be shown.
+        The project was created and this key is live. Copy it before continuing; only its hash is stored
+        server-side, so it cannot be retrieved later.
       </div>
       <div className="flex items-center gap-2 rounded-sm border border-rule bg-card px-2.5 py-2">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-[11px] text-ink">{apiKey.key}</code>
@@ -137,7 +146,7 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
     pendingProject,
     continueAfterSavingKey
   } = useCreateProject();
-  const dismissible = pendingProject === null;
+  const dismissible = pendingProject === null || pendingProject.canDismiss;
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose,
     closeOnEscape: dismissible && !busy
@@ -173,7 +182,11 @@ export function NewProjectModal({ onClose }: { onClose: () => void }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-3.5">
           {pendingProject ? (
-            <OneTimeKeyNotice apiKey={pendingProject.apiKey} onContinue={continueAfterSavingKey} />
+            <>
+              {pendingProject.apiKey ? <OneTimeKeyNotice apiKey={pendingProject.apiKey} onContinue={continueAfterSavingKey} />
+                : <Button onClick={continueAfterSavingKey}>Project created — continue</Button>}
+              {pendingProject.canDismiss ? <Button variant="ghost" onClick={onClose}>Stay in current project</Button> : null}
+            </>
           ) : (
             <>
               <ProjectTaskFields mode={mode} setMode={setMode} name={name} setName={setName} onEnter={() => void submit()} />
@@ -222,7 +235,8 @@ export function NoProjectLanding() {
       <Card className="mt-5">
         <CardContent className="flex flex-col gap-3.5 py-4">
           {pendingProject ? (
-            <OneTimeKeyNotice apiKey={pendingProject.apiKey} onContinue={continueAfterSavingKey} />
+            pendingProject.apiKey ? <OneTimeKeyNotice apiKey={pendingProject.apiKey} onContinue={continueAfterSavingKey} />
+              : <Button onClick={continueAfterSavingKey}>Project created — continue</Button>
           ) : (
             <>
               <ProjectTaskFields mode={mode} setMode={setMode} name={name} setName={setName} onEnter={() => void submit()} />

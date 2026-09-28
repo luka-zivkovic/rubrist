@@ -62,7 +62,7 @@ describe("accessibility foundations", () => {
       "components/project-create.tsx",
       "screens/integrations.tsx",
       "screens/reliability.tsx",
-      "screens/settings.tsx",
+      "screens/settings/delete-confirm.tsx",
       "screens/review-queues.tsx",
       ...webExtractionContracts.datasets.dialogSources,
       ...webExtractionContracts["trace-test-builder"].dialogSources

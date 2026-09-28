@@ -43,6 +43,7 @@ import {
   ProjectModeSchema,
   ProjectSchema,
   ProjectSettingsSchema,
+  ProjectSettingsViewSchema,
   RetentionPruneResultSchema,
   UpdateProjectSettingsInputSchema
 } from "./projects.js";
@@ -51,6 +52,7 @@ import type {
   Project,
   ProjectMode,
   ProjectSettings,
+  ProjectSettingsView,
   RetentionPruneResult,
   UpdateProjectSettingsInput
 } from "./projects.js";
@@ -116,6 +118,7 @@ export {
   ProjectModeSchema,
   ProjectSchema,
   ProjectSettingsSchema,
+  ProjectSettingsViewSchema,
   RUBRIC_TEMPLATE_VARIABLE,
   RetentionPruneResultSchema,
   evaluatorAuthorship,
@@ -156,6 +159,7 @@ export type {
   Project,
   ProjectMode,
   ProjectSettings,
+  ProjectSettingsView,
   RetentionPruneResult,
   RubricProvenance,
   Skill,
