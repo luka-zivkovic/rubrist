@@ -49,23 +49,19 @@ export interface SessionReceiptState {
   promote: number;
 }
 
-function exceptionCaseHref(exception: ExceptionCase, search: string): string {
-  const params = new URLSearchParams({ from: "exceptions" });
-  if (exception.criterionVersionId) params.set("criterionVersionId", exception.criterionVersionId);
-  return contextualHref(`/cases/${exception.id}?${params}`, search);
-}
-
 export function ExceptionQueueRow({
   exception,
   provisional,
   onOpen,
   search = "",
+  reviewHref,
   onCategory
 }: {
   exception: ExceptionCase;
   provisional: boolean;
   onOpen: () => void;
   search?: string;
+  reviewHref?: string;
   onCategory: (category: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -77,7 +73,7 @@ export function ExceptionQueueRow({
       <td role="cell" data-label="Case">
         <div className="flex min-w-[180px] items-center">
           <RowLink
-            to={exceptionCaseHref(exception, search)}
+            to={reviewHref ?? caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)}
             state={{ backTo: "/exceptions", backLabel: "Back to queue" }}
             title={exception.title}
             className="block min-w-0 max-w-[280px] flex-1 truncate font-medium"
@@ -152,7 +148,7 @@ export function ExceptionQueueRow({
             size="xs"
             className="min-h-10 md:min-h-0"
           >
-            <Link to={caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)} aria-label={`Review ${exception.title}`} onClick={(event) => event.stopPropagation()}>
+            <Link to={reviewHref ?? caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)} aria-label={`Review ${exception.title}`} onClick={(event) => event.stopPropagation()}>
               Review <ArrowRight />
             </Link>
           </Button>
@@ -179,7 +175,12 @@ export function ExceptionsScreen() {
   const categoryFromQuery = searchParams.get("cluster");
 
   const [category, setCategory] = useState<string>(categoryFromQuery ?? ALL_CATEGORIES);
-  const [verdict, setVerdict] = useState<string>(ALL_VERDICTS);
+  const [verdict, setVerdict] = useState<string>(() => { const value = searchParams.get("verdict"); return isVerdictLabel(value) ? value : ALL_VERDICTS; });
+  useEffect(() => {
+    setCategory(searchParams.get("cluster") ?? ALL_CATEGORIES);
+    const value = searchParams.get("verdict");
+    setVerdict(isVerdictLabel(value) ? value : ALL_VERDICTS);
+  }, [searchParams]);
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [resolved, setResolved] = useState<ResolvedDecision[] | null>(null);
   const [queueModalOpen, setQueueModalOpen] = useState(false);
@@ -362,7 +363,10 @@ export function ExceptionsScreen() {
           ) : null}
           <div className="flex flex-wrap gap-1.5">
             {VERDICT_OPTIONS.map((v) => (
-              <FilterChip key={v} active={v === verdict} onClick={() => setVerdict(v)}>
+              <FilterChip key={v} active={v === verdict} onClick={() => {
+                setVerdict(v);
+                setSearchParams((prev) => { const next = new URLSearchParams(prev); if (v === ALL_VERDICTS) next.delete("verdict"); else next.set("verdict", v); return next; }, { replace: true });
+              }}>
                 {v}
               </FilterChip>
             ))}
@@ -486,12 +490,13 @@ export function ExceptionsScreen() {
                   exception={ex}
                   provisional={stage === "provisional"}
                   onOpen={() =>
-                    navigate(exceptionCaseHref(ex, location.search), {
+                    navigate(queueReviewUrl(list, location.search, category !== ALL_CATEGORIES ? category : null, ex.id), {
                       state: { backTo: "/exceptions", backLabel: "Back to queue" }
                     })
                   }
                   onCategory={updateCategory}
                   search={location.search}
+                  reviewHref={queueReviewUrl(list, location.search, category !== ALL_CATEGORIES ? category : null, ex.id)}
                 />
               ))}
             </tbody>

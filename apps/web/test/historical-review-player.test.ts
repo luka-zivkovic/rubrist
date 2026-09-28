@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { act, cloneElement, createElement } from "react";
+import { act, cloneElement, createElement, useSyncExternalStore } from "react";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { ExceptionDetail } from "@rubrist/shared";
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
@@ -18,8 +18,20 @@ vi.mock("@/lib/dashboard-context", () => ({ useDashboard: () => dashboard }));
 vi.mock("@/lib/criterion-scope", async () => import("../src/lib/criterion-scope.js"));
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@/components/review-player", async () => import("../src/components/review-player.js"));
-const route = vi.hoisted(() => ({ id: "case_1", search: "", state: null as { caseIds: string[] } | null }));
-vi.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }: any) => createElement("a", { href: to, ...props }, children), useNavigate: () => vi.fn(), useParams: () => ({ id: route.id }), useSearchParams: () => [new URLSearchParams(route.search)], useLocation: () => ({ state: route.state, search: route.search }) }));
+const route = vi.hoisted(() => ({ setSearch: vi.fn(), navigate: vi.fn(), listeners: new Set<() => void>(), id: "case_1", search: "", state: null as { caseIds: string[] } | null }));
+vi.mock("react-router-dom", () => {
+  const updateRoute = (search: string) => { route.search = search; route.state = null; route.listeners.forEach((listener) => listener()); };
+  const navigate = (to: string, options?: unknown) => { route.navigate(to, options); updateRoute(to.includes("?") ? to.slice(to.indexOf("?")) : ""); };
+  return {
+    Link: ({ to, children, ...props }: any) => createElement("a", { href: to, ...props }, children),
+    useNavigate: () => navigate, useParams: () => ({ id: route.id }),
+    useSearchParams: () => {
+      const search = useSyncExternalStore((listener) => { route.listeners.add(listener); return () => { route.listeners.delete(listener); }; }, () => route.search);
+      return [new URLSearchParams(search), (update: (params: URLSearchParams) => URLSearchParams, options: unknown) => { route.setSearch(update, options); updateRoute("?" + update(new URLSearchParams(route.search))); }];
+    },
+    useLocation: () => { const search = useSyncExternalStore((listener) => { route.listeners.add(listener); return () => { route.listeners.delete(listener); }; }, () => route.search); return { state: route.state, search }; }
+  };
+});
 vi.mock("@/lib/exception-queue", async () => import("../src/lib/exception-queue.js"));
 vi.mock("@/components/view-in-ironside", () => ({ ViewInIronside: () => null }));
 vi.mock("@/lib/trace-test-flow", () => ({ intentForVerdict: () => "prevent" }));
@@ -39,6 +51,8 @@ vi.mock("@/components/ui/separator", () => ({
   Separator: (props: Record<string, unknown>) => createElement("hr", props)
 }));
 vi.mock("@/components/rubrist", () => ({
+  KPI: ({ label, num }: any) => createElement("div", null, `${label}: ${num}`),
+  KPIRow: ({ children }: any) => createElement("div", null, children),
   EmptyGlyph: () => null,
   EmptyShell: ({ title, body, primary, secondary }: any) => createElement("section", null, createElement("h1", null, title), body, primary, secondary),
   Eyebrow: ({ children, ...props }: { children?: unknown }) => createElement("span", props, children as never),
@@ -85,13 +99,20 @@ const detail: ExceptionDetail = {
   verdictHistory: [],
   goldenSetEntry: null
 };
+const savedRuling = { id: "human_new", skillVersionId: "skillv_1", source: "human", actorName: "Reviewer", payload: { kind: "categorical", choice: "fail", choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 }, rationale: "Accepted" }, createdAt: "2026-09-28T00:00:00Z" };
+function queueFixture(id: string, completed = false) {
+  return {
+    queue: { id, name: id, status: completed ? "completed" : "active", pendingCount: completed ? 0 : 1, completedCount: completed ? 1 : 0 },
+    items: [{ id: `${id}_item`, caseId: "case_1", criterionVersionId: "criterionv_1", position: 0, status: completed ? "completed" : "pending", createdAt: "2026-09-28T00:00:00Z" }]
+  };
+}
 const { ReviewPlayer } = await import("../src/components/review-player.js");
 const { CaseScreen } = await import("../src/screens/trace.js");
 const { ReviewScreen } = await import("../src/screens/review.js");
 const { QueueDetailScreen } = await import("../src/screens/queue-detail.js");
 let root: ReturnType<typeof createRoot> | undefined;
 afterAll(() => { dom.window.close(); vi.unstubAllGlobals(); });
-afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = ""; route.search = ""; route.state = null;
+afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = ""; route.search = ""; route.state = null; route.id = "case_1";
   dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } };
   dashboard.loading = false; dashboard.error = null; dashboard.errorStatus = null;
   vi.clearAllMocks(); });
@@ -104,6 +125,198 @@ async function mount(items = [{ key: "item_1", caseId: "case_1", criterionVersio
   return container;
 }
 describe("historical review player", () => {
+  it("opens the requested queue position and preserves its exact definition when navigating", async () => {
+    route.search = "criterionId=c1&at=item_2&cluster=scope";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = await mount([
+      { key: "item_1", caseId: "case_1", criterionVersionId: "old", completed: false },
+      { key: "item_2", caseId: "case_2", criterionVersionId: "other", completed: false }
+    ]);
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Prev")!.click());
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old");
+    const update = route.setSearch.mock.calls.at(-1)![0];
+    const params = update(new URLSearchParams(route.search));
+    expect(params.get("at")).toBe("item_1");
+    expect(params.get("criterionId")).toBe("c1");
+    expect(params.get("cluster")).toBe("scope");
+  });
+
+  it("canonicalizes a state-only selection before navigation drops router state", async () => {
+    route.state = { caseIds: ["case_1", "case_2"] };
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(new URLSearchParams(route.search).getAll("caseId")).toEqual(["case_1", "case_2"]);
+    expect(new URLSearchParams(route.search).get("criterionVersionId")).toBe("criterionv_1");
+    expect(route.state).toBeNull();
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Next")!.click());
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+  });
+
+  it("reopens the exact completed saved item from its position URL", async () => {
+    route.search = "at=item_2";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = await mount([
+      { key: "item_1", caseId: "case_1", criterionVersionId: "old", completed: true },
+      { key: "item_2", caseId: "case_2", criterionVersionId: "other", completed: true }
+    ]);
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+  });
+
+  it("skips the last case without a review write and keeps it visibly unfinished", async () => {
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = await mount();
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Skip for now")!.click());
+    expect(container.textContent).toContain("1 skipped this session; skipping does not record a ruling");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+  });
+
+  it("keeps save confirmation after advancing and can return to change that ruling", async () => {
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockResolvedValue({ id: "human_new", skillVersionId: "skillv_1", source: "human", actorName: "Reviewer", payload: { kind: "categorical", choice: "fail", choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 }, rationale: "Accepted" }, createdAt: "2026-09-28T00:00:00Z" });
+    const container = await mount([
+      { key: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", completed: false },
+      { key: "item_2", caseId: "case_2", criterionVersionId: "criterionv_1", completed: false }
+    ]);
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    expect(container.textContent).toContain("Case 1: ruling recorded");
+    expect(dashboard.refresh).toHaveBeenCalledTimes(1);
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Change ruling")!.click());
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1");
+    expect(container.querySelector("textarea")).not.toBeNull();
+    expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a destination queue failure instead of retaining the prior queue's loading state", async () => {
+    route.id = "queue_a";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.fetchReviewQueueDetail.mockResolvedValueOnce(queueFixture("queue_a")).mockRejectedValueOnce(new Error("Destination unavailable"));
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    expect(container.textContent).toContain("queue_a");
+    route.id = "queue_b";
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    expect(container.textContent).toContain("Could not load queue");
+    expect(container.textContent).toContain("Destination unavailable");
+    expect(container.textContent).not.toContain("Loading queue");
+    expect(container.textContent).not.toContain("Agree with evaluator");
+  });
+
+  it("does not apply a late saved ruling or progress reload to another queue", async () => {
+    route.id = "queue_a";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.fetchReviewQueueDetail.mockResolvedValueOnce(queueFixture("queue_a")).mockResolvedValueOnce(queueFixture("queue_b"));
+    let resolveSave!: (value: unknown) => void;
+    api.recordHumanVerdict.mockReturnValueOnce(new Promise((resolve) => { resolveSave = resolve; }));
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
+    route.id = "queue_b";
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    await act(async () => resolveSave(savedRuling));
+    expect(container.querySelector("h1")?.textContent).toContain("queue_b");
+    expect(container.textContent).not.toContain("ruling recorded");
+    expect(api.fetchReviewQueueDetail.mock.calls.map(([id]) => id)).toEqual(["queue_a", "queue_b"]);
+    expect(route.setSearch).not.toHaveBeenCalled();
+    expect(dashboard.refresh).not.toHaveBeenCalled();
+  });
+
+  it("preserves a saved ruling receipt when progress refresh fails and retries to the completed summary", async () => {
+    route.id = "queue_a";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
+    api.fetchReviewQueueDetail.mockResolvedValueOnce(queueFixture("queue_a"))
+      .mockRejectedValueOnce(new Error("Progress unavailable"))
+      .mockResolvedValueOnce(queueFixture("queue_a", true));
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    expect(container.textContent).toContain("Case 1: ruling recorded");
+    expect(container.textContent).toContain("queue progress could not refresh");
+    expect(container.textContent).not.toContain("Queue complete");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Retry queue progress")!.click());
+    expect(container.textContent).toContain("1 of 1 cases have a recorded ruling");
+    expect(container.textContent).toContain("Queue complete");
+    expect(container.textContent).not.toContain("queue progress could not refresh");
+    expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
+    expect(api.fetchReviewQueueDetail).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the original ad hoc selection and partial summary after a dashboard refresh removes reviewed cases", async () => {
+    route.state = { caseIds: ["case_1", "case_2"] };
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_after_edit", criterionVersionId: "criterionv_after_edit" } } };
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(new URLSearchParams(route.search).getAll("caseId")).toEqual(["case_1", "case_2"]);
+    expect(new URLSearchParams(route.search).get("criterionVersionId")).toBe("criterionv_1");
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Session summary")!.click());
+    expect(container.textContent).toContain("1 of 2 cases reviewed this session");
+    expect(container.textContent).toContain("1 cases were not reviewed in this session");
+    expect(container.textContent).toContain("Accepted: 1");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Continue reviewing")!.click());
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+    expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets session counts and receipt when the selected criterion changes", async () => {
+    route.search = "caseId=case_1&caseId=case_2&criterionVersionId=criterionv_1";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    expect(container.textContent).toContain("Case 1: ruling recorded");
+    route.search = "caseId=case_1&caseId=case_2&criterionVersionId=criterionv_2";
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2");
+    expect(container.textContent).not.toContain("ruling recorded");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Session summary")!.click());
+    expect(container.textContent).toContain("0 of 2 cases reviewed this session");
+    expect(container.textContent).toContain("Accepted: 0");
+    expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards an in-flight progress response from the queue left behind", async () => {
+    route.id = "queue_a";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
+    let resolveProgress!: (value: unknown) => void;
+    api.fetchReviewQueueDetail.mockResolvedValueOnce(queueFixture("queue_a"))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveProgress = resolve; }))
+      .mockResolvedValueOnce(queueFixture("queue_b"));
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    route.id = "queue_b";
+    await act(async () => root!.render(createElement(QueueDetailScreen)));
+    await act(async () => resolveProgress(queueFixture("queue_a", true)));
+    expect(container.querySelector("h1")?.textContent).toContain("queue_b");
+    expect(container.textContent).not.toContain("Queue complete");
+    expect(container.textContent).not.toContain("ruling recorded");
+    expect(api.fetchReviewQueueDetail.mock.calls.map(([id]) => id)).toEqual(["queue_a", "queue_a", "queue_b"]);
+  });
+
+  it("never interprets modified browser shortcuts as review actions", async () => {
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    await mount();
+    await act(async () => {
+      window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "a", metaKey: true }));
+      window.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "a", ctrlKey: true }));
+    });
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+  });
+
   it.each(["legacy URL", "router state", "partially pinned URL"])("offers recovery for %s when dashboard scope is unavailable", async (entry) => {
     route.search = entry === "legacy URL" ? "caseId=case_1"
       : entry === "partially pinned URL" ? "caseId=case_1&caseId=case_2&cv.0=old_definition" : "";
@@ -190,6 +403,7 @@ describe("historical review player", () => {
   });
 
   it("carries persisted item criterion pins through the queue screen, including two criteria on one case", async () => {
+    route.id = "queue_1";
     api.fetchCaseDetail.mockImplementation(async (_caseId, _version, criterionVersionId) => ({ ...detail, exception: { ...detail.exception, criterionVersionId } }));
     api.fetchReviewQueueDetail.mockResolvedValue({
       queue: { id: "queue_1", name: "Mixed criterion queue", pendingCount: 2, completedCount: 0 },

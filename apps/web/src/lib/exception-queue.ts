@@ -10,11 +10,14 @@ export function queueReviewUrl(
   cases: Array<{ id: string; criterionVersionId?: string | null | undefined }>,
   search = "",
   category?: string | null,
+  startCaseId?: string,
 ): string {
   const source = new URLSearchParams(search);
   const params = new URLSearchParams();
   if (source.has("criterionId")) params.set("criterionId", source.get("criterionId")!);
   if (category) params.set("cluster", category);
+  if (source.has("verdict")) params.set("verdict", source.get("verdict")!);
+  if (startCaseId && cases.some((item) => item.id === startCaseId)) params.set("at", startCaseId);
   const uniqueCases = [...new Map(cases.map((item) => [item.id, item])).values()];
   // Most queues share one definition. Index overrides keep even 50 distinct
   // pins below ordinary proxy request-line limits without repeating case IDs.

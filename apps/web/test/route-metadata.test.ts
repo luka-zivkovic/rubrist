@@ -28,9 +28,11 @@ describe("workspace location", () => {
   });
 
   it("preserves a filtered Review all selection and each recorded definition without router state", () => {
-    const href = queueReviewUrl([{ id: "a&b", criterionVersionId: "old / definition" }, { id: "second", criterionVersionId: "cv2" }], "?criterionId=c1&unrelated=discard", "Specific category");
+    const href = queueReviewUrl([{ id: "a&b", criterionVersionId: "old / definition" }, { id: "second", criterionVersionId: "cv2" }], "?criterionId=c1&verdict=fail&unrelated=discard", "Specific category", "second");
     const search = new URL(href, "https://rubrist.example").searchParams;
     expect(search.get("criterionId")).toBe("c1");
+    expect(search.get("verdict")).toBe("fail");
+    expect(search.get("at")).toBe("second");
     expect(search.get("cluster")).toBe("Specific category");
     expect(reviewCaseCriterionPin(search, "a&b")).toBe("old / definition");
     expect(reviewCaseCriterionPin(search, "second")).toBe("cv2");
