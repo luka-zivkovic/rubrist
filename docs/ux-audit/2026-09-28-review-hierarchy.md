@@ -63,9 +63,9 @@ The saved human ruling still takes visual precedence over model output.
 
 The review buttons now say “Agree with evaluator” with “Record PASS/FAIL/AMBIGUOUS
 as my ruling,” or “Disagree with evaluator” with “Choose a different ruling and
-explain why.” Agreement uses a filled blue button, so agreeing with a FAIL
-cannot be confused with a green pass action. Disagreement uses an amber edit
-button and opens the existing form without writing. The final form submission
+explain why.” Both actions now use compact neutral buttons, side by side where space permits
+and stacked on phones. Agreement names the recorded label; disagreement opens
+the existing form without writing. The final form submission
 names the selected ruling. The golden-set action sits below that form.
 
 Independent source review found no blocking issue. All 465 web tests passed,
@@ -88,3 +88,18 @@ Data fingerprints and the queue API view match the new pre-deployment baseline:
 three completed reviews and five pending. No human review was submitted and
 no provider was called during verification. The temporary tab is closed,
 developer tools are closed, and the original tab shows the update on case 4.
+
+
+## Quieter review controls
+
+CURRENT: after feedback that the saturated action buttons were too strong,
+`db983526d49c62fc860f51cb4e7cc36caec2ad75` replaces them with neutral theme
+surfaces, thin borders, smaller medium-weight text and less padding. Explicit
+action descriptions, minimum 44px touch targets, focus outlines, and green/red
+result colors remain. This is a seven-line styling change with no handler changes.
+
+Independent diff review cleared it; 26 focused tests and the production web
+build passed. Coolify activity 494 finished. Native browser checks confirmed
+side-by-side desktop buttons and stacked, unclipped controls at 390 CSS pixels
+in the user's dark theme. The temporary tab and developer tools were closed,
+returning the browser to the user's previously active tab. No review was submitted.
