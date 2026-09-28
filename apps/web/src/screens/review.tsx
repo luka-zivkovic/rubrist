@@ -1,3 +1,5 @@
+import { PageLoading } from "../components/page-loading.js";
+import { ApiUnavailableScreen } from "./system.js";
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -27,7 +29,7 @@ export function ReviewScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { dashboard, loading, error } = useDashboard();
+  const { dashboard, loading, error, errorStatus, reload } = useDashboard();
   const categoryFilter = searchParams.get("cluster");
   const explicitCaseId = searchParams.get("caseId");
 
@@ -56,12 +58,9 @@ export function ReviewScreen() {
     [caseIds, decisions, dashboard, searchParams]
   );
 
-  if (loading && !dashboard && caseIds.length === 0) {
-    return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Review" title="Loading queue" />
-      </div>
-    );
+  if (loading && !dashboard && caseIds.length === 0) return <PageLoading title="Loading queue" shape="list" />;
+  if (error && !dashboard && caseIds.length === 0) {
+    return <ApiUnavailableScreen resource="the review queue" status={errorStatus} retry={() => void reload()} />;
   }
 
   if (caseIds.length === 0) {

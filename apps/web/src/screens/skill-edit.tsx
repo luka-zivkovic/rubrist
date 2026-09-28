@@ -1,3 +1,4 @@
+import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
@@ -693,9 +694,7 @@ export function SkillEditScreen() {
 
   if (loading || criterionLoading || loadedCriterionId !== selectedCriterionId) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Edit skill" title="Loading skill" />
-      </div>
+      <PageLoading title="Loading skill" shape="editor" />
     );
   }
 

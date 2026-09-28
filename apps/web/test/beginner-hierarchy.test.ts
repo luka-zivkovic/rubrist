@@ -74,7 +74,7 @@ describe("beginner-first hierarchy", () => {
     ]);
     expect(app).toContain('{ path: "settings", element: <SettingsScreen /> }');
     expect(rootLayout).toContain("const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname)");
-    expect(rootLayout).toContain("!dashboard && criterionSelectionRequiredForRoute");
+    expect(rootLayout).toContain("criteriaLoading && criterionSelectionRequiredForRoute");
     expect(sidebar.match(/{ to: "\/settings",\s+label: "Settings",\s+icon: SettingsIcon }/g)).toHaveLength(2);
   });
 

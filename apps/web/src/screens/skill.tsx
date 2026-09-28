@@ -1,3 +1,4 @@
+import { PageLoading } from "../components/page-loading.js";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
@@ -63,9 +64,7 @@ export function SkillScreen() {
 
   if (loading && !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="The artifact" title="Loading skill" />
-      </div>
+      <PageLoading title="Loading skill" shape="detail" />
     );
   }
 
