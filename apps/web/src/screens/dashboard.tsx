@@ -1,10 +1,11 @@
+import { overviewNextAction } from "../lib/overview-next-action.js";
 import { queueReviewUrl } from "../lib/exception-queue.js";
 import { contextualHref } from "../lib/route-metadata.js";
 import { PageLoading } from "../components/page-loading.js";
 import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, RefreshCcw, ChevronRight, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table } from "@/components/ui/table";
@@ -146,11 +147,11 @@ export function DashboardScreen() {
   // never production language.
   const bench = isBench(project);
   const importedTotal = project.importedTraceCount;
-  const autoJudged = dashboard.currentVersionResultCount;
   const exceptionsTotal = dashboard.exceptionsTotal ?? null;
   const syncBackPct = Math.round(project.syncBackCoverage * 100);
   const agreement = skill.currentVersion.goldenSetAgreement;
   const agreementPct = agreement == null ? null : Math.round(agreement * 100);
+  const nextAction = overviewNextAction(dashboard, location.search);
   const versionStateLabel = skill.isStarter
     ? `v${skill.currentVersion.version} · Starter · unvalidated`
     : skillVersionStateLabel(skill.currentVersion);
@@ -161,7 +162,7 @@ export function DashboardScreen() {
       {setupReceipt}
       <SectionHead
         eyebrow="Overview"
-        title="Project overview"
+        title="Overview"
         sub={bench
           ? "See what is ready, what still needs an example or Run, and the next action for this Check."
           : "See what is set up, what needs a human, and the next action for this criterion before opening detailed evidence."}
@@ -173,6 +174,81 @@ export function DashboardScreen() {
         })}`}
       />
 
+      <Card className="mb-5 border-rule" aria-label="Next action">
+        <CardContent className="flex flex-wrap items-center gap-4 py-5">
+          <div className="min-w-0 flex-1 basis-[280px]">
+            <Eyebrow>Next</Eyebrow>
+            <h2 className="mt-1 font-serif text-xl font-medium">{nextAction.title}</h2>
+            <p className="mt-2 max-w-[72ch] text-sm leading-relaxed text-ink-3">{nextAction.description}</p>
+          </div>
+          <Button variant="primary" className="h-auto min-h-11 max-w-full whitespace-normal" asChild><Link to={nextAction.href}>{nextAction.label} <ArrowRight /></Link></Button>
+        </CardContent>
+      </Card>
+
+{exceptions.length > 0 ? (
+      <Card className="mb-7">
+        <CardHeader>
+          <div>
+            <CardTitle>Exceptions waiting</CardTitle>
+            <CardDescription>Showing {Math.min(exceptions.length, 5)} of {exceptionsTotal ?? "an unknown number of"} waiting cases. The review queue loads up to 50 at a time.</CardDescription>
+          </div>
+          <div className="flex-1" />
+          <Button variant="ghost" size="sm" asChild><Link to={contextualHref("/exceptions", location.search)}>
+            Open queue <ArrowRight />
+          </Link></Button>
+        </CardHeader>
+        <Table className="ledger-stacked" role="table" aria-label="Waiting case preview">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader" style={{ width: 130 }}>When</th>
+              <th scope="col" role="columnheader">Case</th>
+              <th scope="col" role="columnheader" style={{ width: 150 }}>Skill said</th>
+              <th scope="col" role="columnheader">Reason</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            {exceptions.slice(0, 5).map((ex) => (
+              <tr role="row"
+                key={ex.id}
+                className="row-link row-signal"
+                onClick={() => navigate(`${queueReviewUrl(exceptions, location.search)}&at=${encodeURIComponent(ex.id)}`)}
+              >
+                <td role="cell" data-label="When" className="font-mono text-ink-3">
+                  {new Date(ex.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </td>
+                <td role="cell" data-label="Case">
+                  <RowLink
+                    to={`${queueReviewUrl(exceptions, location.search)}&at=${encodeURIComponent(ex.id)}`}
+                  >
+                    {ex.title}
+                  </RowLink>
+                  <div className="mt-1 flex items-center gap-2">
+                    {ex.capabilityGap ? (
+                      <Ref
+                        kind="category"
+                        label={ex.capabilityGap}
+                        onClick={() => navigate(contextualHref(`/exceptions?cluster=${encodeURIComponent(ex.capabilityGap as string)}`, location.search))}
+                      />
+                    ) : null}
+                    <span className="dev-only font-mono text-[11px] tracking-[0.04em] text-ink-3">
+                      {ex.traceId}
+                    </span>
+                  </div>
+                </td>
+                <td role="cell" data-label="Skill said">
+                  <VerdictChip verdict={ex.verdict} />
+                </td>
+                <td role="cell" data-label="Reason" className="text-ink-3"><span className="line-clamp-2">{ex.reason || "No explanation recorded."}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+
+      ) : null}
+      <details className="mb-7 rounded-sm border border-rule-soft px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium">Setup progress and first Result</summary>
+        <div className="mt-4">
       {bench ? (
         <FirstRunSetupLedger dashboard={dashboard} className="mb-7" />
       ) : (
@@ -182,42 +258,13 @@ export function DashboardScreen() {
       {dashboard.currentVersionResultCount === 1 ? (
         <FirstVerdictCard
           dashboard={dashboard}
-          onOpenCase={(caseId) => navigate(`/cases/${caseId}`, { state: { backTo: "/", backLabel: "Back to overview" } })}
+          onOpenCase={(caseId) => navigate(contextualHref(`/cases/${caseId}?skillVersionId=${encodeURIComponent(skill.currentVersion.id)}`, location.search), { state: { backTo: "/", backLabel: "Back to overview" } })}
           className="mb-7"
         />
       ) : null}
 
-      <div className="mb-7 max-w-[760px] font-serif text-[22px] font-medium leading-[1.28] tracking-[-0.022em]">
-        The Check evaluated {autoJudged.toLocaleString()} of {importedTotal.toLocaleString()}{" "}
-        {bench ? "supplied examples" : "traces"}.{" "}
-        <Link className="border-b border-ink-3 text-inherit no-underline hover:border-ink" to="/exceptions">
-          {exceptionsTotal === null ? "Review backlog total unavailable" : `${exceptionsTotal} ${exceptionsTotal === 1 ? "is" : "are"} waiting on a person`}
-        </Link>
-        {legacyHumanChecked !== null ? (
-          <>
-            ; legacy human checks cover{" "}
-            <Link
-              className="border-b border-ink-3 text-inherit no-underline hover:border-ink"
-              to={bench ? "/exceptions" : "/traces"}
-            >
-              {legacyHumanChecked.toLocaleString()} {legacyHumanChecked === 1 ? "case" : "cases"}
-            </Link>
-          </>
-        ) : null}
-        . The remaining Results rely only on the Check.
-        {agreementPct != null ? (
-          <>
-            {" "}Its recorded agreement with the Golden set is{" "}
-            <Link
-              className="border-b border-ink-3 text-inherit no-underline hover:border-ink"
-              to="/skill/versions"
-            >
-              {agreementPct}%
-            </Link>
-            .
-          </>
-        ) : null}
-      </div>
+        </div>
+      </details>
 
       <KPIRow className="mb-7">
         <KPI
@@ -234,17 +281,6 @@ export function DashboardScreen() {
           num={legacyHumanChecked === null ? "—" : legacyHumanChecked.toLocaleString()}
           delta={bench ? "ungoverned case reviews" : "ungoverned queues + adjudications"}
           foot="not governed human truth"
-          to={bench ? "/exceptions" : "/review-queues"}
-          src={bench ? "open exceptions →" : "open queues →"}
-        />
-        <KPI
-          label="Exceptions"
-          num={exceptionsTotal ?? "—"}
-          delta={exceptionsTotal === 0 ? "queue clear" : "Waiting on a reviewer"}
-          deltaKind={exceptionsTotal === 0 ? "default" : "signal"}
-          foot="Humans next"
-          to="/exceptions"
-          src="open queue →"
         />
         {bench ? (
           <KPI
@@ -338,10 +374,10 @@ export function DashboardScreen() {
                 <tr
                   key={gap.id}
                   className="row-link"
-                  onClick={() => navigate(`/exceptions?cluster=${encodeURIComponent(gap.name)}`)}
+                  onClick={() => navigate(contextualHref(`/exceptions?cluster=${encodeURIComponent(gap.name)}`, location.search))}
                 >
                   <td>
-                    <RowLink to={`/exceptions?cluster=${encodeURIComponent(gap.name)}`}>
+                    <RowLink to={contextualHref(`/exceptions?cluster=${encodeURIComponent(gap.name)}`, location.search)}>
                       {gap.name}
                     </RowLink>
                   </td>
@@ -417,85 +453,8 @@ export function DashboardScreen() {
         </Card>
       </div>
 
-      <Card className="mb-7">
-        <CardHeader>
-          <div>
-            <CardTitle>Exceptions waiting</CardTitle>
-            <CardDescription>Showing {Math.min(exceptions.length, 5)} of {exceptionsTotal ?? "an unknown number of"} waiting cases. The review queue loads up to 50 at a time.</CardDescription>
-          </div>
-          <div className="flex-1" />
-          {exceptions.length > 0 ? (
-            <Button
-              variant="primary"
-              size="sm"
-              asChild
-            >
-              <Link to={queueReviewUrl(exceptions, location.search)}>Review {exceptions.length} loaded cases <ArrowRight /></Link>
-            </Button>
-          ) : null}
-          <Button variant="default" size="sm" asChild><Link to={contextualHref("/exceptions", location.search)}>
-            Open queue <ArrowRight />
-          </Link></Button>
-        </CardHeader>
-        <Table>
-          <thead>
-            <tr>
-              <th style={{ width: 130 }}>When</th>
-              <th>Case</th>
-              <th style={{ width: 150 }}>Skill said</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {exceptions.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center text-ink-3">No exceptions right now. Failed or ambiguous judge runs will appear here.</td>
-              </tr>
-            ) : null}
-            {exceptions.slice(0, 5).map((ex) => (
-              <tr
-                key={ex.id}
-                className="row-link row-signal"
-                onClick={() => navigate(`/cases/${ex.id}`, { state: { backTo: "/", backLabel: "Back to overview" } })}
-              >
-                <td className="font-mono text-ink-3">
-                  {new Date(ex.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </td>
-                <td>
-                  <RowLink
-                    to={`/cases/${ex.id}`}
-                    state={{ backTo: "/", backLabel: "Back to overview" }}
-                  >
-                    {ex.title}
-                  </RowLink>
-                  <div className="mt-1 flex items-center gap-2">
-                    {ex.capabilityGap ? (
-                      <Ref
-                        kind="category"
-                        label={ex.capabilityGap}
-                        onClick={() => navigate(`/exceptions?cluster=${encodeURIComponent(ex.capabilityGap as string)}`)}
-                      />
-                    ) : null}
-                    <span className="dev-only font-mono text-[11px] tracking-[0.04em] text-ink-3">
-                      {ex.traceId}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <VerdictChip verdict={ex.verdict} />
-                </td>
-                <td className="text-ink-3">{ex.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
 
-      <div className="mt-2">
-        <Button variant="default" size="sm" onClick={() => navigate("/integrations")}>
-          <ChevronRight /> Manage integrations
-        </Button>
-      </div>
+
     </div>
   );
 }

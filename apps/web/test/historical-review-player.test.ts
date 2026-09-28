@@ -156,6 +156,17 @@ describe("historical review player", () => {
     expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
   });
 
+  it("lands an Overview preview link on its selected case within the whole loaded batch", async () => {
+    const { queueReviewUrl } = await import("../src/lib/exception-queue.js");
+    route.search = queueReviewUrl([{ id: "case_1", criterionVersionId: "old" }, { id: "case_2", criterionVersionId: "other" }], "?criterionId=c1").split("?")[1] + "&at=case_2";
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other");
+    expect(container.querySelector("h1")?.getAttribute("aria-label")).toContain("Case 2 of 2");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+  });
+
   it("reopens the exact completed saved item from its position URL", async () => {
     route.search = "at=item_2";
     api.fetchCaseDetail.mockResolvedValue(detail);

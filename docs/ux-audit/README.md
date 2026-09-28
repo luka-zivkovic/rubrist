@@ -5,7 +5,7 @@ rounds' findings and decisions into one sequence of implementation slices.
 Each round stays the record for its own findings; `PRODUCT.md` and the
 accepted ADRs stay the product authority.
 
-Last updated: 2026-09-28 · waves 1–2 staged; draft PRs remain unmerged
+Last updated: 2026-09-28 · waves 1–2 and review hierarchy merged; bounded triage and Overview follow-ups implemented
 
 ## Rounds
 
@@ -109,6 +109,18 @@ changed.
   and the docs.
 
 ## CURRENT progress (2026-09-28)
+
+PRs #159 and #165–#173 are merged at `13a3377`; that exact main revision was
+verified on staging with all benchmark rows and the founder's saved reviews
+preserved. The founder has since completed all eight development reviews.
+
+Two bounded follow-ups implement [continuous review](2026-09-28-continuous-review.md)
+and [Overview focus](2026-09-28-overview-focus.md). They preserve vocabulary and
+display modes. These complete selected continuity and attention-order issues,
+not all of slices 6–8. Their PRs record final verification and deployment.
+
+### Earlier wave staging record
+
 
 Wave 1 is independently reviewed and deployed to the staging app at
 `dbcf39d`. Its draft PRs remain unmerged:
