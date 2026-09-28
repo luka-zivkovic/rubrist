@@ -1,3 +1,4 @@
+import { InlineDetails } from "../components/rubrist/inline-details.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, FileCheck2, ShieldCheck } from "lucide-react";
@@ -130,9 +131,9 @@ function TraceScreenBase({ fetcher, backTo, backLabel }: TraceScreenProps) {
         </Link></Button>
         <div className="flex flex-wrap items-center justify-end gap-3">
           <ViewInIronside caseId={caseId} />
-          <div className="dev-only font-mono text-[11px] text-ink-3">
+          <InlineDetails label="Case and trace IDs">
             {detail.exception.id} · {detail.trace.id}
-          </div>
+          </InlineDetails>
         </div>
       </div>
 

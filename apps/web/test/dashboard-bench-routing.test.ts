@@ -62,7 +62,6 @@ vi.mock("@/lib/dashboard-context", () => ({
     reload: vi.fn()
   })
 }));
-vi.mock("@/hooks/use-mode", () => ({ useMode: () => ["pm", vi.fn()] }));
 
 function productionBench(input: { judged: number; golden: number }): DashboardSummary {
   return {

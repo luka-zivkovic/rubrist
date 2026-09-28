@@ -4,25 +4,14 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFile(new URL(path, import.meta.url), "utf8");
 
 describe("trust-aligned frontend flows", () => {
-  it("keeps governed workflows and ungoverned diagnostics outside the legacy act groups", async () => {
+  it("keeps governed workflows separate from operational review and diagnostics", async () => {
     const sidebar = await source("../src/components/layout/sidebar.tsx");
-    const tracingNav = sidebar.slice(
-      sidebar.indexOf("const TRACING_NAV"),
-      sidebar.indexOf("const BENCH_NAV")
-    );
-    const operationalGroup = tracingNav.slice(
-      tracingNav.indexOf('label: "2 · Operational triage"'),
-      tracingNav.indexOf('label: "3 · Guard known failures"')
-    );
-    const knownFailureGroup = tracingNav.slice(
-      tracingNav.indexOf('label: "3 · Guard known failures"'),
-      tracingNav.indexOf('label: "Ungoverned diagnostics"')
-    );
-
-    expect(tracingNav).toContain('label: "Governed lifecycle"');
-    expect(operationalGroup).not.toMatch(/Analyze · governed|Human truth · governed/);
-    expect(knownFailureGroup).not.toContain("Reliability signals");
-    expect(tracingNav).not.toMatch(/Golden evidence|Earn trust|Judge real work/);
+    const operationalGroup = sidebar.slice(sidebar.indexOf('label: "Evidence & review"'), sidebar.indexOf('label: "Evaluator work"'));
+    expect(sidebar).toContain('label: "Governed lifecycle"');
+    expect(sidebar).toContain('label: "Ungoverned diagnostics"');
+    expect(operationalGroup).not.toContain("Human truth");
+    expect(operationalGroup).toContain("Review sessions · ungoverned");
+    expect(sidebar).not.toMatch(/Golden evidence|Earn trust|Judge real work/);
     expect(sidebar).toContain("h-dvh flex-col overflow-y-auto");
   });
 
@@ -79,19 +68,16 @@ describe("trust-aligned frontend flows", () => {
     expect(traceExport).toContain("Verdict-label, search, and random-sample filters are not applied");
   });
 
-  it("uses one Golden set name and presents display density without impersonating a role", async () => {
-    const [golden, sidebar, rootLayout, displayMode] = await Promise.all([
+  it("uses one Golden set name and one workspace without impersonating a role", async () => {
+    const [golden, sidebar, rootLayout] = await Promise.all([
       source("../src/screens/golden.tsx"),
       source("../src/components/layout/sidebar.tsx"),
-      source("../src/components/layout/root-layout.tsx"),
-      source("../src/lib/display-mode.ts")
+      source("../src/components/layout/root-layout.tsx")
     ]);
-    const combined = [golden, sidebar, rootLayout, displayMode].join("\n");
+    const combined = [golden, sidebar, rootLayout].join("\n");
 
     expect(golden).toContain('title="Golden set"');
-    expect(sidebar).toContain("Workspace display");
-    expect(displayMode).toContain('label: "Guided"');
-    expect(rootLayout).toContain("DISPLAY_MODE_BY_VALUE[mode].label");
+    expect(combined).not.toMatch(/Workspace display|DISPLAY_MODE|useMode/);
     expect(combined).not.toMatch(/Golden evidence|Reviewer view|View as/);
   });
 });

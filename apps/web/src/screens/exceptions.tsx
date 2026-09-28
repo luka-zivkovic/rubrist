@@ -1,3 +1,4 @@
+import { InlineDetails } from "../components/rubrist/inline-details.js";
 import { PageLoading } from "../components/page-loading.js";
 import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
@@ -81,9 +82,9 @@ export function ExceptionQueueRow({
             {exception.title}
           </RowLink>
         </div>
-        <span className="dev-only mt-1 font-mono text-[10.5px] tracking-[0.04em] text-ink-4">
+        <InlineDetails label="Trace details">
           {formatTimestamp(exception.createdAt)} · {exception.traceId}
-        </span>
+        </InlineDetails>
       </td>
       <td role="cell" data-label="Judge category">
         {exception.capabilityGap ? (
@@ -568,8 +569,8 @@ export function ExceptionsScreen() {
                           <Decision kind={row.kind} />
                         </td>
                         <td className="text-[12px] text-ink-4">{row.note}</td>
-                        <td className="dev-only font-mono text-[11px] text-ink-4" style={{ width: 120 }}>
-                          {row.actorUserId ? `by ${row.actorUserId.slice(0, 12)}` : ""}
+                        <td className="text-[11px] text-ink-4" style={{ width: 120 }}>
+                          {row.actorUserId ? <InlineDetails label="Actor ID">{row.actorUserId}</InlineDetails> : null}
                         </td>
                       </tr>
                     ))}

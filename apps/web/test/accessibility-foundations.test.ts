@@ -48,10 +48,6 @@ describe("accessibility foundations", () => {
     expect(kpi).toContain("<Link");
     expect(kpi).toContain("to?: string");
     expect(ref).toMatch(/<button\s+type="button"/);
-    expect(sidebar).toContain('role="group"');
-    expect(sidebar).toContain('aria-label="Workspace display"');
-    expect(sidebar).toContain('aria-pressed={mode === option.value}');
-    expect(sidebar).toContain('aria-describedby="workspace-display-help"');
     expect(sidebar).toContain("aria-expanded={open}");
     expect(sidebar).toContain('aria-current={active ? "true" : undefined}');
     expect(sidebar).not.toContain("aria-haspopup");

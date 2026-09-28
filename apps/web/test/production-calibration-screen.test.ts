@@ -69,7 +69,7 @@ describe("production calibration screen", () => {
       readFile(new URL("lib/criterion-selection.ts", src), "utf8")
     ]);
     expect(app).toContain('{ path: "production-calibration", element: <ProductionCalibrationScreen /> }');
-    expect(sidebar.match(/{ to: "\/production-calibration", label: "Production calibration", icon: Activity }/g)).toHaveLength(2);
+    expect(sidebar.match(/{ to: "\/production-calibration", label: "Production calibration", icon: Activity }/g)).toHaveLength(1);
     expect(rootLayout).toContain("routeMetadata(location.pathname, location.search, bench)");
     expect(routeMetadata("/production-calibration").crumbs).toEqual([{ label: "Production calibration" }]);
     expect(criterionSelection).toContain('"/production-calibration",');

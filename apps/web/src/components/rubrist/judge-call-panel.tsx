@@ -2,7 +2,6 @@ import * as React from "react";
 import { Copy } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useMode } from "@/hooks/use-mode";
 import { cn } from "@/lib/utils";
 
 export interface JudgeCallMeta {
@@ -30,8 +29,6 @@ export interface JudgeCallPanelProps {
 type OpenSection = "prompt" | "request" | "response" | null;
 
 export function JudgeCallPanel({ meta, compiledPrompt, rawRequest, rawResponse }: JudgeCallPanelProps) {
-  const [mode] = useMode();
-  const isDev = mode === "dev";
   const [open, setOpen] = React.useState<OpenSection>(null);
 
   const summary: Array<string> = [];
@@ -83,10 +80,9 @@ export function JudgeCallPanel({ meta, compiledPrompt, rawRequest, rawResponse }
             />
           ) : null}
 
-          {isDev && rawRequest ? (
+          {rawRequest ? (
             <JudgeDisclosure
               label="View raw request"
-              dev
               open={open === "request"}
               onToggle={() => setOpen(open === "request" ? null : "request")}
               meta="HTTP POST · what we sent to the provider"
@@ -94,10 +90,9 @@ export function JudgeCallPanel({ meta, compiledPrompt, rawRequest, rawResponse }
             />
           ) : null}
 
-          {isDev && rawResponse ? (
+          {rawResponse ? (
             <JudgeDisclosure
               label="View raw response"
-              dev
               open={open === "response"}
               onToggle={() => setOpen(open === "response" ? null : "response")}
               meta={
@@ -107,12 +102,6 @@ export function JudgeCallPanel({ meta, compiledPrompt, rawRequest, rawResponse }
               }
               content={rawResponse}
             />
-          ) : null}
-
-          {!isDev && (rawRequest || rawResponse) ? (
-            <div className="mt-1 font-mono text-[10.5px] tracking-[0.04em] text-ink-3">
-              Raw request &amp; response available in Technical display.
-            </div>
           ) : null}
         </div>
       </CardContent>
@@ -125,32 +114,29 @@ interface JudgeDisclosureProps {
   meta: string;
   open: boolean;
   onToggle: () => void;
-  dev?: boolean;
   content: string;
 }
 
-function JudgeDisclosure({ label, meta, open, onToggle, dev, content }: JudgeDisclosureProps) {
+function JudgeDisclosure({ label, meta, open, onToggle, content }: JudgeDisclosureProps) {
+  const contentId = React.useId();
   return (
     <div className={cn("rounded-sm border border-rule-soft", open && "bg-card-2")}>
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={open ? contentId : undefined}
         className="flex w-full items-center gap-2 px-3 py-2 text-left cursor-pointer hover:bg-card-2"
       >
         <span className="font-mono text-[10.5px] text-ink-3">{open ? "▾" : "▸"}</span>
         <span className="text-[12.5px] text-ink-2">
           {label}
-          {dev ? (
-            <span className="ml-2 inline-block rounded-sm border border-dev px-1 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] text-dev">
-              dev
-            </span>
-          ) : null}
         </span>
         <span className="flex-1" />
         <span className="font-mono text-[10.5px] text-ink-3">{meta}</span>
       </button>
       {open ? (
-        <div className="fadeUp border-t border-rule-soft px-3 py-2.5">
+        <div id={contentId} className="fadeUp border-t border-rule-soft px-3 py-2.5">
           <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.55] text-ink-2">
             {content}
           </pre>

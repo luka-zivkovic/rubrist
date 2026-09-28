@@ -1,9 +1,10 @@
 import * as React from "react";
+import { InlineDetails } from "./inline-details.js";
 import { Flag, Star, GitCompareArrows, FileText, Inbox, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // P1-1 · Ref — a human-readable reference chip. Names, not IDs.
-// The raw ID demotes to Technical display (.dev-only).
+// Raw identity is available on demand without a separate workspace display.
 export type RefKind = "category" | "cluster" | "golden" | "version" | "case" | "queue" | "source";
 
 const REF_ICON: Record<RefKind, React.ComponentType<{ className?: string }>> = {
@@ -35,7 +36,6 @@ export function Ref({ kind, label, id, onClick, mono, className }: RefProps) {
         <Icon className="h-2.5 w-2.5" />
       </span>
       <span className={cn("truncate", mono && "font-mono")}>{label}</span>
-      {id ? <span className="dev-only font-mono text-[9.5px] text-ink-4">{id}</span> : null}
     </>
   );
   const classes = cn(
@@ -45,7 +45,7 @@ export function Ref({ kind, label, id, onClick, mono, className }: RefProps) {
     className
   );
 
-  return onClick ? (
+  const chip = onClick ? (
     <button
       type="button"
       className={classes}
@@ -63,4 +63,5 @@ export function Ref({ kind, label, id, onClick, mono, className }: RefProps) {
       {content}
     </span>
   );
+  return <span className="inline-flex max-w-full flex-wrap items-center gap-1">{chip}{id ? <InlineDetails label="ID">{id}</InlineDetails> : null}</span>;
 }

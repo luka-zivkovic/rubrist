@@ -292,14 +292,6 @@
 
   .fill-ambiguous { background: var(--ambig-pattern); }
 
-  /* dev-only blocks: surfaced by an ancestor .dev class */
-  .dev-only { display: none; }
-  .dev .dev-only       { display: initial; }
-  .dev .dev-only.block { display: block; }
-  .dev .dev-only.flex  { display: flex; }
-  .dev .dev-only.grid  { display: grid; }
-  .dev .pm-only        { display: none; }
-
   /* highlighted edited block (rubric edits) */
   .edit-mark {
     background: linear-gradient(transparent 60%, var(--signal-tint) 60%);
