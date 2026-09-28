@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eyebrow, MarginNote, SectionHead, Chip } from "@/components/rubrist";
+import { Eyebrow, MarginNote, PageLoadError, SectionHead, Chip } from "@/components/rubrist";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { TypedQuestionView } from "../components/typed-question-view.js";
 import { fetchCurrentSkill } from "@/lib/api";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
+import { measuredCount } from "@/lib/regression-gate";
 import { useDashboard } from "@/lib/dashboard-context";
 import { skillEditConsequence, skillVersionStateLabel } from "../lib/skill-presentation.js";
 import { cn } from "@/lib/utils";
@@ -36,7 +38,7 @@ export function SkillScreen() {
   const { dashboard, refresh: refreshDashboard } = useDashboard();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadFailure | null>(null);
   const [tab, setTab] = useState<Tab>("rubric");
 
   const load = useCallback(async () => {
@@ -45,7 +47,7 @@ export function SkillScreen() {
     try {
       setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(loadFailure(err));
     } finally {
       setLoading(false);
     }
@@ -69,14 +71,17 @@ export function SkillScreen() {
 
   if (error || !skill) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="The artifact" title="Could not load skill" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {error ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+      <PageLoadError
+        eyebrow="The artifact"
+        title="Couldn't load the skill"
+        failure={error ?? NO_SKILL_FAILURE}
+        onRetry={() => void load()}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
+      />
     );
   }
 
@@ -165,7 +170,7 @@ export function SkillScreen() {
               </span>
             </button>
             <div className="px-2 py-1.5 font-mono text-[11px] text-ink-3">
-              Strict {v.tooStrictCount} · Lenient {v.tooLenientCount}
+              Strict {measuredCount(v, v.tooStrictCount)} · Lenient {measuredCount(v, v.tooLenientCount)}
             </div>
           </div>
 

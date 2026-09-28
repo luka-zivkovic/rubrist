@@ -234,13 +234,30 @@ export async function fetchSkillVersionHistory(skillId: string, limit = 50): Pro
   };
 }
 
-// the regression run recorded for a specific version (incl. per-case
-// diff). Returns null on 404 (no run recorded — e.g. the seeded baseline
-// version or a version created before regression runs were persisted).
+// The regression run recorded for a specific version, including its per-case
+// diff. null means the API answered that this version has no recorded run: the
+// seeded baseline, a version saved before runs were persisted, or a check
+// still running. Any other 404, such as an unknown version or a missing route,
+// is a failed read, never "no run recorded". The message is matched as well as
+// the code, for an API that predates the code.
+const NO_RECORDED_REGRESSION_RUN = {
+  code: "regression_run_not_recorded",
+  message: "No regression run recorded for this version"
+};
+
+function isNoRecordedRun(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const { code, error } = body as { code?: unknown; error?: unknown };
+  return code === NO_RECORDED_REGRESSION_RUN.code || error === NO_RECORDED_REGRESSION_RUN.message;
+}
+
 export async function fetchSkillVersionRegression(skillId: string, versionId: string): Promise<RegressionRunResult | null> {
   const response = await apiFetch(`${API_BASE}/api/skills/${skillId}/versions/${versionId}/regression`, { credentials: "include" });
-  if (response.status === 404) return null;
-  if (!response.ok) throw await apiErrorFromResponse(response, "Regression run request failed");
+  if (!response.ok) {
+    const error = await apiErrorFromResponse(response, "Regression run request failed");
+    if (error.status === 404 && isNoRecordedRun(error.body)) return null;
+    throw error;
+  }
   const body = (await response.json()) as { regressionRun?: unknown };
   return RegressionRunResultSchema.parse(body.regressionRun);
 }

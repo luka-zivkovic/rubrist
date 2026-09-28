@@ -8,6 +8,7 @@ export * from "./spark";
 export * from "./judge-call-panel";
 export * from "./journey-pipeline";
 export * from "./empty-shell";
+export * from "./load-error";
 export * from "./regression-diff-table";
 export * from "./convergence-audit";
 export * from "./ref";

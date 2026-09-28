@@ -81,8 +81,10 @@ function RootLayoutInner() {
       ? `Judge a dataset · ${dashboard.project.importedTraceCount.toLocaleString()} examples · no production traces`
       : `Judge live traces · ${dashboard.project.traceProvider} · ${dashboard.project.importedTraceCount.toLocaleString()} traces`
     : "—";
-  const exceptionsCount = dashboard?.exceptions.length ?? 0;
-  const importedTotal = dashboard?.project.importedTraceCount ?? 0;
+  // null until the dashboard loads, and after it fails: an unknown count is
+  // shown as unknown, never as zero.
+  const exceptionsCount = dashboard?.exceptions.length ?? null;
+  const importedTotal = dashboard?.project.importedTraceCount ?? null;
   const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname);
   const showCriterionPicker = selectionRequired && criterionSelectionRequiredForRoute;
 
@@ -154,7 +156,7 @@ function RootLayoutInner() {
       <Sidebar
         projectName={projectName}
         projectSource={projectSource}
-        exceptionsCount={exceptionsCount}
+        exceptionsCount={exceptionsCount ?? 0}
         bench={bench}
         journeyActs={dashboard ? journeyActStates(dashboard) : undefined}
         goldenSetSize={dashboard?.goldenSetSize ?? 0}
@@ -196,9 +198,9 @@ function RootLayoutInner() {
                 <span className="font-mono text-[10px] text-ink-3">criterion · {selectedChoice.name}</span>
               ) : null}
               <div className="hidden font-mono text-[10.5px] text-ink-3 xl:block">
-                <b className="font-medium text-ink">{importedTotal.toLocaleString()}</b> {bench ? "examples" : "traces this week"}
+                <b className="font-medium text-ink">{importedTotal === null ? "—" : importedTotal.toLocaleString()}</b> {bench ? "examples" : "traces imported"}
                 <span className="text-ink-3"> · </span>
-                <b className={`font-medium ${exceptionsCount > 0 ? "text-signal" : "text-ink"}`}>{exceptionsCount}</b> exceptions
+                <b className={`font-medium ${exceptionsCount ? "text-signal" : "text-ink"}`}>{exceptionsCount ?? "—"}</b> exceptions
               </div>
               <div className="hidden sm:block"><TopbarPill>
                 {DISPLAY_MODE_BY_VALUE[mode].label} display

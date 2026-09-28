@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FirstRunCheckSetup } from "@/components/first-run-check-setup";
 import type { SkillEditPhase } from "@/components/skill-edit-flow";
-import { SectionHead } from "@/components/rubrist";
+import { PageLoadError, SectionHead } from "@/components/rubrist";
 import {
   createSkillVersion,
   createOnboardingCheck,
@@ -22,6 +21,7 @@ import {
 } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useCriterion } from "@/lib/criterion-context";
+import { loadFailure, NO_SKILL_FAILURE, type LoadFailure } from "@/lib/load-error";
 import { skillCriterionVersionId } from "@/lib/criterion-scope";
 import { executionBindingFields } from "@/lib/execution-binding-draft";
 import { promptedProviderOptions, resolveJudgeProviderSelection } from "@/lib/judge-provider-selection";
@@ -101,7 +101,7 @@ export function SkillEditScreen() {
   const [baseVersion, setBaseVersion] = useState<SkillVersion | null>(null);
   const [loadedCriterionId, setLoadedCriterionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<LoadFailure | null>(null);
   const loadGeneration = useRef(0);
   const operationGeneration = useRef(0);
   const criterionScope = useRef(selectedCriterionId);
@@ -178,9 +178,13 @@ export function SkillEditScreen() {
   const [phase, setPhase] = useState<SkillEditPhase>("edit");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pollError, setPollError] = useState<string | null>(null);
+  // A failed status refresh. Polling continues only while retrying can work.
+  const [pollError, setPollError] = useState<LoadFailure | null>(null);
   const [pendingVersion, setPendingVersion] = useState<SkillVersion | null>(null);
-  const [pinnedReferenceCount, setPinnedReferenceCount] = useState<number | null>(null);
+  // The pinned revision's case count, keyed by version and revision so a count
+  // read for one never shows for another, and each saved version reads its
+  // own. count is null when the read failed or returned no count.
+  const [pinnedCount, setPinnedCount] = useState<{ key: string; count: number | null } | null>(null);
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -265,7 +269,6 @@ export function SkillEditScreen() {
     setBaseVersion(null);
     setPhase("edit");
     setPendingVersion(null);
-    setPinnedReferenceCount(null);
     setResult(null);
     setSubmitError(null);
     setPollError(null);
@@ -348,7 +351,10 @@ export function SkillEditScreen() {
       setLoadedCriterionId(selectedCriterionId);
     } catch (err) {
       if (generation === loadGeneration.current) {
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(loadFailure(err));
+        // The load for this criterion has settled, so the error replaces the
+        // loading state instead of waiting behind the criterion check.
+        setLoadedCriterionId(selectedCriterionId);
       }
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -402,26 +408,33 @@ export function SkillEditScreen() {
   }, [setSearchParams]);
 
   const pinnedRevisionId = pendingVersion?.regressionDatasetRevisionId ?? result?.version.regressionDatasetRevisionId ?? null;
+  const pinnedVersionId = pendingVersion?.id ?? result?.version.id ?? null;
+  const pinnedCountKey = pinnedRevisionId && pinnedVersionId ? `${pinnedVersionId}|${pinnedRevisionId}` : null;
   useEffect(() => {
     const revisionId = pinnedRevisionId;
-    if (!revisionId) {
-      setPinnedReferenceCount(null);
-      return;
-    }
+    const key = pinnedCountKey;
+    if (!revisionId || !key) return;
     let cancelled = false;
-    setPinnedReferenceCount(null);
     void fetchDatasetRevisionMetadata(revisionId)
       .then((metadata) => {
-        if (!cancelled) setPinnedReferenceCount(metadata?.itemCount ?? null);
+        if (!cancelled) setPinnedCount({ key, count: metadata?.itemCount ?? null });
       })
       .catch(() => {
         // The durable version receipt still names the pinned revision. A read
         // failure only withholds the count; terminal evidence remains exact.
+        if (!cancelled) setPinnedCount({ key, count: null });
       });
     return () => {
       cancelled = true;
     };
-  }, [pinnedRevisionId]);
+    // pinnedCountKey names the version and pinnedRevisionId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinnedCountKey]);
+  const pinnedCountRead = pinnedCount !== null && pinnedCount.key === pinnedCountKey ? pinnedCount : null;
+  const pinnedReferenceCount = pinnedCountRead?.count ?? null;
+  // Unavailable when there is no pinned revision, or when its read settled
+  // without a count. Until then the running check says the count is loading.
+  const pinnedReferenceCountUnavailable = !pinnedRevisionId || (pinnedCountRead !== null && pinnedCountRead.count === null);
 
   useEffect(() => {
     if (phase !== "running" || !pendingVersion || !skill) return;
@@ -449,9 +462,11 @@ export function SkillEditScreen() {
         }
         setPollError(null);
       } catch (error) {
-        if (!cancelled) {
-          setPollError(error instanceof Error ? error.message : "Could not refresh the regression status.");
-        }
+        if (cancelled) return;
+        const failure = loadFailure(error);
+        setPollError(failure);
+        // A refused or missing version fails the same way on every poll.
+        if (!failure.retryable) return;
       }
       if (!cancelled) timer = setTimeout(() => void poll(), 2000);
     };
@@ -660,7 +675,6 @@ export function SkillEditScreen() {
       if (res.state === "queued") {
         setResult(null);
         setPendingVersion(res.version);
-        setPinnedReferenceCount(null);
         setPollError(null);
         setPhase("running");
       } else {
@@ -692,19 +706,17 @@ export function SkillEditScreen() {
 
   if (loadError || !skill) {
     return (
-      <div className="fadeUp">
-        <div className="mb-3">
+      <PageLoadError
+        eyebrow="Edit skill"
+        title="Couldn't load the skill"
+        failure={loadError ?? NO_SKILL_FAILURE}
+        onRetry={() => void load()}
+        back={
           <Button variant="ghost" size="sm" onClick={() => navigate("/skill")}>
             <ArrowLeft /> Back to skill
           </Button>
-        </div>
-        <SectionHead eyebrow="Edit skill" title="Could not load skill" />
-        <Card>
-          <CardContent className="text-[13px] text-ink-2">
-            {loadError ?? "Start the API with `pnpm dev:api` and refresh."}
-          </CardContent>
-        </Card>
-      </div>
+        }
+      />
     );
   }
 
@@ -729,6 +741,7 @@ export function SkillEditScreen() {
         firstRun={firstRun}
         criterionVersion={onboardingCriterionVersion}
         referenceCount={pinnedReferenceCount}
+        referenceCountUnavailable={pinnedReferenceCountUnavailable}
         pollError={pollError}
         onOpenHistory={() => navigate("/skill/versions")}
       />

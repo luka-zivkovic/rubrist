@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table } from "@/components/ui/table";
@@ -12,6 +12,7 @@ import {
   gateStateForVersion,
   KPI,
   KPIRow,
+  PageLoadError,
   Ref,
   SectionHead
 } from "@/components/rubrist";
@@ -20,13 +21,20 @@ import {
   fetchSkillVersionRegression,
   fetchSkillVersions
 } from "@/lib/api";
-import type { RegressionRunResult, SkillVersion } from "@rubrist/shared";
+import type { SkillVersion } from "@rubrist/shared";
 import { useCriterion } from "@/lib/criterion-context";
-
-interface ChainStep {
-  version: SkillVersion;
-  run: RegressionRunResult | null;
-}
+import { loadFailure, type LoadFailure } from "@/lib/load-error";
+import {
+  chainImprovementsGap,
+  chainRecordedNote,
+  chainRetryable,
+  chainStepRun,
+  chainTotals,
+  chainTotalsGap,
+  loadChainStep,
+  runCompared,
+  type ChainStep
+} from "@/lib/compare-chain";
 
 // P1-3 · run comparison. Compare any two versions over the known-failure set by
 // chaining the RECORDED per-save regression runs between them — every number
@@ -36,23 +44,32 @@ export function CompareVersionsScreen() {
   const { selectedCriterionId } = useCriterion();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [skillId, setSkillId] = useState<string | null>(null);
-  const [versions, setVersions] = useState<SkillVersion[]>([]); // newest → oldest
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [steps, setSteps] = useState<ChainStep[] | null>(null);
+  // The version list and a failed list read, each keyed by the criterion it
+  // was read for, so another criterion's list or error never shows for this
+  // one. Versions run newest → oldest.
+  const [list, setList] = useState<{ criterionId: string | null; skillId: string; versions: SkillVersion[] } | null>(null);
+  const [listFailure, setListFailure] = useState<{ criterionId: string | null; failure: LoadFailure } | null>(null);
+  const [listReloadKey, setListReloadKey] = useState(0);
+  // The recorded runs for one path, keyed by it so another pair's runs never
+  // show for this one.
+  const [chain, setChain] = useState<{ key: string; steps: ChainStep[]; baseline: ChainStep } | null>(null);
+  const [stepsReloadKey, setStepsReloadKey] = useState(0);
+  // True from a path Retry until its reads settle.
+  const [retryingSteps, setRetryingSteps] = useState(false);
 
   const fromId = searchParams.get("from");
   const toId = searchParams.get("to");
 
   useEffect(() => {
     let cancelled = false;
+    const criterionId = selectedCriterionId;
+    setListFailure(null);
     void (async () => {
       try {
-        const skill = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+        const skill = await fetchCurrentSkill(criterionId ?? undefined);
         const list = await fetchSkillVersions(skill.id, 200);
         if (cancelled) return;
-        setSkillId(skill.id);
-        setVersions(list);
+        setList({ criterionId, skillId: skill.id, versions: list });
         // Default pair: previous → newest. A criterion switch can leave
         // the other lineage's version ids in the URL, so replace stale pairs
         // while preserving the criterion selector and other query state.
@@ -73,14 +90,19 @@ export function CompareVersionsScreen() {
           );
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setListFailure({ criterionId, failure: loadFailure(err) });
       }
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCriterionId]);
+  }, [selectedCriterionId, listReloadKey]);
+
+  const currentList = list !== null && list.criterionId === selectedCriterionId ? list : null;
+  const loadError = listFailure !== null && listFailure.criterionId === selectedCriterionId ? listFailure.failure : null;
+  const skillId = currentList?.skillId ?? null;
+  const versions = useMemo(() => currentList?.versions ?? [], [currentList]);
 
   const iFrom = versions.findIndex((v) => v.id === fromId);
   const iTo = versions.findIndex((v) => v.id === toId);
@@ -96,40 +118,48 @@ export function CompareVersionsScreen() {
     [versions, valid, iTo, iFrom]
   );
 
+  const chainKey = skillId && from && chainVersions.length > 0
+    ? `${skillId}|${from.id}|${chainVersions.map((version) => version.id).join(",")}`
+    : null;
+
   useEffect(() => {
-    if (!skillId || chainVersions.length === 0) {
-      setSteps(chainVersions.length === 0 ? [] : null);
-      return;
-    }
+    if (!chainKey || !skillId || !from) return;
     let cancelled = false;
-    setSteps(null);
     void (async () => {
-      const loaded = await Promise.all(
-        chainVersions.map(async (version) => ({
-          version,
-          run: await fetchSkillVersionRegression(skillId, version.id).catch(() => null)
-        }))
-      );
-      if (!cancelled) setSteps(loaded);
+      // A failed read stays a failure; it never reads as "no run recorded".
+      // `from` is read too: the oldest save's improvements are counted
+      // against its verdicts.
+      const read = (version: SkillVersion) =>
+        loadChainStep(version, () => fetchSkillVersionRegression(skillId, version.id));
+      const [steps, baseline] = await Promise.all([Promise.all(chainVersions.map(read)), read(from)]);
+      if (!cancelled) {
+        setChain({ key: chainKey, steps, baseline });
+        setRetryingSteps(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [skillId, chainVersions]);
+    // chainKey names skillId, from, and chainVersions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chainKey, stepsReloadKey]);
 
-  const totals = useMemo(() => {
-    const out = { regressed: 0, improved: 0, recorded: 0 };
-    for (const step of steps ?? []) {
-      if (!step.run) continue;
-      out.recorded += 1;
-      out.regressed += step.run.regressed;
-      out.improved += step.run.improved;
-    }
-    return out;
-  }, [steps]);
+  // null until every run on this path has been read. A retry keeps the rows
+  // it is re-reading in place.
+  const loaded = chain !== null && chain.key === chainKey ? chain : null;
+  const steps = loaded?.steps ?? null;
+  const totals = useMemo(() => (loaded ? chainTotals(loaded.steps, loaded.baseline) : null), [loaded]);
+  const totalsNote = (complete: string) =>
+    totals === null ? "loading recorded runs" : chainTotalsGap(totals) ?? complete;
+  const improvementsNote = (complete: string) =>
+    totals === null || loaded === null
+      ? "loading recorded runs"
+      : chainImprovementsGap(totals, loaded.steps, loaded.baseline) ?? complete;
 
   // The newest step's per-case diff — the recorded record of the final hop.
-  const newestRun = steps?.[0]?.run ?? null;
+  const newestStep = steps?.[0];
+  const newestRun = newestStep?.status === "recorded" ? newestStep.run : null;
+  const newestImprovementsCounted = totals?.improvementsCountedBySave[0] ?? false;
 
   function setPair(nextFrom: string, nextTo: string) {
     setSearchParams((current) => {
@@ -142,8 +172,25 @@ export function CompareVersionsScreen() {
 
   if (loadError) {
     return (
+      <PageLoadError
+        eyebrow="Run comparison"
+        title="Couldn't load versions"
+        failure={loadError}
+        onRetry={() => setListReloadKey((key) => key + 1)}
+        back={
+          <Button variant="ghost" onClick={() => navigate("/criteria")}>
+            Open criteria
+          </Button>
+        }
+      />
+    );
+  }
+
+  // The list is empty while it loads; that is not "nothing to compare".
+  if (!currentList) {
+    return (
       <div className="fadeUp">
-        <SectionHead eyebrow="Run comparison" title="Could not load versions" sub={loadError} />
+        <SectionHead eyebrow="Run comparison" title="Loading versions" />
       </div>
     );
   }
@@ -201,7 +248,8 @@ export function CompareVersionsScreen() {
           <div className="flex-1" />
           {valid ? (
             <span className="font-mono text-[11px] text-ink-4">
-              {chainVersions.length} recorded {chainVersions.length === 1 ? "run" : "runs"} between them
+              {chainVersions.length} {chainVersions.length === 1 ? "save" : "saves"} between them
+              {totals ? ` · ${chainRecordedNote(totals)}` : ""}
             </span>
           ) : (
             <span className="font-mono text-[11px] text-signal">
@@ -223,9 +271,11 @@ export function CompareVersionsScreen() {
               delta={
                 fromPct == null || toPct == null
                   ? "not measured on both"
-                  : toPct >= fromPct
+                  : toPct > fromPct
                     ? "improved"
-                    : "declined"
+                    : toPct < fromPct
+                      ? "declined"
+                      : "unchanged"
               }
               deltaKind={
                 fromPct != null && toPct != null && toPct < fromPct ? "signal" : "up"
@@ -233,15 +283,19 @@ export function CompareVersionsScreen() {
             />
             <KPI
               label="Regressions across versions"
-              num={totals.regressed}
-              delta="changes against recorded labels"
-              deltaKind={totals.regressed ? "signal" : "default"}
+              num={totals?.regressed ?? "—"}
+              delta={totalsNote("changes against recorded labels")}
+              deltaKind={totals?.regressed ? "signal" : "default"}
             />
-            <KPI label="Improvements" num={totals.improved} delta="flips toward the label" />
+            <KPI
+              label="Improvements"
+              num={totals?.improved ?? "—"}
+              delta={improvementsNote("flips toward the label")}
+            />
             <KPI
               label="Saves between"
               num={chainVersions.length}
-              foot={`${totals.recorded} with a recorded run`}
+              foot={totals ? chainRecordedNote(totals) : "loading recorded runs"}
             />
           </KPIRow>
 
@@ -249,8 +303,26 @@ export function CompareVersionsScreen() {
             <CardHeader>
               <div>
                 <CardTitle>The path, run by run</CardTitle>
-                <CardDescription>Each row is a recorded evaluator-version regression check.</CardDescription>
+                <CardDescription>
+                  Each row is one saved version and the regression check recorded when it was saved, if any.
+                </CardDescription>
               </div>
+              {loaded && chainRetryable(loaded.steps, loaded.baseline) ? (
+                <>
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={retryingSteps}
+                    onClick={() => {
+                      setRetryingSteps(true);
+                      setStepsReloadKey((key) => key + 1);
+                    }}
+                  >
+                    <RefreshCcw /> {retryingSteps ? "Retrying…" : "Retry"}
+                  </Button>
+                </>
+              ) : null}
             </CardHeader>
             <Table>
               <thead>
@@ -269,48 +341,62 @@ export function CompareVersionsScreen() {
                     <td colSpan={6} className="text-center text-ink-3">Loading recorded runs…</td>
                   </tr>
                 ) : (
-                  steps.map(({ version, run }) => (
-                    <tr
-                      key={version.id}
-                      className="row-link"
-                      onClick={() => navigate(`/skill/versions/${version.id}`)}
-                    >
-                      <td>
-                        <RowLink to={`/skill/versions/${version.id}`} className="font-mono">
-                          v{version.version}
-                        </RowLink>
-                      </td>
-                      <td>
-                        <GateChip
-                          state={gateStateForVersion(version)}
-                          title={version.knownLimitations.join(" · ")}
-                        />
-                      </td>
-                      <td
-                        className="font-mono text-[10px] text-ink-3"
-                        title={run?.datasetRevisionId ?? version.regressionDatasetRevisionId ?? undefined}
+                  steps.map((step) => {
+                    const { version } = step;
+                    const run = step.status === "recorded" ? step.run : null;
+                    // A failed or empty check recorded zeros it never measured.
+                    const measured = run !== null && runCompared(run);
+                    return (
+                      <tr
+                        key={version.id}
+                        className="row-link"
+                        onClick={() => navigate(`/skill/versions/${version.id}`)}
                       >
-                        {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId)?.slice(0, 18) ?? "not pinned"}
-                        {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId) ? "…" : ""}
-                      </td>
-                      <td
-                        className="text-right font-mono tabular-nums"
-                        style={run && run.regressed ? { color: "var(--signal)" } : undefined}
-                      >
-                        {run ? run.regressed : "—"}
-                      </td>
-                      <td className="text-right font-mono tabular-nums">{run ? run.improved : "—"}</td>
-                      <td className="text-[12.5px] text-ink-3">
-                        {run
-                          ? run.overrideReason
-                            ? `override on file · "${run.overrideReason}"`
-                            : run.goldenSetMissing
-                              ? "no promoted reference cases at version creation"
-                              : `${run.compared} reference cases compared`
-                          : "no run recorded for this save"}
-                      </td>
-                    </tr>
-                  ))
+                        <td>
+                          <RowLink to={`/skill/versions/${version.id}`} className="font-mono">
+                            v{version.version}
+                          </RowLink>
+                        </td>
+                        <td>
+                          <GateChip
+                            state={gateStateForVersion(version, chainStepRun(step))}
+                            title={version.knownLimitations.join(" · ")}
+                          />
+                        </td>
+                        <td
+                          className="font-mono text-[10px] text-ink-3"
+                          title={run?.datasetRevisionId ?? version.regressionDatasetRevisionId ?? undefined}
+                        >
+                          {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId)?.slice(0, 18) ?? "not pinned"}
+                          {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId) ? "…" : ""}
+                        </td>
+                        <td
+                          className="text-right font-mono tabular-nums"
+                          style={measured && run.regressed ? { color: "var(--signal)" } : undefined}
+                        >
+                          {measured ? run.regressed : "—"}
+                        </td>
+                        <td className="text-right font-mono tabular-nums">{measured ? run.improved : "—"}</td>
+                        <td className="text-[12.5px] text-ink-3">
+                          {step.status === "failed" ? (
+                            <span className="text-signal">
+                              Couldn't load this save's run · {step.error}
+                            </span>
+                          ) : run?.status === "error" ? (
+                            <span className="text-signal" title={run.error ?? undefined}>
+                              Regression check failed
+                            </span>
+                          ) : run
+                            ? run.overrideReason
+                              ? `override on file · "${run.overrideReason}"`
+                              : run.goldenSetMissing
+                                ? "no promoted reference cases at version creation"
+                                : `${run.compared} reference cases compared`
+                            : "no run recorded for this save"}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </Table>
@@ -331,10 +417,24 @@ export function CompareVersionsScreen() {
                 <div className="flex-1" />
                 <div className="flex gap-2">
                   <Chip variant="fail">{newestRun.regressed} regressed</Chip>
-                  <Chip>{newestRun.improved} improved</Chip>
-                  <Chip variant="outline">
-                    {Math.max(0, newestRun.compared - newestRun.regressed - newestRun.improved)} unchanged
-                  </Chip>
+                  {newestImprovementsCounted ? (
+                    <>
+                      <Chip>{newestRun.improved} improved</Chip>
+                      <Chip variant="outline">
+                        {Math.max(0, newestRun.compared - newestRun.regressed - newestRun.improved)} unchanged
+                      </Chip>
+                    </>
+                  ) : (
+                    // Without the previous save's verdicts an improved case is
+                    // recorded as agreeing, so improved and unchanged can't be
+                    // told apart.
+                    <>
+                      <Chip variant="outline">
+                        {Math.max(0, newestRun.compared - newestRun.regressed)} agree with the label
+                      </Chip>
+                      <Chip variant="outline">improvements not counted</Chip>
+                    </>
+                  )}
                 </div>
               </CardHeader>
               <Table>

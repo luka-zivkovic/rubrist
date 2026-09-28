@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
+import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, fetchSkillVersionRegression, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
 
 const createdKey = {
   id: "apikey_first",
@@ -279,6 +279,32 @@ describe("web API helpers", () => {
 
     await expect(fetchSkillVersionCriterion("skill/one", "version one")).resolves.toEqual(criterionVersion);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/skills/skill%2Fone/versions/version%20one/criterion");
+  });
+
+  it("reads only the API's no-run answer as a version without a recorded run", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      error: "No regression run recorded for this version",
+      code: "regression_run_not_recorded"
+    }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
+    // The code decides, whatever the wording; an API that predates the code
+    // is matched by its message.
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "Reworded", code: "regression_run_not_recorded" }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "No regression run recorded for this version" }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).resolves.toBeNull();
+
+    // An unknown version, or a 404 from anything else, is a failed read.
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "Skill version not found" }, 404)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_missing")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "Skill version not found"
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Not Found", { status: 404 })));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).rejects.toMatchObject({ status: 404 });
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "boom" }, 500)));
+    await expect(fetchSkillVersionRegression("skill_1", "skillv_1")).rejects.toMatchObject({ status: 500 });
   });
 
   it("loads version history receipts and reference counts from metadata-only reads", async () => {
