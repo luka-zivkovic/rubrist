@@ -573,7 +573,7 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
       />
 
       <div className="grid grid-cols-1 gap-7 xl:grid-cols-[1.25fr_1fr]">
-        <div className="flex flex-col gap-5">
+        <div className="min-w-0 flex flex-col gap-5">
           {typedEvaluation ? (
             <Card>
               <CardContent className="pt-5">
@@ -632,7 +632,7 @@ export function TraceDetail({ detail, onChanged, shortcuts }: TraceDetailProps) 
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="min-w-0 flex flex-col gap-5">
           {effectiveRuling ? (
             <HumanRulingCard
               ruling={effectiveRuling}

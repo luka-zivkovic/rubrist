@@ -64,8 +64,8 @@ export function ExceptionQueueRow({
   const hasNote = Boolean(exception.reason.trim() || exception.rejudgedSince?.reason.trim());
 
   return (
-    <tr className="row-link row-signal" onClick={onOpen}>
-      <td>
+    <tr role="row" className="row-link row-signal" onClick={onOpen}>
+      <td role="cell" data-label="Case">
         <div className="flex min-w-[180px] items-center">
           <RowLink
             to={`/cases/${exception.id}`}
@@ -80,7 +80,7 @@ export function ExceptionQueueRow({
           {formatTimestamp(exception.createdAt)} · {exception.traceId}
         </span>
       </td>
-      <td>
+      <td role="cell" data-label="Judge category">
         {exception.capabilityGap ? (
           <Ref
             kind="category"
@@ -91,8 +91,8 @@ export function ExceptionQueueRow({
           <span className="text-[11.5px] text-ink-4">Uncategorized</span>
         )}
       </td>
-      <td>
-        <div className="flex items-center gap-1.5">
+      <td role="cell" data-label="Evaluator">
+        <div className="flex flex-wrap items-center gap-1.5">
           <VerdictChip verdict={exception.verdict} />
           {provisional ? <ProvChip /> : null}
         </div>
@@ -103,7 +103,7 @@ export function ExceptionQueueRow({
           </div>
         ) : null}
       </td>
-      <td>
+      <td role="cell" data-label="Judge note">
         <div
           id={noteId}
           className={cn(
@@ -120,12 +120,13 @@ export function ExceptionQueueRow({
           </div>
         ) : null}
       </td>
-      <td>
-        <div className="flex justify-end gap-1">
+      <td role="cell" data-label="Actions">
+        <div className="flex flex-wrap justify-start gap-1 md:justify-end">
           {hasNote ? <Button
             type="button"
             variant="ghost"
             size="xs"
+            className="min-h-10 md:min-h-0"
             aria-expanded={expanded}
             aria-controls={noteId}
             onClick={(event) => {
@@ -140,6 +141,7 @@ export function ExceptionQueueRow({
             type="button"
             variant="default"
             size="xs"
+            className="min-h-10 md:min-h-0"
             aria-label={`Review ${exception.title}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -371,11 +373,11 @@ export function ExceptionsScreen() {
           </div>
           <div className="flex-1" />
           {category !== ALL_CATEGORIES && list.length > 0 ? (
-            <Button variant="ghost" size="sm" onClick={() => setQueueModalOpen(true)}>
+            <Button className="h-auto min-h-8 max-w-full whitespace-normal" variant="ghost" size="sm" onClick={() => setQueueModalOpen(true)}>
               <Inbox /> Save this category as a queue · {list.length}
             </Button>
           ) : null}
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {VERDICT_OPTIONS.map((v) => (
               <FilterChip key={v} active={v === verdict} onClick={() => setVerdict(v)}>
                 {v}
@@ -484,17 +486,17 @@ export function ExceptionsScreen() {
             </div>
           </div>
         ) : (
-          <Table className="table-fixed">
-            <thead>
-              <tr>
-                <th style={{ width: 240 }}>Case</th>
-                <th style={{ width: 150 }}>Judge category</th>
-                <th style={{ width: 110 }}>Evaluator</th>
-                <th>Judge note</th>
-                <th style={{ width: 160 }}></th>
+          <Table className="ledger-stacked table-fixed" role="table" aria-label="Waiting cases">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader" style={{ width: 240 }}>Case</th>
+                <th scope="col" role="columnheader" style={{ width: 150 }}>Judge category</th>
+                <th scope="col" role="columnheader" style={{ width: 110 }}>Evaluator</th>
+                <th scope="col" role="columnheader">Judge note</th>
+                <th scope="col" role="columnheader" style={{ width: 160 }}></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {list.map((ex) => (
                 <ExceptionQueueRow
                   key={ex.id}
@@ -623,7 +625,7 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-6 items-center rounded-sm border px-2 text-[11.5px] transition-colors cursor-pointer",
+        "inline-flex min-h-8 max-w-full items-center whitespace-normal rounded-sm border px-2 text-[11.5px] transition-colors cursor-pointer",
         active
           ? "border-ink bg-ink text-paper"
           : "border-rule-soft bg-transparent text-ink-2 hover:bg-paper-3"

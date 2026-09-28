@@ -67,7 +67,7 @@ export function FirstProjectKeyCard({ project, className }: { project: Project; 
           </Button>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <FirstRunPath
             icon={<Database className="size-3.5" />}
             title={bench ? "Paste JSONL" : "Paste one trace"}
