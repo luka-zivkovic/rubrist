@@ -225,7 +225,7 @@ describe("Demo golden evidence repository slice", () => {
       ["getSkillFormatExamples", "{ return this.goldenEvidenceRepository.getSkillFormatExamples(projectId, cap, criterionVersionId); }"],
       ["getGoldenSetHealth", "{ return this.goldenEvidenceRepository.getGoldenSetHealth(projectId, criterionVersionId); }"],
       ["getExceptionDetail", "{ return this.goldenEvidenceRepository.getExceptionDetail(projectId, caseId, skillVersionId); }"],
-      ["getCaseDetail", "{ return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId); }"],
+      ["getCaseDetail", "{ return this.goldenEvidenceRepository.getCaseDetail(projectId, caseId, skillVersionId, criterionVersionId); }"],
       ["promoteExceptionToGoldenSet", "{ return this.goldenEvidenceRepository.promoteExceptionToGoldenSet(input); }"],
       ["retireGoldenSetEntry", "{ return this.goldenEvidenceRepository.retireGoldenSetEntry(input); }"],
       ["getGoldenSetTraces", "{ return this.goldenEvidenceRepository.getGoldenSetTraces(projectId, criterionVersionId); }"]

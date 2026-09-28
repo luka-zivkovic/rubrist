@@ -52,8 +52,8 @@ import {
 // The canonical case-detail fetcher — resolves any judged case, exception or
 // not, so links from the regression diff to a still-passing golden case don't
 // 404 and the exceptions queue drills into the same endpoint.
-export async function fetchCaseDetail(caseId: string, skillVersionId?: string): Promise<ExceptionDetail> {
-  const response = await apiFetch(queryPath(`${API_BASE}/api/cases/${caseId}`, { skillVersionId }), { credentials: "include" });
+export async function fetchCaseDetail(caseId: string, skillVersionId?: string, criterionVersionId?: string): Promise<ExceptionDetail> {
+  const response = await apiFetch(queryPath(`${API_BASE}/api/cases/${caseId}`, { skillVersionId, criterionVersionId }), { credentials: "include" });
   if (!response.ok) throw await apiErrorFromResponse(response, "Case detail request failed");
   return ExceptionDetailSchema.parse(await response.json());
 }

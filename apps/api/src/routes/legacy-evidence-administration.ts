@@ -58,22 +58,30 @@ export function registerLegacyEvidenceAdministrationRoutes(
     markUngovernedLegacy(c);
     const projectId = c.get("projectId");
     const caseId = c.req.param("caseId");
-    const query = z.object({ skillVersionId: z.string().min(1).optional() }).strict().safeParse({
-      skillVersionId: c.req.query("skillVersionId") ?? undefined
+    const query = z.object({
+      skillVersionId: z.string().min(1).optional(),
+      criterionVersionId: z.string().min(1).optional()
+    }).strict().safeParse({
+      skillVersionId: c.req.query("skillVersionId") ?? undefined,
+      criterionVersionId: c.req.query("criterionVersionId") ?? undefined
     });
     if (!query.success) {
       return c.json({ error: "Invalid case-detail query", details: z.treeifyError(query.error) }, 400);
     }
     let detail;
     try {
-      detail = await repository.getCaseDetail(projectId, caseId, query.data.skillVersionId);
+      detail = await repository.getCaseDetail(projectId, caseId, query.data.skillVersionId, query.data.criterionVersionId);
     } catch (error) {
       if (error instanceof AmbiguousProjectSkillError) {
         return c.json({ error: error.message, code: "skill_version_required" }, 409);
       }
       throw error;
     }
-    if (!detail) return c.json({ error: "Case not found" }, 404);
+    if (!detail) {
+      return query.data.criterionVersionId
+        ? c.json({ code: "case_evaluation_unavailable", error: "No recorded evaluator result is available for this case and criterion version." }, 404)
+        : c.json({ error: "Case not found" }, 404);
+    }
     if (options.pool) {
       await options.pool.query(
         `insert into audit_logs (id, project_id, actor_user_id, action, target_type, target_id, metadata)
