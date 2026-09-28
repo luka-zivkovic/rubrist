@@ -1,5 +1,5 @@
 import { PageLoading } from "../components/page-loading.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Pencil, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,27 +42,38 @@ export function SkillScreen() {
   const [error, setError] = useState<LoadFailure | null>(null);
   const [tab, setTab] = useState<Tab>("rubric");
 
+  const [loadedCriterion, setLoadedCriterion] = useState<string | null | undefined>(undefined);
+  const loadGeneration = useRef(0);
+
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      setSkill(await fetchCurrentSkill(selectedCriterionId ?? undefined));
+      const selected = await fetchCurrentSkill(selectedCriterionId ?? undefined);
+      if (generation !== loadGeneration.current) return;
+      setSkill(selected);
+      setLoadedCriterion(selectedCriterionId);
     } catch (err) {
-      setError(loadFailure(err));
+      if (generation === loadGeneration.current) {
+        setError(loadFailure(err));
+        setLoadedCriterion(selectedCriterionId);
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [selectedCriterionId]);
 
   useEffect(() => {
     void load();
+    return () => { loadGeneration.current += 1; };
   }, [load]);
 
   useEffect(() => {
     void refreshDashboard();
   }, [refreshDashboard]);
 
-  if (loading && !skill) {
+  if (loadedCriterion !== selectedCriterionId || (loading && !skill)) {
     return (
       <PageLoading title="Loading skill" shape="detail" />
     );
@@ -98,7 +109,7 @@ export function SkillScreen() {
   return (
     <div className="fadeUp max-w-[1760px]">
       <SectionHead
-        eyebrow="Evaluator definition"
+        eyebrow={`Evaluator definition · current default · v${v.version}`}
         title={skill.name}
         sub={starterUnvalidated
           ? `${skill.description} This Starter Check can run, but it has not been validated against governed human judgment. Review what it checks before relying on its Results.`
@@ -119,6 +130,10 @@ export function SkillScreen() {
           </div>
         }
       />
+
+      <p className="mb-5 text-[12.5px] leading-5 text-ink-2">
+        Used for new runs that do not pin a version. Default selection is separate from evidence of accuracy or calibration.
+      </p>
 
       {starterUnvalidated ? (
         <MarginNote tone="neutral" who="Starter · unvalidated" className="mb-5 max-w-[82ch]">
@@ -179,7 +194,7 @@ export function SkillScreen() {
             <div className="px-2 font-mono text-[11px] text-ink-3">
               {starterUnvalidated
                 ? "Starter · unvalidated"
-                : `Approved ${v.approvedAt ? new Date(v.approvedAt).toLocaleDateString() : "—"}`}
+                : `Recorded status: ${v.status}`}
             </div>
           </div>
         </aside>

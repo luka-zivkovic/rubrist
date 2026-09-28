@@ -727,7 +727,7 @@ export function registerV1AgentAdministrationRoutes(
       return c.json({ skill });
     } catch (error) {
       if (error instanceof NoCurrentSkillError) {
-        return c.json({ error: "No evaluator exists for this criterion" }, 404);
+        return c.json({ error: "No evaluator exists for this criterion", code: "no_current_evaluator" }, 404);
       }
       throw error;
     }

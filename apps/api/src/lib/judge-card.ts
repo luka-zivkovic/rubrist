@@ -145,12 +145,12 @@ export function renderJudgeCardMarkdown(card: JudgeCard): string {
   lines.push("");
   lines.push(`Project **${esc(card.project.name)}** · skill owner ${esc(card.skill.ownerName)} · generated ${card.generatedAt}`);
   lines.push("");
-  lines.push(`- **Version**: ${card.version.version} (\`${card.version.id}\`) · status **${card.version.status}** · verdict kind ${card.version.verdictKind}`);
-  lines.push(`- **Approved**: ${card.version.approvedAt ?? "not approved"}`);
+  lines.push(`- **Version**: ${card.version.version} (\`${card.version.id}\`) · recorded status **${card.version.status}** · verdict kind ${card.version.verdictKind}`);
+  lines.push(`- **Recorded approval timestamp**: ${card.version.approvedAt ?? "not recorded"} (not evidence of accuracy or calibration)`);
   lines.push(`- **Evaluator authorship**: ${evaluatorAuthorship(card.version).label}`);
   lines.push(`  ${evaluatorAuthorship(card.version).note}`);
   lines.push(`- **Execution binding**: ${esc(describeExecutionBinding(card.executionBinding))}`);
-  const agreement = card.goldenSet.agreement === null
+  const agreement = (card.goldenSet.agreement === null || card.regression?.compared === 0)
     ? "no comparable golden cases"
     : card.regression
       ? `recorded ratio ${card.goldenSet.agreement.toFixed(2)} over the ${card.regression.compared} case(s) compared at ship`
@@ -158,7 +158,9 @@ export function renderJudgeCardMarkdown(card: JudgeCard): string {
   lines.push(`- **Golden set**: ${card.goldenSet.size} active case(s) now · agreement ${agreement} · directions ${card.goldenSet.tooStrict} strict / ${card.goldenSet.tooLenient} lenient / ${card.goldenSet.ambiguous} ambiguous`);
   if (card.regression) {
     lines.push(
-      `- **Regression gate**: ${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} regressed, ${card.regression.improved} improved, ${card.regression.flipped} flipped` +
+      (card.regression.status === "passed" && card.regression.compared === 0
+        ? "- **Regression gate**: no reference cases compared"
+        : `- **Regression gate**: ${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} regressed, ${card.regression.improved} improved, ${card.regression.flipped} flipped`) +
       (card.regression.overrideReason ? ` · override: "${esc(card.regression.overrideReason)}"` : "")
       + (card.regression.error ? ` · error: "${esc(card.regression.error)}"` : "")
     );

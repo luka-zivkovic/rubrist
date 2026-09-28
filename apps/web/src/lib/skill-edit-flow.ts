@@ -61,7 +61,7 @@ export function regressionReceiptLabel(run: RegressionRunResult | undefined): st
   if (run.status === "overridden") return "override recorded";
   if (run.status === "blocked") return "regression found";
   if (run.status === "error") return "check failed";
-  if (run.goldenSetMissing) return "recorded without comparison";
+  if (run.compared === 0 || run.goldenSetMissing) return "recorded without comparison";
   return "check passed";
 }
 

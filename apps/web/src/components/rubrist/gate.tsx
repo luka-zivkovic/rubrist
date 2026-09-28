@@ -167,8 +167,8 @@ export function GateStrip({ state, goldenSize, mode, onStartEvidence, onOpenExce
       body={
         <>
           <b>Evaluator regression check enabled.</b> Saving re-judges all {goldenSize} promoted reference cases
-          before this evaluator version can become current. Regressions keep it in draft until someone records an
-          override reason — or reverts the change.
+          and records the outcome. Regressions require review or a recorded override reason.
+          Check Version history for the current default; a reference check does not establish general accuracy.
           <GateProgress goldenSize={goldenSize} />
         </>
       }

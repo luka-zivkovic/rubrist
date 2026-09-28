@@ -69,6 +69,12 @@ describe("evaluator-version regression state", () => {
     expect(gateStateForVersion(version(), run())).toBe("clean");
   });
 
+  it("never calls zero comparisons clean, even when the legacy status is passed", () => {
+    expect(gateStateForVersion(version(), run({ compared: 0 }))).toBe("first");
+    expect(gateStateForVersion(version(), run({ compared: 0, status: "error" }))).toBe("error");
+    expect(gateStateForVersion(version(), run({ compared: 0, status: "blocked" }))).toBe("blocked");
+  });
+
   it("never reads a version without a recorded run as clean", () => {
     // Approved, full agreement, no limitations: the old derivation called this
     // clean. Without a recorded run there is no evidence either way.
@@ -114,7 +120,7 @@ describe("evaluator-version regression state", () => {
     expect(gateStateForVersion(
       version({ knownLimitations: ["no golden-set cases are available; regression gate is advisory only"] }),
       run({ status: "overridden" })
-    )).toBe("first");
+    )).toBe("override");
   });
 
   it("labels every state without calling any unknown or missing state clean", () => {

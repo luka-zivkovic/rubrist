@@ -170,7 +170,7 @@ export function RegressionRunning({
             </div>
             <p className="mt-1 max-w-[72ch] text-[12px] leading-5 text-ink-2">
               Rubrist records the full outcome only after every case in the pinned revision finishes.
-              Until then this version is not presented as passed or current.
+              A pending check does not establish quality. Check Version history for the current default.
             </p>
             <CheckWait createdAt={version.createdAt} stopped={stopped} />
             <dl className="mt-4 grid grid-cols-1 gap-y-1 text-[11.5px] sm:grid-cols-[150px_1fr] sm:gap-y-2">
@@ -246,7 +246,8 @@ export function RegressionResult({
   const blocked = result.blocked && run.status === "blocked";
   const overridden = run.status === "overridden";
   const failed = run.status === "error";
-  const outcome: SkillEditOutcome = failed ? "error" : blocked ? "blocked" : overridden ? "overridden" : "passed";
+  const uncompared = run.compared === 0 || run.goldenSetMissing;
+  const outcome: SkillEditOutcome = failed ? "error" : blocked ? "blocked" : overridden ? "overridden" : uncompared ? "uncompared" : "passed";
   // Count "agree" rows directly. `flipped` overlaps regressed+improved (it's
   // "verdict changed vs the prior version"), so the old arithmetic
   // compared − regressed − improved − flipped double-subtracted.
@@ -309,7 +310,7 @@ export function RegressionResult({
             ? "Evaluator edit · regression found"
             : overridden
               ? "Evaluator edit · override recorded"
-              : "Evaluator edit · check passed"
+              : uncompared ? "Evaluator edit · no reference comparison" : "Evaluator edit · reference check passed"
         }
         title={
           failed
@@ -318,20 +319,20 @@ export function RegressionResult({
             ? `${run.regressed} pinned reference case${run.regressed === 1 ? "" : "s"} would regress`
             : overridden
               ? `v${result.version.version} recorded with an override`
-              : run.goldenSetMissing
+              : uncompared
                 ? `v${result.version.version} recorded without a reference comparison`
                 : `v${result.version.version} agrees with the known-failure set`
         }
         sub={
           failed
             ? run.error ?? "The provider or worker failed before a complete regression result was available."
-            : run.goldenSetMissing
-              ? "No promoted reference set yet — this version was created without a known-failure comparison. Promote reviewed cases to check future evaluator edits."
-              : blocked
+            : blocked
                 ? "Rubrist is holding this evaluator version out of current selection until you record an override reason or revise the edit."
                 : overridden
                   ? "The override reason and replacement version are recorded in Version history."
-                  : "Every promoted reference case still agrees. The immutable outcome is recorded in Version history."
+                  : uncompared
+                    ? "No reference cases were compared. This version is eligible for automatic default selection, but this check provides no evidence of its quality. Promote reviewed cases to check future edits."
+                    : "Every compared reference case agrees. This version is eligible for automatic default selection. This known-failure check does not establish general accuracy or calibration."
         }
       />
 
@@ -413,7 +414,7 @@ export function RegressionResult({
           </div>
           <div className="text-ink-3">Known-failure agreement</div>
           <div>
-            {result.version.goldenSetAgreement == null
+            {uncompared || result.version.goldenSetAgreement == null
               ? "—"
               : `${Math.round(result.version.goldenSetAgreement * 100)}%`}
           </div>
@@ -423,7 +424,7 @@ export function RegressionResult({
               ? "Check failed — no pass recorded"
               : blocked
                 ? "Regression found — review required"
-                : overridden ? "Override recorded" : "No regression found"}
+                : overridden ? "Override recorded" : uncompared ? "No reference cases compared" : "No regression found on compared cases"}
           </div>
         </CardContent>
       </Card>

@@ -13,7 +13,8 @@ import {
   skillVersionChangeLabels,
   verdictOutputContractChanged
 } from "../src/lib/skill-edit-flow.js";
-import type { RegressionRunResult, SkillVersion } from "@rubrist/shared";
+import type { RegressionRunResult, SkillVersion, Skill } from "@rubrist/shared";
+import { RegressionResult } from "../src/screens/skill-edit/regression.js";
 import { readFeatureSource } from "./support/web-extraction-contracts.js";
 
 vi.mock("@/components/ui/card", () => ({
@@ -23,7 +24,14 @@ vi.mock("@/components/ui/card", () => ({
   CardHeader: ({ children, ...props }: { children?: unknown }) => createElement("div", props, children as never),
   CardTitle: ({ children, ...props }: { children?: unknown }) => createElement("div", props, children as never)
 }));
+vi.mock("@/components/skill-edit-flow", async () => import("../src/components/skill-edit-flow.js"));
+vi.mock("@/components/ui/button", () => ({ Button: ({ children }: { children?: unknown }) => createElement("button", null, children as never) }));
 vi.mock("@/components/rubrist", () => ({
+  SectionHead: ({ eyebrow, title, sub }: Record<string, string>) => createElement("header", null, eyebrow, title, sub),
+  KPIRow: ({ children }: { children?: unknown }) => createElement("div", null, children as never),
+  KPI: () => null,
+  MarginNote: () => null,
+  RegressionDiffTable: () => null,
   Chip: ({ children, ...props }: { children?: unknown }) => createElement("div", props, children as never),
   Eyebrow: ({ children, ...props }: { children?: unknown }) => createElement("div", props, children as never)
 }));
@@ -100,6 +108,9 @@ describe("guided evaluator editing", () => {
     expect(html).toContain("Pass when grounded.");
     expect(html).toContain("Pass only with a cited source.");
     expect(html).toContain("Future and existing traces");
+    expect(html).toContain("Saving can change the default");
+    expect(html).toContain("Without an approved version, an unvalidated version can be selected");
+    expect(html).toContain("even when no reference cases exist");
   });
 
   it("reviews a typed question in place of the guide and instructions", () => {
@@ -185,6 +196,14 @@ describe("guided evaluator editing", () => {
     })).toBe(false);
   });
 
+  it("renders no comparison without a passing outcome", () => {
+    const html = renderToStaticMarkup(createElement(SkillEditFlow, {
+      phase: "result", baseVersion: "1.1.0", createdVersion: "1.2.0", referenceCount: 0, outcome: "uncompared"
+    }));
+    expect(html).toContain("No reference comparison");
+    expect(html).not.toContain("Reference check passed");
+  });
+
   it("renders terminal blocked and error outcomes without calling them active", () => {
     const blocked = renderToStaticMarkup(createElement(SkillEditFlow, {
       phase: "result",
@@ -222,6 +241,7 @@ describe("guided evaluator editing", () => {
     });
 
     expect(regressionReceiptLabel(run("passed"))).toBe("check passed");
+    expect(regressionReceiptLabel({ ...run("passed"), compared: 0 })).toBe("recorded without comparison");
     expect(regressionReceiptLabel(run("passed", true))).toBe("recorded without comparison");
     expect(regressionReceiptLabel(run("overridden"))).toBe("override recorded");
     expect(regressionReceiptLabel(run("blocked"))).toBe("regression found");
@@ -266,4 +286,25 @@ describe("guided evaluator editing", () => {
     await completion;
     expect(adopted).toBe(false);
   });
+});
+
+
+it("keeps the complete save result neutral when a legacy receipt passed with zero cases", () => {
+  const regressionRun: RegressionRunResult = {
+    id: "r", skillVersionId: base.id, datasetRevisionId: "revision", status: "passed", compared: 0,
+    regressed: 0, improved: 0, flipped: 0, goldenSetMissing: false, cases: [], createdAt: base.createdAt
+  };
+  const html = renderToStaticMarkup(createElement(RegressionResult, {
+    skill: { id: base.skillId, name: "Support" } as Skill, baseVersion: "1.0.0",
+    result: { version: base, regressionRun, blocked: false }, firstRun: false, criterionVersion: null,
+    referenceCount: 0, overrideReason: "", onOverrideReasonChange: () => undefined, submitting: false,
+    submitError: null, onPublishOverride: () => undefined, onBackToEdit: () => undefined,
+    onDone: () => undefined, doneLabel: "Done"
+  }));
+  expect(html).toContain("No reference comparison");
+  expect(html).toContain("No reference cases compared");
+  expect(html).toContain("eligible for automatic default selection");
+  expect(html).not.toContain("check passed");
+  expect(html).not.toContain("No regression found");
+  expect(html).not.toContain("100%");
 });

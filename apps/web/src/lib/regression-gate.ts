@@ -20,7 +20,7 @@ export const GATE_LABEL: Record<GateState, string> = {
   error: "regression · error",
   override: "regression · override recorded",
   inactive: "regression · inactive",
-  first: "regression · no baseline",
+  first: "regression · no comparison",
   running: "regression · running",
   unrecorded: "regression · not recorded",
   unavailable: "regression · unavailable",
@@ -30,8 +30,8 @@ export const GATE_LABEL: Record<GateState, string> = {
 
 // Stored disagreement counts are zeros until a check measures them; while a
 // version has no agreement value they are unknown, never zero.
-export function measuredCount(version: SkillVersion, count: number): number | "—" {
-  return version.goldenSetAgreement == null ? "—" : count;
+export function measuredCount(version: SkillVersion, count: number, run?: Pick<RegressionRunResult, "compared"> | null): number | "—" {
+  return version.goldenSetAgreement == null || run?.compared === 0 ? "—" : count;
 }
 
 export function isGateState(value: string): value is GateState {
@@ -58,16 +58,17 @@ export function gateStateForVersion(
   if (run === null) return version.status === "calibrating" ? "running" : "unrecorded";
   if (run.status === "error") return "error";
   if (run.status === "blocked") return "blocked";
+  if (run.status === "overridden") return "override";
   if (
-    run.goldenSetMissing
+    run.compared === 0
+    || run.goldenSetMissing
     || version.goldenSetAgreement === null
     || version.knownLimitations.some((limitation) => limitation.includes("no golden-set cases"))
   ) {
     return "first";
   }
   if (
-    run.status === "overridden"
-    || version.knownLimitations.some((limitation) => limitation.includes("regressed on one or more"))
+    version.knownLimitations.some((limitation) => limitation.includes("regressed on one or more"))
   ) {
     return "override";
   }
