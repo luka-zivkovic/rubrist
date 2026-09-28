@@ -51,6 +51,7 @@ interface TraceDetailProps {
   // Called after a decision is recorded server-side, with which kind — hosts
   // use it to advance their cursor and tally a session summary.
   onChanged?: (kind: TraceDecisionKind) => void;
+  openRulingOnMount?: boolean;
   shortcuts?: TraceDetailShortcuts;
 }
 
@@ -344,7 +345,7 @@ function DecisionHistory({
   );
 }
 
-export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: TraceDetailProps) {
+export function TraceDetail({ detail, onChanged, shortcuts, openRulingOnMount = false, headingAs = "h1" }: TraceDetailProps) {
   const { exception, trace, judgeRun, rawRequest, rawResponse } = detail;
   const typedEvaluation = recordedTypedEvaluation(detail);
   const structuredEvidence = evidenceClaim(trace.input, trace.output);
@@ -551,14 +552,18 @@ export function TraceDetail({ detail, onChanged, shortcuts, headingAs = "h1" }: 
     }
   };
 
+  useEffect(() => {
+    if (openRulingOnMount) openReviewForm();
+  }, [openRulingOnMount]); // A return from the save receipt opens a new append-only correction.
+
   // Keyboard shortcuts (player mode only). The handler closure is stashed in a
   // ref so the window listener registers once per mount instead of re-binding
   // on every keystroke-triggered re-render.
   const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyHandlerRef.current = (e: KeyboardEvent) => {
-    if (!shortcuts) return;
+    if (!shortcuts || e.metaKey || e.ctrlKey || e.altKey || e.repeat || submitting) return;
     const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) return;
+    if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.tagName === "SELECT" || target.isContentEditable)) return;
 
     const key = e.key.toLowerCase();
     if (key === "a" && !submitting && !effectiveRuling) void handleAccept();

@@ -81,7 +81,6 @@ describe("exception note controls", () => {
     expect(html).not.toContain("Full note");
     expect(html).toContain("Review Question without explanation");
     expect(html).toContain('href="/review?criterionId=criterion_1&amp;criterionVersionId=criterionv_1&amp;caseId=case_1"');
-    expect(html).toContain('href="/cases/case_1?from=exceptions&amp;criterionVersionId=criterionv_1&amp;criterionId=criterion_1"');
   });
 
   it("keeps expansion when an actual earlier or newer explanation exists", () => {

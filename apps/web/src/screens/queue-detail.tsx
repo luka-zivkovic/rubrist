@@ -22,15 +22,17 @@ export function QueueDetailScreen() {
   // queue-A → record verdict → quickly navigate to queue-B race where A's
   // reload would otherwise write into B's URL.
   const loadSeqRef = useRef(0);
+  const routeQueueRef = useRef(queueId);
+  routeQueueRef.current = queueId;
 
   const load = useCallback(async () => {
-    if (!queueId) return;
+    if (!queueId || routeQueueRef.current !== queueId) return;
     const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const d = await fetchReviewQueueDetail(queueId);
-      if (loadSeqRef.current !== seq) return;
+      if (loadSeqRef.current !== seq || routeQueueRef.current !== queueId) return;
       if (!d) {
         setError("Queue not found.");
         setDetail(null);
@@ -50,6 +52,7 @@ export function QueueDetailScreen() {
     if (!queueId) return;
     const seq = ++loadSeqRef.current;
     let cancelled = false;
+    setDetail(null);
     setLoading(true);
     setError(null);
     fetchReviewQueueDetail(queueId)
@@ -83,7 +86,7 @@ export function QueueDetailScreen() {
     );
   }
 
-  if (loading && !detail) {
+  if ((loading && !detail) || (detail && detail.queue.id !== queueId)) {
     return (
       <div className="fadeUp">
         <SectionHead eyebrow="Ungoverned legacy · Review queue" title="Loading queue" />
@@ -107,7 +110,7 @@ export function QueueDetailScreen() {
     );
   }
 
-  return <QueueDetailBody detail={detail} reload={load} />;
+  return <><div role="status">{error ? <Card className="mb-4"><CardContent>Saved rulings are preserved, but queue progress could not refresh. <Button variant="ghost" onClick={() => void load()}>Retry queue progress</Button></CardContent></Card> : null}</div><QueueDetailBody key={detail.queue.id} detail={detail} reload={load} /></>;
 }
 
 function QueueDetailBody({ detail, reload }: { detail: ReviewQueueDetail; reload: () => void }) {
@@ -174,7 +177,7 @@ function DoneView({
   return (
     <div className="fadeUp max-w-[1760px]">
       <SectionHead
-        eyebrow="Queue complete"
+        eyebrow={completed === items.length ? "Queue complete" : "Review session summary"}
         title={queue.name}
         sub={`${completed} of ${items.length} cases have a recorded ruling. Each ruling remains attached to its case and can be reopened from Traces.`}
       />
@@ -182,7 +185,7 @@ function DoneView({
         <CardHeader>
           <div>
             <CardTitle>Summary</CardTitle>
-            <CardDescription>The queue's final progress and recorded case rulings.</CardDescription>
+            <CardDescription>Saved progress and recorded case rulings.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -193,7 +196,7 @@ function DoneView({
               <Chip variant="outline">{items.length - completed} pending</Chip>
             ) : null}
           </div>
-          <MarginNote tone="neutral" who="Closed by reviewers">
+          <MarginNote tone="neutral" who="Rulings are preserved">
             Closing the queue does not change or remove its rulings. Reopen it at any time to see
             which reviewer recorded each decision.
           </MarginNote>
@@ -202,7 +205,7 @@ function DoneView({
               Back to queues
             </Button>
             <Button variant="default" onClick={onReopen}>
-              Walk the queue again
+              {completed === items.length ? "Walk the queue again" : "Continue reviewing"}
             </Button>
           </div>
         </CardContent>

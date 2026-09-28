@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronLeft, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,13 @@ export function ReviewPlayer({
   renderDone
 }: ReviewPlayerProps) {
   const { dashboard, refresh } = useDashboard();
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [lastSaved, setLastSaved] = useState<{ key: string; position: number; kind: TraceDecisionKind } | null>(null);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [changeKey, setChangeKey] = useState<string | null>(null);
   const completedCount = items.filter((i) => i.completed).length;
   const total = items.length;
   const allComplete = total > 0 && completedCount === total;
@@ -59,11 +67,28 @@ export function ReviewPlayer({
   const firstPendingIndex = items.findIndex((i) => !i.completed);
   const initialCursor = firstPendingIndex >= 0 ? firstPendingIndex : Math.max(0, total - 1);
 
-  const [cursor, setCursor] = useState(initialCursor);
+  const requestedIndex = items.findIndex((item) => item.key === searchParams.get("at"));
+  const [cursor, setCursor] = useState(requestedIndex >= 0 ? requestedIndex : initialCursor);
+  const requestedKey = searchParams.get("at");
+  useEffect(() => {
+    if (requestedKey) {
+      const index = items.findIndex((item) => item.key === requestedKey);
+      if (index >= 0) setCursor(index);
+    }
+  }, [requestedKey]); // Items can refresh without resetting the reviewer's position.
+  const pick = useCallback((index: number) => {
+    const bounded = Math.max(0, Math.min(index, items.length - 1));
+    setCursor(bounded);
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      if (items[bounded]) next.set("at", items[bounded].key);
+      return next;
+    }, { replace: true });
+  }, [items, setSearchParams]);
   // `walkAgain` lets the user re-enter from the done view and stay in work
   // mode even when every item is already completed. Otherwise the allComplete
   // branch would short-circuit back on the next render.
-  const [walkAgain, setWalkAgain] = useState(false);
+  const [walkAgain, setWalkAgain] = useState(requestedIndex >= 0);
 
   // Clamp / re-anchor when the items list changes underneath us.
   useEffect(() => {
@@ -76,17 +101,13 @@ export function ReviewPlayer({
 
   // Advance to the next pending case (or just the next case if none are
   // pending) after the user records a decision on the current one.
-  const advanceCursor = useCallback(() => {
-    setCursor((c) => {
-      const nextPending = items.findIndex((item, idx) => idx > c && !item.completed);
-      if (nextPending !== -1) return nextPending;
-      return Math.min(c + 1, total - 1);
-    });
-  }, [items, total]);
-
   const current = items[cursor];
+  const currentKeyRef = useRef(current?.key);
+  currentKeyRef.current = current?.key;
   const criterionVersionId = current?.criterionVersionId ?? dashboardCriterionVersionId(dashboard);
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const loadIdentity = `${current?.key}:${criterionVersionId}`;
   const [detailError, setDetailError] = useState<string | null>(null);
   // Bumping retryTick refetches the current case after a failed load.
   const [retryTick, setRetryTick] = useState(0);
@@ -103,7 +124,7 @@ export function ReviewPlayer({
     if (!criterionVersionId) return;
     fetchCaseDetail(targetCaseId, undefined, criterionVersionId)
       .then((d) => {
-        if (!cancelled) setDetail(d);
+        if (!cancelled) { setDetail(d); setLoadedFor(loadIdentity); }
       })
       .catch((err) => {
         if (!cancelled) setDetailError(err instanceof Error ? err.message : String(err));
@@ -111,21 +132,43 @@ export function ReviewPlayer({
     return () => {
       cancelled = true;
     };
-  }, [current?.caseId, criterionVersionId, retryTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.key, current?.caseId, criterionVersionId, retryTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const prev = useCallback(() => setCursor((c) => Math.max(0, c - 1)), []);
-  const next = useCallback(() => setCursor((c) => Math.min(total - 1, c + 1)), [total]);
+  const prev = useCallback(() => pick(cursor - 1), [pick, cursor]);
+  const next = useCallback(() => pick(cursor + 1), [pick, cursor]);
+
+  const skip = useCallback(() => {
+    if (!current) return;
+    if (!current.completed) setSkipped((keys) => [...new Set([...keys, current.key])]);
+    if (cursor === total - 1) setSummaryOpen(true);
+    else next();
+  }, [current, cursor, total, next]);
 
   const shortcuts = useMemo(
-    () => ({ onSkip: next, onPrev: prev, onNext: next, onExit }),
-    [next, prev, onExit]
+    () => ({ onSkip: skip, onPrev: prev, onNext: next, onExit }),
+    [skip, next, prev, onExit]
   );
 
-  if (allComplete && !walkAgain) {
+  const receipt = lastSaved ? (
+    <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-sm border border-rule-soft bg-paper-2 px-4 py-3 text-sm">
+      <span>Case {lastSaved.position}: {lastSaved.kind === "promote" ? "golden-set entry saved" : "ruling recorded"}.</span>
+      <Button variant="ghost" size="sm" onClick={() => {
+        const index = items.findIndex((item) => item.key === lastSaved.key);
+        if (index < 0) return;
+        setSummaryOpen(false); setWalkAgain(true); setChangeKey(lastSaved.key);
+        setRetryTick((value) => value + 1); pick(index);
+      }}>Change ruling</Button>
+    </div>
+  ) : null;
+
+  if ((allComplete && !walkAgain) || summaryOpen) {
     return (
       <>
+        {receipt}
+        {skipped.length > 0 ? <p className="mb-4 text-sm text-ink-2">{items.filter((item) => skipped.includes(item.key) && !item.completed).length} skipped this session; skipping does not record a ruling.</p> : null}
         {renderDone(() => {
-          setCursor(0);
+          setSummaryOpen(false);
+          pick(firstPendingIndex >= 0 ? firstPendingIndex : 0);
           setWalkAgain(true);
         })}
       </>
@@ -144,7 +187,9 @@ export function ReviewPlayer({
         onExit={onExit}
       />
 
-      <NavStrip items={items} cursor={cursor} onPick={(i) => setCursor(i)} onPrev={prev} onNext={next} />
+      {receipt}
+      <NavStrip items={items} cursor={cursor} onPick={pick} onPrev={prev} onNext={next} onSkip={skip} />
+      <div className="mb-4 flex justify-end"><Button variant="ghost" size="sm" onClick={() => setSummaryOpen(true)}>Session summary</Button></div>
 
       {!current ? (
         <Card>
@@ -159,7 +204,7 @@ export function ReviewPlayer({
             </Button>
           </CardContent>
         </Card>
-      ) : !detail ? (
+      ) : !detail || loadedFor !== loadIdentity ? (
         <Card>
           <CardContent className="py-8 text-center text-ink-3">Loading trace…</CardContent>
         </Card>
@@ -174,11 +219,21 @@ export function ReviewPlayer({
             headingAs="h2"
             key={`${current.key}:${detail.judgeRun.id}`}
             detail={detail}
+            openRulingOnMount={changeKey === current.key}
             shortcuts={shortcuts}
             onChanged={(kind) => {
+              if (!mountedRef.current) return;
               const caseId = current.caseId;
               void refresh();
-              advanceCursor();
+              setLastSaved({ key: current.key, position: cursor + 1, kind });
+              setChangeKey(null);
+              setSkipped((keys) => keys.filter((key) => key !== current.key));
+              if (currentKeyRef.current === current.key) {
+                const remaining = items.map((item, index) => ({ item, index })).filter(({ item }) => item.key !== current.key && !item.completed);
+                const nextItem = remaining.find(({ index }) => index > cursor) ?? remaining[0];
+                if (nextItem) pick(nextItem.index);
+                else if (kind !== "promote") setSummaryOpen(true);
+              }
               onItemChanged(caseId, kind);
             }}
           />
@@ -241,13 +296,15 @@ function NavStrip({
   cursor,
   onPick,
   onPrev,
-  onNext
+  onNext,
+  onSkip
 }: {
   items: ReviewPlayerItem[];
   cursor: number;
   onPick: (i: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  onSkip: () => void;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-rule-soft pb-3">
@@ -257,6 +314,7 @@ function NavStrip({
       <Button variant="default" size="sm" disabled={cursor >= items.length - 1} onClick={onNext}>
         Next <ArrowRight />
       </Button>
+      <Button variant="ghost" size="sm" onClick={onSkip}>Skip for now</Button>
       <div className="ml-2 flex min-w-0 flex-1 flex-wrap items-center gap-[3px]">
         {items.map((item, i) => {
           const isCurrent = i === cursor;

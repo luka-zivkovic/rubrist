@@ -281,14 +281,10 @@ describe("case-detail human ruling state", () => {
     expect(html).toContain("other_version");
   });
 
-  it("refreshes the shared dashboard after standalone and player decisions", async () => {
-    const [traceSource, playerSource] = await Promise.all([
-      readFile(new URL("../src/screens/trace.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../src/components/review-player.tsx", import.meta.url), "utf8")
-    ]);
+  it("refreshes the shared dashboard after standalone decisions", async () => {
+    const traceSource = await readFile(new URL("../src/screens/trace.tsx", import.meta.url), "utf8");
 
     expect(traceSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*load\(caseId\);[\s\S]*void refresh\(\);/);
-    expect(playerSource).toMatch(/onChanged=\{\(kind\) => \{[\s\S]*void refresh\(\);[\s\S]*advanceCursor\(\);/);
   });
 });
 

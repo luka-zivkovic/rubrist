@@ -18,7 +18,7 @@ describe("exception queue rows", () => {
     expect(source).toContain('"truncate whitespace-nowrap"');
     expect(source).toContain("open Review to read the full trace and guide before recording a ruling");
     expect(source).toContain('exceptions.length === 0 ? "Queue cleared" : "No matches"');
-    expect(source).toContain("<Link to={caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)}");
+    expect(source).toContain("<Link to={reviewHref ?? caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)}");
   });
 
   it("keeps a row-level review scoped to its case across refreshes", () => {
