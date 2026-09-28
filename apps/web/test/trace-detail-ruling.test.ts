@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
@@ -116,7 +117,7 @@ describe("case-detail human ruling state", () => {
     expect(html).toContain("Add to golden set");
     expect(html).toContain("Decision history · 2 append-only records");
     expect(html).toContain("Evaluator output");
-    expect(html).not.toContain("Accept evaluator opinion");
+    expect(html).not.toContain("Agree with evaluator");
     expect(html).not.toContain("next week");
   });
 
@@ -288,5 +289,56 @@ describe("case-detail human ruling state", () => {
 
     expect(traceSource).toMatch(/onChanged=\{\(\) => \{[\s\S]*load\(caseId\);[\s\S]*void refresh\(\);/);
     expect(playerSource).toMatch(/onChanged=\{\(kind\) => \{[\s\S]*void refresh\(\);[\s\S]*advanceCursor\(\);/);
+  });
+});
+
+
+describe("review attention and progressive disclosure", () => {
+  const typedDetail: ExceptionDetail = {
+    ...detail,
+    latestHumanLabel: null,
+    verdictHistory: [judgeBeforeRuling],
+    trace: { ...detail.trace, input: { evidence: ["First source sentence.", "Final source sentence."], claim_context_for_reference_resolution_only: "Reference context." }, output: { claim: "The claim to check." } },
+    judgeRun: { ...detail.judgeRun, score: 0.2, reasoning: null },
+    rawRequest: { provider: "typesafe", prompt: { id: "skillv_1", name: "0.1.3", content: JSON.stringify({ type: "noul", instructions: "Is every factual part supported?", criteria: { true: "All supported", false: "Unsupported" } }) } },
+    rawResponse: { kind: "typed-question", probability: 0.2, threshold: 0.5, label: "fail", rationaleStatus: "not_provided" }
+  };
+
+  it("puts the opinion before long evidence, and review choices before closed diagnostics", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: typedDetail }));
+    const document = new JSDOM(html).window.document;
+    const disclosures = [...document.querySelectorAll("details")];
+    const question = disclosures.find((el) => el.querySelector("summary")?.textContent === "Typed question and decision threshold");
+    const call = disclosures.find((el) => el.querySelector("summary")?.textContent === "Judge call and version details");
+    expect(question?.open).toBe(false);
+    expect(call?.open).toBe(false);
+    expect(question?.textContent).toContain("Is every factual part supported?");
+    expect(question?.textContent).toContain("0.5");
+    expect(call?.textContent).toContain("skillv_1");
+    expect(html.indexOf("Latest evaluator opinion")).toBeLessThan(html.indexOf("Claim and supplied evidence"));
+    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Typed question and decision threshold"));
+    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Judge call and version details"));
+    expect(html).toContain("Probability answer is true: 20%");
+    expect(html).toContain("not measured accuracy");
+    expect(html).toContain("does not provide an explanation");
+    expect(document.querySelectorAll("ol li")).toHaveLength(2);
+    expect(html).toContain("Final source sentence.");
+    expect(html).toContain("Reference context.");
+  });
+
+  it("keeps a saved human ruling ahead of the highlighted model output", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail }));
+    expect(html.indexOf("Recorded human ruling")).toBeLessThan(html.indexOf("Latest evaluator opinion"));
+    expect(html).toContain("overridden by ruling");
+    expect(html).not.toContain("Agree with evaluator");
+  });
+
+  it("keeps ordinary LLM rationale visible without a typed-question disclosure", () => {
+    const html = renderToStaticMarkup(createElement(TraceDetail, { detail: { ...detail, verdictHistory: [], latestHumanLabel: null } }));
+    const document = new JSDOM(html).window.document;
+    const rationale = [...document.querySelectorAll("div")].find((el) => el.textContent === "The answer omitted a direct link.");
+    expect(rationale).toBeDefined();
+    expect(rationale?.closest("details")).toBeNull();
+    expect(html).not.toContain("Typed question and decision threshold");
   });
 });
