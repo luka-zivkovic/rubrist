@@ -82,7 +82,12 @@ const picker = vi.hoisted(() => ({
   guidance: { temperature: { shown: false } },
   blockingProblems: []
 }));
-vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({ useBindingPicker: () => picker }));
+vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({
+  useBindingPicker: (_model: unknown, _base: unknown, options: { setTemperature: (value: string) => void }) => ({
+    ...picker,
+    editTemperature: options.setTemperature
+  })
+}));
 vi.mock("../src/screens/skill-edit/regression.js", () => ({
   GovernedEvaluatorEditBoundary: () => createElement("section"),
   RegressionResult: ({ onBackToEdit }: { onBackToEdit: () => void }) => createElement("button", { onClick: onBackToEdit }, "Back to edit"),
@@ -319,11 +324,11 @@ describe("editor protects author choices and work", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderEditor();
     const original = lastEditor.temperature;
-    await change("setTemperature", "invalid");
+    await act(async () => lastEditor.picker.editTemperature("invalid"));
     const reload = new window.Event("beforeunload", { cancelable: true });
     window.dispatchEvent(reload);
     expect(reload.defaultPrevented).toBe(true);
-    await change("setTemperature", original);
+    await act(async () => lastEditor.picker.editTemperature(original));
     const cleanReload = new window.Event("beforeunload", { cancelable: true });
     window.dispatchEvent(cleanReload);
     expect(cleanReload.defaultPrevented).toBe(false);
