@@ -37,6 +37,9 @@ writers together, and prefer a forward fix over rolling back application images.
 Frozen assessment/SkillFormat/lifecycle artifact contracts and evaluator identity
 remain unchanged. Optional input stays absent when omitted so existing onboarding
 and governed-candidate idempotency request digests remain stable on retries.
+The governed candidate request digest normalizes explicit unspecified to omission;
+SQL reconstruction includes authorship only when the declaration flag is true.
+Historical artifact shapes and their request/content digests remain unchanged.
 
 ## Verification
 
