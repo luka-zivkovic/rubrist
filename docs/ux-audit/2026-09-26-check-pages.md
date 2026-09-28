@@ -916,6 +916,14 @@ the accepted ADRs, and the onboarding contract are unchanged.
 
 ## Implementation status
 
+CURRENT update, 2026-09-28: wave 1 stages C2/C3/C13 editor protection and
+additional unavailable-improvement handling. See
+[editor protection](2026-09-28-protect-editor.md) and
+[evidence counts](evidence-counts-closeout.md). Wave 2 addresses C4, C6's
+elapsed-time guidance, and C7's loading placeholders; integration/browser
+verification is pending. G2/G3 remain open. The earlier PR #159 snapshot
+below is retained as history, not the latest completion claim.
+
 As of PR #159 (slice 1, "missing evidence never reads as a result"). The findings
 above keep their as-audited text; this section records what changed in
 CURRENT behavior since `2c82321`.
