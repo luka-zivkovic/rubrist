@@ -4,7 +4,7 @@ Status: **CURRENT implementation**, 2026-09-28. Covers S6, the remaining C6/C7
 loading and wait feedback, and S4's unavailable project label. Existing product
 vocabulary and display modes remain unchanged.
 
-An API 401 now reaches sign-in at the existing browser URL, including case or
+A dashboard API 401 now reaches sign-in at the existing browser URL, including case or
 version path and query selection. Successful sign-in reloads that location.
 A background dashboard refresh also surfaces session expiry instead of keeping
 stale signed-in data. Other transient background failures preserve last-known
@@ -37,7 +37,7 @@ and does not claim to keep checking. Version-history rows show the same wait
 feedback only while their regression result is absent; recorded governed
 candidates do not inherit a false running timer.
 
-Verification includes rendered API401/sign-in with preserved URL, reachable
+Verification includes rendered dashboard API401/sign-in with preserved URL, reachable
 queue error/retry, actual 500 and unknown transport errors, refused-read retry
 suppression, accessible loading placeholders, elapsed/long-wait timers and
 cleanup, dashboard retry/401/background-refresh behavior, plus the existing
