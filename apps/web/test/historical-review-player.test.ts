@@ -9,12 +9,16 @@ for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInput
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const { createRoot } = await import("react-dom/client");
 const api = vi.hoisted(() => ({ fetchTraceTests: vi.fn().mockResolvedValue([]), fetchReviewQueueDetail: vi.fn(), fetchCaseDetail: vi.fn(), recordHumanVerdict: vi.fn(), promoteExceptionToGoldenSet: vi.fn() }));
-const dashboard = vi.hoisted(() => ({ dashboard: { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } }, refresh: vi.fn() }));
+const dashboard = vi.hoisted(() => ({
+  dashboard: { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } } as { exceptions: never[]; skill: { currentVersion: { id: string; criterionVersionId: string } } } | null,
+  loading: false, error: null as string | null, errorStatus: null as number | null,
+  refresh: vi.fn(), reload: vi.fn()
+}));
 vi.mock("@/lib/dashboard-context", () => ({ useDashboard: () => dashboard }));
 vi.mock("@/lib/criterion-scope", async () => import("../src/lib/criterion-scope.js"));
 vi.mock("@/lib/utils", () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(" ") }));
 vi.mock("@/components/review-player", async () => import("../src/components/review-player.js"));
-const route = vi.hoisted(() => ({ id: "case_1", search: "", state: null }));
+const route = vi.hoisted(() => ({ id: "case_1", search: "", state: null as { caseIds: string[] } | null }));
 vi.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }: any) => createElement("a", { href: to, ...props }, children), useNavigate: () => vi.fn(), useParams: () => ({ id: route.id }), useSearchParams: () => [new URLSearchParams(route.search)], useLocation: () => ({ state: route.state, search: route.search }) }));
 vi.mock("@/lib/exception-queue", async () => import("../src/lib/exception-queue.js"));
 vi.mock("@/components/view-in-ironside", () => ({ ViewInIronside: () => null }));
@@ -35,6 +39,8 @@ vi.mock("@/components/ui/separator", () => ({
   Separator: (props: Record<string, unknown>) => createElement("hr", props)
 }));
 vi.mock("@/components/rubrist", () => ({
+  EmptyGlyph: () => null,
+  EmptyShell: ({ title, body, primary, secondary }: any) => createElement("section", null, createElement("h1", null, title), body, primary, secondary),
   Eyebrow: ({ children, ...props }: { children?: unknown }) => createElement("span", props, children as never),
   SectionHead: ({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: string }) =>
     createElement("header", null, `${eyebrow} ${title} ${sub ?? ""}`),
@@ -85,7 +91,10 @@ const { ReviewScreen } = await import("../src/screens/review.js");
 const { QueueDetailScreen } = await import("../src/screens/queue-detail.js");
 let root: ReturnType<typeof createRoot> | undefined;
 afterAll(() => { dom.window.close(); vi.unstubAllGlobals(); });
-afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = ""; route.search = ""; vi.clearAllMocks(); });
+afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = ""; route.search = ""; route.state = null;
+  dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } };
+  dashboard.loading = false; dashboard.error = null; dashboard.errorStatus = null;
+  vi.clearAllMocks(); });
 async function mount(items = [{ key: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", completed: false }]) {
   const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
   await act(async () => root!.render(createElement(ReviewPlayer, {
@@ -95,6 +104,42 @@ async function mount(items = [{ key: "item_1", caseId: "case_1", criterionVersio
   return container;
 }
 describe("historical review player", () => {
+  it.each(["legacy URL", "router state", "partially pinned URL"])("offers recovery for %s when dashboard scope is unavailable", async (entry) => {
+    route.search = entry === "legacy URL" ? "caseId=case_1"
+      : entry === "partially pinned URL" ? "caseId=case_1&caseId=case_2&cv.0=old_definition" : "";
+    route.state = entry === "router state" ? { caseIds: ["case_1"] } : null;
+    dashboard.dashboard = null; dashboard.error = "Server unavailable"; dashboard.errorStatus = 503;
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(container.textContent).toContain("server returned an error while loading the review queue");
+    expect(container.textContent).toContain("HTTP 503");
+    expect(container.textContent).not.toContain("Loading case");
+    expect(api.fetchCaseDetail).not.toHaveBeenCalled();
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Try again"))!.click());
+    expect(dashboard.reload).toHaveBeenCalledTimes(1);
+    dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_new_without_results", criterionVersionId: "criterionv_1" } } };
+    dashboard.error = null; dashboard.errorStatus = null;
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, entry === "partially pinned URL" ? "old_definition" : "criterionv_1");
+    expect(container.textContent).toContain("Accept evaluator opinion");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+  });
+
+  it("loads a fully pinned review URL despite a dashboard 503", async () => {
+    route.search = "caseId=case_1&caseId=case_2&criterionVersionId=old_definition&cv.1=other_definition";
+    dashboard.dashboard = null; dashboard.error = "Server unavailable"; dashboard.errorStatus = 503;
+    api.fetchCaseDetail.mockResolvedValue(detail);
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(ReviewScreen)));
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition");
+    expect(container.textContent).toContain("Accept evaluator opinion");
+    expect(container.textContent).not.toContain("HTTP 503");
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
+    expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+  });
+
   it("loads ad hoc review with the selected criterion when the newest evaluator has no result", async () => {
     route.search = "caseId=case_1";
     api.fetchCaseDetail.mockResolvedValue(detail);

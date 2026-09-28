@@ -6,7 +6,7 @@ import { PageLoading } from "../src/components/page-loading.js";
 import { CheckWait, LONG_CHECK_WAIT_MS } from "../src/components/check-wait.js";
 
 const dom = new JSDOM("<!doctype html><body></body>", { url: "http://localhost/review?caseId=case1&criterionId=criterion1" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "Event", "Node"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "Event", "Node", "MutationObserver"] as const) {
   vi.stubGlobal(name, (dom.window as unknown as Record<string, unknown>)[name]);
 }
 Object.defineProperty(window, "matchMedia", { value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
 type Props = { children?: ReactNode; [key: string]: unknown };
 const Box = ({ children }: Props) => createElement("div", null, children);
 vi.mock("react-router-dom", () => ({
+  Link: ({ to, children }: Props) => createElement("a", { href: to as string }, children),
   Outlet: () => createElement("section", { "data-route": "queue" }, "Queue owns its loading and error state"),
   useNavigate: () => vi.fn(),
   useLocation: () => ({ pathname: state.pathname, search: "?caseId=case1&criterionId=criterion1" }),
@@ -38,7 +39,7 @@ vi.mock("@/hooks/use-mode", () => ({ useMode: () => ["pm"] }));
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: false }) }));
 vi.mock("../src/components/layout/sidebar.js", () => ({ Sidebar: () => null }));
 vi.mock("../src/components/layout/topbar.js", () => ({
-  Topbar: ({ crumbs }: Props) => createElement("nav", null, (crumbs as string[]).join(" / ")), TopbarPill: Box
+  Topbar: ({ crumbs }: Props) => createElement("nav", null, ...(crumbs as ReactNode[])), TopbarPill: Box
 }));
 vi.mock("@/components/skip-link", () => ({ SkipLink: () => null }));
 vi.mock("@/components/import-trace-launcher", () => ({ ImportTraceLauncher: () => null }));

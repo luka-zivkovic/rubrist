@@ -59,7 +59,9 @@ export function ReviewScreen() {
   );
 
   if (loading && !dashboard && caseIds.length === 0) return <PageLoading title="Loading queue" shape="list" />;
-  if (error && !dashboard && caseIds.length === 0) {
+  // Legacy links and router-state selections still need dashboard scope.
+  // Fully pinned URLs can load their recorded evidence independently.
+  if (error && !dashboard && (caseIds.length === 0 || items.some((item) => !item.criterionVersionId))) {
     return <ApiUnavailableScreen resource="the review queue" status={errorStatus} retry={() => void reload()} />;
   }
 

@@ -46,3 +46,11 @@ human judgments are made by these tests.
 
 This slice does not impose an execution timeout or cancel a saved check.
 A slow worker can still finish later; the UI does not infer failure from age.
+
+Follow-up at the integrated navigation/mobile boundary: legacy case-only URLs,
+router-state review selections, and partially pinned selections now expose the
+dashboard read error when its missing definition scope prevents review. Retry
+recovers that scope. Fully pinned review URLs still load recorded cases despite
+an unavailable dashboard. Rendered tests exercise all four paths, including
+success after retry; no verdict or other write is sent. Integrated test fixtures
+also follow the semantic breadcrumb links, route metadata, and stacked table.

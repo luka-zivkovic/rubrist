@@ -14,7 +14,7 @@ describe("exception queue rows", () => {
 
     expect(source).toContain("aria-expanded={expanded}");
     expect(source).toContain("expanded ? exception.reason : rationalePreview(exception.reason)");
-    expect(source).toContain('<Table className="table-fixed">');
+    expect(source).toMatch(/<Table className="[^"]*\btable-fixed\b[^"]*"/);
     expect(source).toContain('"truncate whitespace-nowrap"');
     expect(source).toContain("open Review to read the full trace and guide before recording a ruling");
     expect(source).toContain('exceptions.length === 0 ? "Queue cleared" : "No matches"');
