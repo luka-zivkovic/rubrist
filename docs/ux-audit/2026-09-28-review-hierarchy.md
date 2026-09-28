@@ -71,4 +71,20 @@ names the selected ruling. The golden-set action sits below that form.
 Independent source review found no blocking issue. All 465 web tests passed,
 including mocked agreement handler request payloads for pass/fail/ambiguous with the historical
 version pin and disagreement opening without a write. Typecheck and production
-web build passed. Deployment/browser follow-up remains to be recorded.
+web build passed. After moving the golden action below the override form,
+26 focused tests and the production build passed again; independent rereview
+also cleared the final diff.
+
+Staging deployed `a6647992bc101551cd6623e5197b20bc095e8432` successfully
+(Coolify activity 493). Native Brave checks in the user's current dark theme
+confirmed green PASS and red FAIL cards, the explicit agreement label for
+each, and disagreement opening the different-ruling form with submission
+disabled until a reason is entered. The form was cancelled without saving.
+The result and both action labels fit at 390 CSS pixels. This follow-up did
+not switch the user's theme or visually recheck light mode; both theme variants
+are included in the compiled production CSS.
+
+Data fingerprints and the queue API view match the new pre-deployment baseline:
+three completed reviews and five pending. No human review was submitted and
+no provider was called during verification. The temporary tab is closed,
+developer tools are closed, and the original tab shows the update on case 4.
