@@ -99,7 +99,7 @@ describe("responsive and contrast foundations", () => {
       source("components/layout/topbar.tsx")
     ]);
 
-    expect(root).toContain("grid-cols-1 lg:grid-cols-[232px_minmax(0,1fr)]");
+    expect(root).toContain("grid-cols-1 lg:grid-cols-[256px_minmax(0,1fr)]");
     expect(root).toContain("navigationOpen");
     expect(root).toContain('aria-label="Close workspace navigation"');
     expect(sidebar).toContain('id="workspace-navigation"');

@@ -2,8 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Sidebar } from "./sidebar";
-import { Topbar, TopbarPill } from "./topbar";
-import { DISPLAY_MODE_BY_VALUE } from "@/lib/display-mode";
+import { Topbar } from "./topbar";
 import { Button } from "@/components/ui/button";
 import { SkipLink } from "@/components/skip-link";
 import { ImportTraceLauncher } from "@/components/import-trace-launcher";
@@ -12,14 +11,13 @@ import { SectionLoadError } from "../rubrist/load-error.js";
 import { retryableStatus } from "../../lib/load-error.js";
 import { LoginScreen } from "@/screens/login";
 import { PageLoading } from "../page-loading.js";
-import { useMode } from "@/hooks/use-mode";
 import { useAppMode } from "@/lib/app-mode";
 import { DashboardProvider, useDashboard } from "@/lib/dashboard-context";
 import { CriterionProvider, useCriterion } from "@/lib/criterion-context";
 import { routeRequiresCriterionSelection } from "@/lib/criterion-selection";
 import { CriterionPicker } from "@/screens/criteria";
 import { contextualHref, observePageHeading, pageDocumentTitle, routeMetadata } from "../../lib/route-metadata.js";
-import { isBench, journeyActStates } from "@/lib/journey";
+import { isBench } from "@/lib/journey";
 
 export function RootLayout() {
   return (
@@ -32,7 +30,6 @@ export function RootLayout() {
 }
 
 function RootLayoutInner() {
-  const [mode] = useMode();
   const location = useLocation();
   const { dashboard, loading, errorKind, errorStatus, reload } = useDashboard();
   const {
@@ -121,7 +118,7 @@ function RootLayoutInner() {
   }
 
   return (
-    <div className={`grid min-h-screen grid-cols-1 lg:grid-cols-[232px_minmax(0,1fr)] ${mode === "dev" ? "dev" : ""}`}>
+    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[256px_minmax(0,1fr)]">
       <SkipLink />
       {navigationOpen ? (
         <button
@@ -141,8 +138,6 @@ function RootLayoutInner() {
         projectSource={projectSource}
         exceptionsCount={exceptionsCount ?? 0}
         bench={bench}
-        journeyActs={dashboard ? journeyActStates(dashboard) : undefined}
-        goldenSetSize={dashboard?.goldenSetSize ?? 0}
         mobileOpen={navigationOpen}
         onMobileClose={() => setNavigationOpen(false)}
       />
@@ -185,9 +180,7 @@ function RootLayoutInner() {
                 <span className="text-ink-3"> · </span>
                 <b className={`font-medium ${exceptionsCount ? "text-signal" : "text-ink"}`}>{exceptionsCount ?? "—"}</b> exceptions
               </div>
-              <div className="hidden sm:block"><TopbarPill>
-                {DISPLAY_MODE_BY_VALUE[mode].label} display
-              </TopbarPill></div>
+
             </div>
           }
         />

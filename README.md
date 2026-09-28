@@ -76,7 +76,7 @@ and keep `RUBRIST_AUTH_SECRET` in a recovery record: it also encrypts stored
 credentials.
 
 Open [http://localhost:8081](http://localhost:8081), create the first owner,
-and follow the Guided setup ledger. Judge-provider keys are not part of the
+and follow the setup ledger. Judge-provider keys are not part of the
 bundle; add an Anthropic or OpenAI key per project under **Settings**, where
 it is encrypted at rest. Use an exact version, never `latest`; see
 [self-hosting](docs/self-hosting.md) for updates, backups, and Coolify.
@@ -136,7 +136,7 @@ pnpm dev:web
 ```
 
 Open [http://localhost:5173](http://localhost:5173), create the first owner,
-and follow the Guided setup ledger. It uses saved project state to show what
+and follow the setup ledger. It uses saved project state to show what
 is complete and what to do next. The API runs migrations when `DATABASE_URL`
 is configured.
 
@@ -166,9 +166,9 @@ workspace.
 ### Your first Check
 
 You do not need to learn evaluator-governance terminology first. Rubrist
-defaults to a **Guided** view that keeps the core journey visible, explains
-what each step changes, and leaves secondary diagnostics and system details
-out of the way. A typical first project looks like this:
+uses one workspace that keeps evidence, review, evaluator work, and governed
+evidence in distinct navigation groups. Optional technical details expand
+where you need them. A typical first project looks like this:
 
 1. adding traces or a few example input-and-output pairs;
 2. defining what the evaluator should check;
@@ -176,9 +176,9 @@ out of the way. A typical first project looks like this:
 4. protecting reviewed cases as regression tests for future evaluator changes;
 5. creating a new evaluator version and seeing whether those checks still pass.
 
-Model identifiers, immutable revision details, calibration evidence, and other
-technical records remain available in the **Technical** view. Guided mode
-changes the presentation, not the evidence, permissions, or safety rules.
+Raw identifiers and model request/response bodies are available in collapsed
+details. Navigation does not depend on a display preference. Permissions and
+the distinction between operational review and governed human truth remain unchanged.
 
 <p align="center">
   <picture>
@@ -229,8 +229,8 @@ Trajectory items may also include `steps`, an ordered array of `{ name?, input, 
 
 ## Concepts
 
-The Guided view uses the first three words; the Technical view and the
-contracts below use the rest.
+The UI and contracts currently use the following terms. A broader vocabulary
+consolidation remains deferred under proposed ADR-0015.
 
 | Term | Plain meaning |
 | --- | --- |

@@ -31,11 +31,9 @@ vi.mock("@/lib/criterion-context", () => ({ CriterionProvider: Box, useCriterion
   choices: [], selectedCriterionId: "criterion1", selectedChoice: null,
   selectionRequired: false, selectCriterion: vi.fn(), loading: state.criteriaLoading
 }) }));
-vi.mock("@/lib/display-mode", async () => import("../src/lib/display-mode.js"));
 vi.mock("@/lib/criterion-selection", async () => import("../src/lib/criterion-selection.js"));
 vi.mock("@/lib/resolved", async () => import("../src/lib/resolved.js"));
 vi.mock("@/components/save-queue-modal", () => ({ SaveQueueModal: () => null }));
-vi.mock("@/hooks/use-mode", () => ({ useMode: () => ["pm"] }));
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: false }) }));
 vi.mock("../src/components/layout/sidebar.js", () => ({ Sidebar: () => null }));
 vi.mock("../src/components/layout/topbar.js", () => ({

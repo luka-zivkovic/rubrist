@@ -439,3 +439,12 @@ PostgreSQL 17 container, clones a fresh database for each test, and deletes all
 clones and the container after the run. CI provides an existing server via
 `PG_SMOKE_DATABASE_URL`; without a prepared template, each database test uses
 an isolated schema migrated from the same baseline.
+
+### Workspace presentation
+
+CURRENT: one sidebar inventory covers bench and tracing projects, including
+saved review sessions in both. Old browser `rubrist.mode` values are ignored.
+Raw IDs and model payloads use local disclosures. Project source mode, runtime
+demo mode, and role authorization are unchanged. See the
+[single-workspace contract](ux-audit/unified-workspace.md) for the narrow founder
+authorization; ADR-0015's broader vocabulary and help layer remain proposed.

@@ -57,7 +57,7 @@ describe("exception note controls", () => {
       expect(cells[2]?.textContent).toContain("fail");
       expect(cells[3]?.textContent).toContain(reason);
       const buttons = [...container.querySelectorAll("button")];
-      expect(buttons).toHaveLength(1);
+      expect(buttons).toHaveLength(2);
       const note = buttons.find((button) => button.textContent === "Full note")!;
       const review = container.querySelector<HTMLAnchorElement>('a[aria-label^="Review "]')!;
       expect(review.getAttribute("href")).toBe("/review?criterionId=criterion_1&criterionVersionId=criterionv_1&caseId=case_1");

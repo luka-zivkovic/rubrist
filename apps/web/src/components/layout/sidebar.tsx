@@ -27,113 +27,57 @@ import { useSession } from "@/lib/auth-client";
 import { useAppMode } from "@/lib/app-mode";
 import { routeMetadata } from "../../lib/route-metadata.js";
 import { useCriterion } from "@/lib/criterion-context";
-import { useMode } from "@/hooks/use-mode";
-import { DISPLAY_MODE_BY_VALUE, DISPLAY_MODE_OPTIONS, workspaceRouteVisible } from "@/lib/display-mode";
 import { cn } from "@/lib/utils";
-import type { JourneyActState, JourneyActStates } from "@/lib/journey";
-import { GOLDEN_GATE_RECOMMENDED, type Project } from "@rubrist/shared";
+import type { Project } from "@rubrist/shared";
 
-interface JourneyNavItem {
+interface WorkspaceNavItem {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
-  end?: boolean;
   withBadge?: boolean;
 }
 
-interface JourneyNavGroup {
+interface WorkspaceNavGroup {
   label: string;
-  act?: keyof JourneyActStates;
-  items: JourneyNavItem[];
+  items: WorkspaceNavItem[];
 }
 
-// The numbered acts describe the legacy operational loop only. Governed
-// analysis/truth and ungoverned diagnostics stay outside those checkmarked
-// groups so a trace count or golden-set size cannot imply stronger evidence.
-const TRACING_NAV: JourneyNavGroup[] = [
-  { label: "Journey", items: [{ to: "/", label: "Overview", icon: LayoutDashboard, end: true }] },
-  { label: "1 · Define good", act: "defineGood", items: [
-    { to: "/criteria", label: "Criteria", icon: Layers3 },
-    { to: "/skill", label: "Review guide", icon: FileCog }
-  ] },
-  { label: "Governed lifecycle", items: [
-    { to: "/analyze", label: "Analyze · find failures", icon: Microscope },
-    { to: "/human-truth", label: "Human truth · governed", icon: ShieldCheck }
-  ] },
-  {
-    label: "2 · Operational triage",
-    act: "judgeRealWork",
-    items: [
-      { to: "/traces", label: "Live traces", icon: ListChecks },
+// One inventory for both evidence sources. These groups describe destinations,
+// not evidence validity or completion of the evaluator lifecycle.
+function workspaceNavigation(bench: boolean): WorkspaceNavGroup[] {
+  return [
+    { label: "Start", items: [{ to: "/", label: "Overview", icon: LayoutDashboard }] },
+    { label: "Evidence & review", items: [
+      ...(!bench ? [{ to: "/traces", label: "Live traces", icon: ListChecks }] : []),
+      { to: "/datasets", label: bench ? "Examples & runs" : "Saved datasets", icon: Database },
       { to: "/exceptions", label: "Needs a human · ungoverned", icon: Flag, withBadge: true },
-      { to: "/review-queues", label: "Review sessions · ungoverned", icon: Inbox },
-      { to: "/datasets", label: "Saved datasets", icon: Database }
-    ]
-  },
-  {
-    label: "3 · Guard known failures",
-    act: "earnTrust",
-    items: [
+      { to: "/review-queues", label: "Review sessions · ungoverned", icon: Inbox }
+    ] },
+    { label: "Evaluator work", items: [
+      { to: "/criteria", label: "Criteria", icon: Layers3 },
+      { to: "/skill", label: "Review guide", icon: FileCog },
       { to: "/golden", label: "Golden set", icon: Star }
-    ]
-  },
-  { label: "Ungoverned diagnostics", items: [
-    { to: "/reliability", label: "Reliability signals", icon: Scale },
-    { to: "/production-calibration", label: "Production calibration", icon: Activity }
-  ] }
-];
-
-const BENCH_NAV: JourneyNavGroup[] = [
-  { label: "Journey", items: [{ to: "/", label: "Overview", icon: LayoutDashboard, end: true }] },
-  { label: "1 · Define good", act: "defineGood", items: [
-    { to: "/criteria", label: "Criteria", icon: Layers3 },
-    { to: "/skill", label: "Review guide", icon: FileCog }
-  ] },
-  { label: "Governed lifecycle", items: [
-    { to: "/analyze", label: "Analyze · find failures", icon: Microscope },
-    { to: "/human-truth", label: "Human truth · governed", icon: ShieldCheck }
-  ] },
-  {
-    label: "2 · Operational triage",
-    act: "judgeRealWork",
-    items: [
-      { to: "/datasets", label: "Examples & runs", icon: Database },
-      { to: "/exceptions", label: "Needs a human · ungoverned", icon: Flag, withBadge: true }
-    ]
-  },
-  {
-    label: "3 · Guard known failures",
-    act: "earnTrust",
-    items: [
-      { to: "/golden", label: "Golden set", icon: Star }
-    ]
-  },
-  { label: "Ungoverned diagnostics", items: [
-    { to: "/reliability", label: "Reliability signals", icon: Scale },
-    { to: "/production-calibration", label: "Production calibration", icon: Activity }
-  ] }
-];
-
-const SYS_ITEMS = [
-  { to: "/integrations", label: "Integrations", icon: Plug },
-  { to: "/settings",     label: "Settings",     icon: SettingsIcon }
-];
-
-// Bench keeps Integrations visible as the graduation hook: connecting a
-// tracer is how a bench project grows into a trace project — same skill,
-// added coverage.
-const BENCH_SYS_ITEMS = [
-  { to: "/integrations", label: "Integrations · + traces", icon: Plug },
-  { to: "/settings",     label: "Settings",     icon: SettingsIcon }
-];
+    ] },
+    { label: "Governed lifecycle", items: [
+      { to: "/analyze", label: "Analyze · find failures", icon: Microscope },
+      { to: "/human-truth", label: "Human truth · governed", icon: ShieldCheck }
+    ] },
+    { label: "Ungoverned diagnostics", items: [
+      { to: "/reliability", label: "Reliability signals", icon: Scale },
+      { to: "/production-calibration", label: "Production calibration", icon: Activity }
+    ] },
+    { label: "Setup", items: [
+      { to: "/integrations", label: "Integrations", icon: Plug },
+      { to: "/settings", label: "Settings", icon: SettingsIcon }
+    ] }
+  ];
+}
 
 export interface SidebarProps {
   projectName?: string;
   projectSource?: string;
   exceptionsCount?: number;
   bench?: boolean;
-  journeyActs?: JourneyActStates | undefined;
-  goldenSetSize?: number;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 }
@@ -143,28 +87,14 @@ export function Sidebar({
   projectSource = "—",
   exceptionsCount = 0,
   bench = false,
-  journeyActs,
-  goldenSetSize = 0,
   mobileOpen = false,
   onMobileClose
 }: SidebarProps) {
-  const [mode, setMode] = useMode();
   const location = useLocation();
   const { href: criterionHref } = useCriterion();
-  const navGroups = (bench ? BENCH_NAV : TRACING_NAV)
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => workspaceRouteVisible(mode, bench, item.to))
-    }))
-    .filter((group) => group.items.length > 0);
-  const systemItems = (bench ? BENCH_SYS_ITEMS : SYS_ITEMS)
-    .filter((item) => workspaceRouteVisible(mode, bench, item.to));
-  const visiblePaths = [...navGroups.flatMap((group) => group.items), ...systemItems].map((item) => item.to);
+  const navGroups = workspaceNavigation(bench);
   const routeActivePath = routeMetadata(location.pathname, location.search, bench).activePath;
-  const activePath = visiblePaths.includes(routeActivePath) ? routeActivePath
-    : routeActivePath === "/review-queues" && visiblePaths.includes("/exceptions") ? "/exceptions"
-    : routeActivePath === "/traces" && bench && visiblePaths.includes("/datasets") ? "/datasets"
-    : routeActivePath;
+  const activePath = routeActivePath === "/traces" && bench ? "/datasets" : routeActivePath;
   const { theme, setTheme } = useTheme();
   const session = useSession();
   const userName = session.data?.user?.name ?? "Operator";
@@ -176,7 +106,7 @@ export function Sidebar({
       id="workspace-navigation"
       aria-label="Workspace sidebar"
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex w-[min(85vw,232px)] h-dvh flex-col overflow-y-auto border-r border-rule bg-paper-2 pt-[18px] pb-3.5 shadow-[var(--shadow-elev)] transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-auto lg:translate-x-0 lg:visible lg:shadow-none",
+        "fixed inset-y-0 left-0 z-40 flex w-[min(85vw,256px)] h-dvh flex-col overflow-y-auto border-r border-rule bg-paper-2 pt-[18px] pb-3.5 shadow-[var(--shadow-elev)] transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-auto lg:translate-x-0 lg:visible lg:shadow-none",
         mobileOpen
           ? "visible translate-x-0"
           : "invisible -translate-x-full [transition:transform_200ms,visibility_0s_200ms]"
@@ -197,10 +127,7 @@ export function Sidebar({
         {navGroups.map((group) => (
           <NavSection
             key={group.label}
-            label={group.act === "earnTrust"
-              ? `${group.label} · ${Math.min(goldenSetSize, GOLDEN_GATE_RECOMMENDED)}/${GOLDEN_GATE_RECOMMENDED}`
-              : group.label}
-            state={group.act ? journeyActs?.[group.act] : undefined}
+            label={group.label}
           >
             {group.items.map((item) => {
               const showBadge = item.withBadge && exceptionsCount > 0;
@@ -212,51 +139,15 @@ export function Sidebar({
                   icon={<item.icon className="h-3.5 w-3.5" />}
                   label={item.label}
                   {...(showBadge ? { badge: exceptionsCount, badgeSignal: true } : {})}
-                  {...(item.end ? { end: true } : {})}
                   onNavigate={onMobileClose}
                 />
               );
             })}
           </NavSection>
         ))}
-
-        {systemItems.length > 0 ? (
-          <NavSection label="System">
-            {systemItems.map((item) => (
-              <NavItem activePath={activePath} key={item.to} to={criterionHref(item.to)} icon={<item.icon className="h-3.5 w-3.5" />} label={item.label} onNavigate={onMobileClose} />
-            ))}
-          </NavSection>
-        ) : null}
       </nav>
 
       <div className="mt-auto border-t border-rule-soft px-3.5 pt-3">
-        <div className="eyebrow mb-2">Workspace display</div>
-        <div
-          role="group"
-          aria-label="Workspace display"
-          aria-describedby="workspace-display-help"
-          className="flex rounded-sm border border-rule bg-paper-3 p-0.5 font-mono text-[9px] uppercase tracking-[0.06em]"
-        >
-          {DISPLAY_MODE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={cn(
-                "flex-1 cursor-pointer border-0 bg-transparent px-1.5 py-1.5 text-ink-3",
-                mode === option.value && "bg-card text-ink shadow-[var(--shadow-card)]",
-                mode === option.value && option.value === "dev" && "text-dev"
-              )}
-              aria-pressed={mode === option.value}
-              onClick={() => setMode(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <p id="workspace-display-help" className="mt-1.5 text-[10.5px] leading-[1.4] text-ink-4">
-          {DISPLAY_MODE_BY_VALUE[mode].description}
-        </p>
-
         <div className="mt-3 flex items-center gap-2.5 text-[12px] text-ink-2">
           <div className="grid h-[22px] w-[22px] place-items-center rounded-full bg-ink text-[11px] font-medium text-paper">
             {initial}
@@ -410,13 +301,11 @@ function ProjectSwitcher({ projectName, projectSource }: { projectName: string; 
   );
 }
 
-function NavSection({ label, state, children }: { label: string; state?: JourneyActState | undefined; children: React.ReactNode }) {
+function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-2.5 px-3.5">
       <div className="flex items-center px-2 pb-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-ink-4">
         <span>{label}</span>
-        {state === "done" ? <Check className="ml-auto size-3" /> : null}
-        {state === "now" ? <span className="ml-auto text-signal">now</span> : null}
       </div>
       <div className="flex flex-col gap-0.5">{children}</div>
     </div>
@@ -430,7 +319,6 @@ interface NavItemProps {
   label: string;
   badge?: number;
   badgeSignal?: boolean;
-  end?: boolean;
   onNavigate?: (() => void) | undefined;
 }
 

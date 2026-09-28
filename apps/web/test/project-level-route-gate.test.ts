@@ -9,9 +9,6 @@ vi.mock("../src/components/layout/topbar.js", () => ({
   Topbar: ({ right }: { right?: ReactNode }) => createElement("header", null, right),
   TopbarPill: ({ children }: { children?: ReactNode }) => createElement("span", null, children)
 }));
-vi.mock("@/lib/display-mode", () => ({
-  DISPLAY_MODE_BY_VALUE: { pm: { label: "Guided" } }
-}));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children }: { children?: ReactNode }) => createElement("button", null, children)
 }));
@@ -20,7 +17,6 @@ vi.mock("@/components/import-trace-launcher", () => ({ ImportTraceLauncher: () =
 vi.mock("@/components/project-create", () => ({ NoProjectLanding: () => null }));
 vi.mock("@/screens/login", () => ({ LoginScreen: () => null }));
 vi.mock("../src/components/rubrist/load-error.js", () => ({ SectionLoadError: () => null }));
-vi.mock("@/hooks/use-mode", () => ({ useMode: () => ["pm"] }));
 vi.mock("@/lib/app-mode", () => ({ useAppMode: () => ({ demoMode: false }) }));
 vi.mock("@/lib/dashboard-context", () => ({
   DashboardProvider: ({ children }: { children: ReactNode }) => children,

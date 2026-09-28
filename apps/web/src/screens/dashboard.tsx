@@ -1,3 +1,4 @@
+import { InlineDetails } from "../components/rubrist/inline-details.js";
 import { overviewNextAction } from "../lib/overview-next-action.js";
 import { queueReviewUrl } from "../lib/exception-queue.js";
 import { contextualHref } from "../lib/route-metadata.js";
@@ -20,7 +21,6 @@ import { FirstVerdictCard } from "@/components/first-verdict";
 import { RowLink } from "@/components/row-action";
 import { countLegacyHumanCheckedCases } from "@/lib/legacy-human-checks";
 import { useDashboard } from "@/lib/dashboard-context";
-import { useMode } from "@/hooks/use-mode";
 import { isBench, journeyStage, takeSetupReceipt, clearSetupReceipt } from "@/lib/journey";
 import { skillVersionStateLabel } from "../lib/skill-presentation.js";
 import type { CapabilityGap } from "@rubrist/shared";
@@ -36,7 +36,6 @@ export function DashboardScreen() {
   const location = useLocation();
   const navigate = useNavigate();
   const { dashboard, loading, error, errorStatus, reload } = useDashboard();
-  const [mode] = useMode();
   const [receipt, setReceipt] = useState<string | null>(() => takeSetupReceipt());
   const criterionId = dashboard?.skill.criterionId ?? null;
 
@@ -230,9 +229,7 @@ export function DashboardScreen() {
                         onClick={() => navigate(contextualHref(`/exceptions?cluster=${encodeURIComponent(ex.capabilityGap as string)}`, location.search))}
                       />
                     ) : null}
-                    <span className="dev-only font-mono text-[11px] tracking-[0.04em] text-ink-3">
-                      {ex.traceId}
-                    </span>
+                    <InlineDetails label="Trace ID">{ex.traceId}</InlineDetails>
                   </div>
                 </td>
                 <td role="cell" data-label="Skill said">
@@ -421,12 +418,12 @@ export function DashboardScreen() {
                   <div className="font-mono text-[12px] text-ink-3">{goldenSetSize} golden cases</div>
                 </div>
               </div>
-              <div className="dev-only">
-                <Eyebrow tone="dev">Too strict / lenient</Eyebrow>
+              <details className="text-[12px] text-ink-3">
+                <summary className="cursor-pointer">Too strict / lenient</summary>
                 <div className="mt-1 font-mono text-[12px] text-dev">
                   {skill.currentVersion.tooStrictCount} / {skill.currentVersion.tooLenientCount}
                 </div>
-              </div>
+              </details>
             </div>
             <Separator />
             <div className="flex flex-col gap-1.5 font-mono text-[11px] text-ink-3">
@@ -440,15 +437,9 @@ export function DashboardScreen() {
                 Owner · <span className="text-ink">{skill.ownerName}</span>
               </div>
             </div>
-            {mode === "exec" ? (
-              <Button variant="default" className="mt-2 self-start" onClick={() => navigate("/skill/versions")}>
-                View versions <ArrowRight />
-              </Button>
-            ) : (
-              <Button variant="default" className="mt-2 self-start" onClick={() => navigate("/skill")}>
-                Open Check <ArrowRight />
-              </Button>
-            )}
+            <Button variant="default" className="mt-2 self-start" onClick={() => navigate(contextualHref("/skill", location.search))}>
+              Open Check <ArrowRight />
+            </Button>
           </CardContent>
         </Card>
       </div>

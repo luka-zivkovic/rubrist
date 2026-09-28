@@ -1,12 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  DISPLAY_MODE_BY_VALUE,
-  DISPLAY_MODE_OPTIONS,
-  displayModeFromStorage,
-  workspaceRouteVisible
-} from "../src/lib/display-mode.js";
 import { humanTruthNextStep, humanTruthNextStepHref } from "../src/lib/human-truth-journey.js";
 import { skillEditConsequence, skillVersionStateLabel } from "../src/lib/skill-presentation.js";
 import { readFeatureSource } from "./support/web-extraction-contracts.js";
@@ -24,66 +18,13 @@ async function tsxFiles(directory: string): Promise<string[]> {
 }
 
 describe("beginner-first hierarchy", () => {
-  it("defaults to an action-capable Guided display without changing permissions", () => {
-    expect(displayModeFromStorage(null)).toBe("pm");
-    expect(displayModeFromStorage("unknown")).toBe("pm");
-    expect(displayModeFromStorage("dev")).toBe("dev");
-    expect(displayModeFromStorage("exec")).toBe("exec");
-    expect(DISPLAY_MODE_OPTIONS.map((option) => option.label)).toEqual([
-      "Guided",
-      "Technical",
-      "Summary"
-    ]);
-    expect(DISPLAY_MODE_BY_VALUE.pm.description).toContain("core evaluator journey");
-    expect(DISPLAY_MODE_BY_VALUE.pm.description).not.toContain("hides secondary diagnostics and system details");
-    expect(DISPLAY_MODE_BY_VALUE.exec.description).toContain("does not change your permissions");
-  });
-
-  it("uses a curated action-capable route set for the actual default Guided navigation", async () => {
-    const tracingRoutes = [
-      "/", "/criteria", "/skill", "/analyze", "/human-truth", "/traces", "/exceptions",
-      "/review-queues", "/datasets", "/golden", "/reliability", "/integrations", "/settings"
-    ];
-    const benchRoutes = tracingRoutes.filter((path) => path !== "/traces");
-
-    expect(tracingRoutes.filter((path) => workspaceRouteVisible(displayModeFromStorage(null), false, path))).toEqual([
-      "/", "/criteria", "/skill", "/analyze", "/human-truth", "/traces", "/exceptions",
-      "/golden", "/integrations", "/settings"
-    ]);
-    expect(benchRoutes.filter((path) => workspaceRouteVisible(displayModeFromStorage(null), true, path))).toEqual([
-      "/", "/criteria", "/skill", "/analyze", "/human-truth", "/exceptions", "/datasets",
-      "/golden", "/integrations", "/settings"
-    ]);
-    expect(tracingRoutes.every((path) => workspaceRouteVisible("dev", false, path))).toBe(true);
-
-    const sidebar = await source("../src/components/layout/sidebar.tsx");
-    expect(sidebar).toContain("workspaceRouteVisible(mode, bench, item.to)");
-    expect(sidebar).toContain("workspaceRouteVisible(mode, bench, item.to));");
-  });
-
-  it("keeps Settings visible in every workspace display and preserves its direct route", async () => {
-    for (const mode of ["pm", "dev", "exec"] as const) {
-      expect(workspaceRouteVisible(mode, false, "/settings")).toBe(true);
-      expect(workspaceRouteVisible(mode, true, "/settings")).toBe(true);
-    }
-
-    const [app, rootLayout, sidebar] = await Promise.all([
-      source("../src/App.tsx"),
-      source("../src/components/layout/root-layout.tsx"),
-      source("../src/components/layout/sidebar.tsx")
+  it("keeps Settings directly routable without a criterion or display selection", async () => {
+    const [app, rootLayout] = await Promise.all([
+      source("../src/App.tsx"), source("../src/components/layout/root-layout.tsx")
     ]);
     expect(app).toContain('{ path: "settings", element: <SettingsScreen /> }');
     expect(rootLayout).toContain("const criterionSelectionRequiredForRoute = routeRequiresCriterionSelection(location.pathname)");
     expect(rootLayout).toContain("criteriaLoading && criterionSelectionRequiredForRoute");
-    expect(sidebar.match(/{ to: "\/settings",\s+label: "Settings",\s+icon: SettingsIcon }/g)).toHaveLength(2);
-  });
-
-  it("synchronizes a display change across every mounted consumer", async () => {
-    const modeHook = await source("../src/hooks/use-mode.ts");
-
-    expect(modeHook).toContain('DISPLAY_MODE_EVENT = "rubrist:display-mode-change"');
-    expect(modeHook).toContain('window.addEventListener(DISPLAY_MODE_EVENT, syncMode)');
-    expect(modeHook).toContain('window.dispatchEvent(new Event(DISPLAY_MODE_EVENT))');
   });
 
   it("puts the Golden set scope before entries and never upgrades legacy promotion to truth", async () => {
@@ -242,6 +183,6 @@ describe("beginner-first hierarchy", () => {
     const contents = (await Promise.all(files.map((path) => readFile(path, "utf8")))).join("\n");
 
     expect(contents).not.toMatch(/\b(?:developer|quality|stakeholder) view\b/i);
-    expect(contents).toContain("Technical display");
+    expect(contents).not.toMatch(/(?:Guided|Technical|Summary) display|dev-only|pm-only|useMode/);
   });
 });
