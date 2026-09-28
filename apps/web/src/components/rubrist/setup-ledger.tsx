@@ -44,7 +44,7 @@ export function SetupLedger({
             key={i}
             aria-current={s.state === "now" ? "step" : undefined}
             className={cn(
-              "flex items-start gap-3.5 border-b border-rule-soft px-[18px] py-3.5 last:border-b-0",
+              "grid grid-cols-[22px_minmax(0,1fr)] items-start gap-x-3.5 gap-y-2 border-b sm:flex border-rule-soft px-[18px] py-3.5 last:border-b-0",
               s.state === "locked" && "opacity-90"
             )}
           >
@@ -73,20 +73,20 @@ export function SetupLedger({
               {s.detail ? <div className="mt-px text-[12px] text-ink-3">{s.detail}</div> : null}
             </div>
             {s.cta || s.secondaryCta ? (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
                 {s.secondaryCta ? (
-                  <Button size="sm" variant="ghost" onClick={s.onSecondaryCta}>
+                  <Button className="h-auto min-h-8 max-w-full whitespace-normal text-left" size="sm" variant="ghost" onClick={s.onSecondaryCta}>
                     {s.secondaryCta}
                   </Button>
                 ) : null}
                 {s.cta ? (
-                  <Button size="sm" variant={s.state === "now" ? "primary" : "default"} onClick={s.onCta}>
+                  <Button className="h-auto min-h-8 max-w-full whitespace-normal text-left" size="sm" variant={s.state === "now" ? "primary" : "default"} onClick={s.onCta}>
                     {s.cta}
                   </Button>
                 ) : null}
               </div>
             ) : null}
-            {s.foot ? <div className="self-center font-mono text-[11px] text-ink-4">{s.foot}</div> : null}
+            {s.foot ? <div className="col-start-2 min-w-0 self-center break-words font-mono text-[11px] text-ink-4">{s.foot}</div> : null}
           </li>
         ))}
       </ol>

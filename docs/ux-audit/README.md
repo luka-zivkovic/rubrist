@@ -5,7 +5,7 @@ rounds' findings and decisions into one sequence of implementation slices.
 Each round stays the record for its own findings; `PRODUCT.md` and the
 accepted ADRs stay the product authority.
 
-Last updated: 2026-09-27 · as of PR #159
+Last updated: 2026-09-28 · wave 1 staged; wave 2 in integration review
 
 ## Rounds
 
@@ -83,10 +83,10 @@ changed.
 | # | Slice | Findings | Depends on | Status |
 |---|---|---|---|---|
 | 1 | Missing evidence never reads as a result | C1; C7 except skeletons; C6's count; S4 except the breadcrumb | — | PR #159 |
-| 2 | Protect work and choices | C2, C3, C13, O12, and O14's fix if G1 confirms it | G1 for O12's copy and O14 | Next |
-| 3 | Links and location | S1, S2, S3, T9, T10 | — | Planned |
-| 4 | Phones | O10, T5, C4 | — | Planned |
-| 5 | Loading, errors, and waits | S6; C6's elapsed time and long-wait message; C7's skeletons; S4's breadcrumb | — | Planned |
+| 2 | Protect work and choices | C2, C3, C13, O12, and O14's fix if G1 confirms it | G1 for O12's copy and O14 | Implemented in wave 1; staged, PRs #166/#169 |
+| 3 | Links and location | S1, S2, S3, T9, T10 | — | Implemented in wave 2; integration verification pending |
+| 4 | Phones | O10, T5, C4 | — | Implemented in wave 2; integration verification pending |
+| 5 | Loading, errors, and waits | S6; C6's elapsed time and long-wait message; C7's skeletons; S4's breadcrumb | — | Implemented in wave 2; integration verification pending |
 | 6 | The triage flow | T1, T2, T3, T4, T6, T7 | Slice 5 for the queue's error state; G2 for wording | Planned |
 | 7 | The Overview and shell | O1, O2, O3, O4, O5, O6, O7, O9, O11, O13, S5, S7, S8, S9 | G2 for wording and O7's display part | Planned |
 | 8 | The evaluator pages | C5, C8, C9, C10, C11, C12's status labels | G2 for D1 and D6; G3 for the regressions total | Planned |
@@ -96,7 +96,7 @@ changed.
 
 - **Slice 1** also records its known limitations in round 3's Implementation
   status.
-- **Slice 2** is next because its findings lose work or mislead about
+- **Slice 2** was prioritized because its findings lose work or mislead about
   permissions (Sev 3), and none of it waits on ADR-0015. O12's confirmation
   names the write-back only once G1 has settled whether it happens.
 - **Slices 3 and 4** carry the other Sev 3 findings that don't depend on
@@ -107,6 +107,31 @@ changed.
   depend on ADR-0015 wait for it; the rest ships.
 - **Slice 9** lands everything ADR-0015 decides, in one pass across the app
   and the docs.
+
+## CURRENT progress (2026-09-28)
+
+Wave 1 is independently reviewed and deployed to the staging app at
+`dbcf39d`. Its draft PRs remain unmerged:
+
+- #165: full pinned waiting count, loaded-filter scope, and unavailable
+  comparison improvements ([evidence counts](evidence-counts-closeout.md)).
+- #166: dirty-editor navigation, member permissions, and preserved execution
+  binding ([editor protection](2026-09-28-protect-editor.md)).
+- #167/#168: historical review pins and readable full case evidence
+  ([historical review](historical-review-closeout.md),
+  [readable evidence](2026-09-28-readable-evidence.md)). These close bounded
+  correctness gaps in slice 6; they do not complete the triage redesign.
+- #169: G1 confirmed and corrected. Unsigned versions' feedback stays held;
+  approval releases only that exact version's results, with explicit O12
+  confirmation ([feedback recovery](provisional-feedback-closeout.md)).
+
+Wave 2 implements slices 3–5: links/location, phone layouts, and
+loading/error/wait recovery. Their individual closeouts bound the scope;
+combined testing and browser verification are required before staging.
+This does not complete slices 6–8 or the remaining audit rounds.
+
+The founder explicitly deferred vocabulary changes on 2026-09-28. G2 and G3
+remain open; ADR-0015 remains Proposed. Existing display modes and terms stay.
 
 ## Remaining audit rounds
 

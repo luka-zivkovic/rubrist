@@ -65,17 +65,17 @@ export function FirstVerdictCard({
         <div className="flex-1" />
         <VerdictChip verdict={detail.judgeRun.verdict} />
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-5">
+      <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <Eyebrow>Why the Check said this</Eyebrow>
           <div className="mt-2 text-[13px] leading-[1.6] text-ink-2">
             {detail.judgeRun.reasoning ?? <span className="text-ink-3">This evaluator states no rationale.</span>}
           </div>
-          <Button className="mt-3" size="sm" variant="outline" onClick={() => onOpenCase(detail.judgeRun.caseId)}>
+          <Button className="mt-3 h-auto min-h-8 max-w-full whitespace-normal" size="sm" variant="outline" onClick={() => onOpenCase(detail.judgeRun.caseId)}>
             Open the recorded Run <ArrowRight />
           </Button>
         </div>
-        <div className="border-l border-rule-soft pl-5">
+        <div className="min-w-0 border-t border-rule-soft pt-5 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5">
           <Eyebrow>{current.typedQuestion === null ? "Review guide" : "Typed question"} · v{current.version}</Eyebrow>
           <pre className="mt-2 max-h-[180px] overflow-auto whitespace-pre-wrap break-words font-mono text-[10.5px] leading-[1.55] text-ink-3">
             {excerpt || "No review guide recorded."}

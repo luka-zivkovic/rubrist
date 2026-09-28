@@ -266,6 +266,30 @@
   .ledger tbody tr.row-signal:hover td { background: var(--signal-wash); }
   .ledger tbody tr.selected td { background: var(--card-2); }
 
+  /* Opt-in, one-DOM mobile records: no hidden result or action columns. Keep
+     the real column headers available to assistive technology at every width. */
+  @media (width < 48rem) {
+    .ledger-stacked, .ledger-stacked tbody { display: block; width: 100%; }
+    .ledger-stacked thead {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap;
+    }
+    .ledger-stacked tbody tr {
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
+      padding: 16px; border-bottom: 1px solid var(--rule-soft);
+    }
+    .ledger-stacked tbody tr:last-child { border-bottom: 0; }
+    .ledger-stacked td {
+      display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere;
+    }
+    .ledger-stacked td[data-label]::before {
+      content: attr(data-label); display: block; margin-bottom: 4px;
+      font-family: var(--font-sans); font-size: 11px; font-weight: 500;
+      color: var(--ink-3); text-align: left;
+    }
+  }
+
+
   .fill-ambiguous { background: var(--ambig-pattern); }
 
   /* dev-only blocks: surfaced by an ancestor .dev class */
@@ -288,4 +312,11 @@
     to   { opacity: 1; transform: none; }
   }
   .fadeUp { animation: fadeUp 280ms ease-out backwards; }
+}
+
+/* Override truncation utilities only inside the opt-in phone records. */
+@layer utilities {
+  @media (width < 48rem) {
+    .ledger-stacked .truncate { white-space: normal; overflow: visible; text-overflow: clip; }
+  }
 }
