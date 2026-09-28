@@ -15,7 +15,7 @@ const UNREADABLE: LoadFailure = {
 // limiting, or a sign-in. A 501 is an unconfigured feature, and other 4xx
 // responses are refused requests or missing resources: they fail the same way
 // again.
-function retryableStatus(status: number): boolean {
+export function retryableStatus(status: number): boolean {
   return status === 401 || status === 408 || status === 429 || (status >= 500 && status !== 501);
 }
 

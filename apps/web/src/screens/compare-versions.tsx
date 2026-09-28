@@ -1,3 +1,4 @@
+import { PageLoading } from "../components/page-loading.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
@@ -189,9 +190,7 @@ export function CompareVersionsScreen() {
   // The list is empty while it loads; that is not "nothing to compare".
   if (!currentList) {
     return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Run comparison" title="Loading versions" />
-      </div>
+      <PageLoading title="Loading versions" shape="list" />
     );
   }
 

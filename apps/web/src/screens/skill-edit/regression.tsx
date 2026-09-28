@@ -1,3 +1,4 @@
+import { CheckWait } from "../../components/check-wait.js";
 import { ArrowLeft, Clock, LoaderCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,6 +124,7 @@ export function RegressionRunning({
             </p>
           </CardContent>
         </Card>
+        <CheckWait createdAt={version.createdAt} stopped={stopped} />
         {pollError ? (
           <MarginNote tone="signal" who="Status refresh" className="mb-4">
             {pollError.message}{" "}
@@ -170,6 +172,7 @@ export function RegressionRunning({
               Rubrist records the full outcome only after every case in the pinned revision finishes.
               Until then this version is not presented as passed or current.
             </p>
+            <CheckWait createdAt={version.createdAt} stopped={stopped} />
             <dl className="mt-4 grid grid-cols-1 gap-y-1 text-[11.5px] sm:grid-cols-[150px_1fr] sm:gap-y-2">
               <dt className="text-ink-3">Immutable version</dt>
               <dd className="font-mono">v{version.version} · {version.id}</dd>

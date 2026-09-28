@@ -1,3 +1,5 @@
+import { PageLoading } from "../components/page-loading.js";
+import { ApiUnavailableScreen } from "./system.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, RefreshCcw, ChevronRight, X } from "lucide-react";
@@ -29,7 +31,7 @@ const QUEUE_VOLUME: Record<CapabilityGap["severity"], string> = {
 
 export function DashboardScreen() {
   const navigate = useNavigate();
-  const { dashboard, loading, error, reload } = useDashboard();
+  const { dashboard, loading, error, errorStatus, reload } = useDashboard();
   const [mode] = useMode();
   const [receipt, setReceipt] = useState<string | null>(() => takeSetupReceipt());
   const criterionId = dashboard?.skill.criterionId ?? null;
@@ -74,31 +76,10 @@ export function DashboardScreen() {
     };
   }, [dashboard]);
 
-  if (loading && !dashboard) {
-    return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Loading" title="Monday morning" />
-        <div className="rounded-sm border border-rule-soft bg-card p-12 text-center text-ink-3">
-          Fetching project dashboard…
-        </div>
-      </div>
-    );
-  }
+  if (loading && !dashboard) return <PageLoading title="Loading project overview" shape="detail" />;
 
   if (error || !dashboard || !totals) {
-    return (
-      <div className="fadeUp">
-        <SectionHead eyebrow="Rubrist" title="API unavailable" />
-        <Card>
-          <CardContent>
-            <p className="text-[13px] text-ink-2">{error ?? "Start the API with `pnpm dev:api` and refresh."}</p>
-            <Button variant="primary" className="mt-3" onClick={() => void reload()}>
-              <RefreshCcw /> Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <ApiUnavailableScreen resource="the project overview" status={errorStatus} retry={() => void reload()} />;
   }
 
   const setupReceipt = receipt ? (
