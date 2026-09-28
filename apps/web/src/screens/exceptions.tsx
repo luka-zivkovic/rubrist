@@ -46,7 +46,7 @@ export interface SessionReceiptState {
   promote: number;
 }
 
-function ExceptionQueueRow({
+export function ExceptionQueueRow({
   exception,
   provisional,
   onOpen,
@@ -61,6 +61,7 @@ function ExceptionQueueRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const noteId = `exception-note-${exception.id}`;
+  const hasNote = Boolean(exception.reason.trim() || exception.rejudgedSince?.reason.trim());
 
   return (
     <tr className="row-link row-signal" onClick={onOpen}>
@@ -110,7 +111,7 @@ function ExceptionQueueRow({
             expanded ? "whitespace-pre-wrap text-ink-2" : "truncate whitespace-nowrap"
           )}
         >
-          {expanded ? exception.reason : rationalePreview(exception.reason)}
+          {exception.reason.trim() ? (expanded ? exception.reason : rationalePreview(exception.reason)) : "No explanation recorded."}
         </div>
         {expanded && exception.rejudgedSince ? (
           <div className="mt-2 border-t border-rule-soft pt-2 text-[11.5px] leading-[1.45] text-ink-4">
@@ -121,7 +122,7 @@ function ExceptionQueueRow({
       </td>
       <td>
         <div className="flex justify-end gap-1">
-          <Button
+          {hasNote ? <Button
             type="button"
             variant="ghost"
             size="xs"
@@ -134,7 +135,7 @@ function ExceptionQueueRow({
           >
             {expanded ? <ChevronDown /> : <ChevronRight />}
             {expanded ? "Hide note" : "Full note"}
-          </Button>
+          </Button> : null}
           <Button
             type="button"
             variant="default"
