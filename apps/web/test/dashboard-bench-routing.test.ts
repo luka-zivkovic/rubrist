@@ -11,7 +11,7 @@ const Element = ({ children, ...props }: { children?: unknown }) =>
   createElement("div", props, children as never);
 
 vi.mock("react-router-dom", () => ({
-  useLocation: () => ({ search: "" }),
+  useLocation: () => ({ search: "?criterionId=criterion_1" }),
   Link: ({ children, to }: { children?: unknown; to: string }) =>
     createElement("a", { href: to }, children as never),
   useNavigate: () => vi.fn()
@@ -51,7 +51,7 @@ vi.mock("@/screens/dashboard-bench-welcome", () => ({
 vi.mock("@/screens/dashboard-provisional", () => ({ DashboardProvisional: Element }));
 vi.mock("@/components/first-project-key", () => ({ FirstProjectKeyCard: () => null }));
 vi.mock("@/components/first-verdict", () => ({ FirstVerdictCard: () => null }));
-vi.mock("@/components/row-action", () => ({ RowLink: Element }));
+vi.mock("@/components/row-action", () => ({ RowLink: ({ to, children }: any) => createElement("a", { href: to }, children) }));
 vi.mock("@/lib/legacy-human-checks", () => ({ countLegacyHumanCheckedCases: vi.fn() }));
 vi.mock("@/lib/journey", async () => import("../src/lib/journey.js"));
 vi.mock("@/lib/dashboard-context", () => ({
@@ -158,13 +158,23 @@ it("shows the full backlog while distinguishing the loaded review batch", async 
   state.dashboard.exceptions = Array.from({ length: 50 }, (_, index) => ({
     id: `case_${index}`, title: `Case ${index}`, traceId: `trace_${index}`,
     verdict: "fail" as const, reason: "A failure", createdAt: "2026-09-01T00:00:00Z",
-    capabilityGap: null, rejudgedSince: null
+    criterionVersionId: `definition_${index}`, capabilityGap: null, rejudgedSince: null
   }));
   const html = renderToStaticMarkup(createElement(DashboardScreen));
   expect(html).toContain("137 are waiting on a person");
   expect(html).toMatch(/Showing 5 of 137 waiting cases/);
   expect(html).toMatch(/Review 50 loaded cases/);
   expect(html).not.toContain("Review all 50");
+  expect(html.indexOf("Next")).toBeLessThan(html.indexOf("Result distribution"));
+  expect(html.indexOf("Exceptions waiting")).toBeLessThan(html.indexOf("Result distribution"));
+  expect(html.match(/variant="primary"/g)).toHaveLength(1);
+  expect(html).toContain('aria-label="Waiting case preview"');
+  expect(html).toContain('at=case_4');
+  expect(html).toContain('criterionId=criterion_1');
+  expect(html).toContain('cv.4=definition_4');
+  expect(html).not.toContain('href="/cases/case_4"');
+  expect(html).not.toContain('Manage integrations');
+  expect(html).toContain('Setup progress and first Result');
   expect(html).not.toContain("50 are waiting on a person");
 
   delete state.dashboard.exceptionsTotal;
