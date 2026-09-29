@@ -30,7 +30,11 @@ runPgSmoke("capability check persistence", () => {
       await runMigrations(previous); await runMigrations(previous);
       expect((await previous.query(`select to_jsonb(v) row from skill_versions v order by id`)).rows).toEqual(before);
       expect((await previous.query(`select count(*) from evaluator_capability_checks`)).rows[0].count).toBe("0");
-    } finally { await previous?.end(); await cleanup(); }
+    } finally {
+      await previous?.end();
+      try { await pool.query(`drop schema if exists "${schema}" cascade`); }
+      finally { await cleanup(); }
+    }
   });
   it("survives another store instance, expires, isolates projects/keys and preserves existing evidence on repeat migrations", async () => {
     const { pool, cleanup } = await openPostgresTestDatabase("capability_carry");
