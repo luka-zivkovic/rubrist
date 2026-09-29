@@ -49,8 +49,9 @@ make fresh calls.
 **Authorization.** The founder approved the provider/setup completion route
 on 2026-09-29. Migration `0004_capability_check_carry.sql` adds the short-lived
 store without changing baseline bytes or existing hosted reviews. Delivery
-verification is pending; this item does not imply the first-project picker
-gap below is closed.
+verification is pending. First-project setup now offers the shared model
+picker and checks settings before creation; its delivery verification is also
+in progress.
 
 ## 2. Close the loop: finding → change → verdict (PROPOSED)
 
@@ -179,10 +180,11 @@ hosts, for example refusing private networks in hosted deployments.
   OpenRouter's model list). ADR-0014's call counts cover probes only. The
   read isn't recorded as a probe: a resolution keeps only its snapshot
   digest, and a re-check keeps nothing of it.
-- **First-project setup has no picker.** If it falls back from the seeded
-  provider to another one, temperature starts unset. For a model that lets
-  the author choose temperature, a governed gate then asks for a new version
-  that states one.
+- **First-project picker delivery verification is pending.** The shared model
+  picker now checks the selected provider/model, fills only accepted defaults,
+  and blocks creation for pending checks or rejected settings. Detailed controls
+  stay collapsed unless they need attention. Navigation and reload protect
+  unsaved choices; those model choices are not persisted across discarded drafts.
 - **The ignored-temperature table rests on documentation.** Its DeepSeek
   entries cite DeepSeek's documentation as read on 2026-09-27. Re-check them,
   and look for new cases, with `tools/temperature-study.mjs`.

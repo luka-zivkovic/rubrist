@@ -223,9 +223,11 @@ temperature as unknown and resolution classifies it with that `topP`. When
 the author selects reasoning the check didn't probe temperature with, the
 picker classifies it; saving waits for that, and for a newly picked model's
 check. A new check replaces the probes, so the picker drops a classification
-still answering for the old one and asks again. First-project setup shows no
-picker: it keeps the seeded binding's temperature 0, and a provider it falls
-back to starts with temperature unset (CURRENT).
+still answering for the old one and asks again. First-project setup uses the
+same picker, with detailed settings collapsed unless they need attention.
+Choosing the first review focus starts the initial model check; creation waits
+for pending checks and rejected settings to be addressed. Navigation and reload
+warn before losing unsaved model choices (CURRENT).
 
 The author sees a version's resolution on its version page and in the
 evaluator lifecycle panel (`GET /api/evaluator-lifecycles/:id/resolution`):

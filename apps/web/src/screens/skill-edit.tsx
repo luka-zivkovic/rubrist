@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FirstRunCheckSetup } from "@/components/first-run-check-setup";
+import { FirstRunJudgePicker } from "../components/first-run-judge-picker.js";
 import type { SkillEditPhase } from "@/components/skill-edit-flow";
 import { PageLoadError, SectionHead } from "@/components/rubrist";
 import {
@@ -139,16 +140,16 @@ export function SkillEditScreen() {
   const [temperature, setTemperature] = useState("");
   const baseUrlValid = provider !== "custom" || /^https?:\/\/\S+$/i.test(baseUrl.trim());
   const providerAvailable = providerOptions.some((option) => option.provider === provider && option.available);
-  // The model picker's settings, guided by a capability check (Batch 8F). First-project
-  // setup shows no picker, so it never checks.
+  // First-project setup uses the same settings and checks as later edits.
   const pickerModel = useMemo(() => ({ provider, modelId, modelVersion, baseUrl }), [provider, modelId, modelVersion, baseUrl]);
-  const canCheckModel = !firstRun && providerAvailable && baseUrlValid && modelId.trim() !== "" && modelVersion.trim() !== "";
+  const canCheckModel = dashboard?.viewerRole === "owner" && providerAvailable && baseUrlValid && modelId.trim() !== "" && modelVersion.trim() !== "";
   const picker = useBindingPicker(pickerModel, (baseVersion ?? skill?.currentVersion)?.executionBinding ?? null, {
     canCheck: canCheckModel,
     temperature,
     setTemperature
   });
   const loadPickerSettings = picker.load;
+  const armModelCheck = picker.modelPicked;
   const pickerSavedFields = picker.savedFields;
   // First-run setup starts from an already-recorded Run whenever one exists;
   // keep the new Check on future Runs and enqueue the existing evidence after
@@ -191,6 +192,10 @@ export function SkillEditScreen() {
   const [pinnedCount, setPinnedCount] = useState<{ key: string; count: number | null } | null>(null);
   const [result, setResult] = useState<CompletedSkillVersionResult | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+
+  useEffect(() => {
+    if (firstRun && onboardingDraft && !loading && phase === "edit") armModelCheck();
+  }, [firstRun, onboardingDraft?.requestId, loading, phase, armModelCheck]);
 
   // Preserve an existing binding even when its credentials or catalog are unavailable.
   // Only the separate first-project setup flow chooses an initial available provider.
@@ -588,7 +593,7 @@ export function SkillEditScreen() {
     dashboard?.viewerRole === "owner" &&
     skill != null &&
     draftInput !== null &&
-    (firstRun || (picker.blockingProblems.length === 0 && !picker.checkPending && !picker.temperaturePending)) &&
+    picker.blockingProblems.length === 0 && !picker.checkPending && !picker.temperaturePending &&
     (typed
       ? typedQuestionFromDraft(typedDraft) !== null
       : rubric.trim().length > 0 && prompt.trim().length > 0) &&
@@ -605,7 +610,7 @@ export function SkillEditScreen() {
     rubric, rubricProvenance, prompt, typedDraft, provider, modelId, modelVersion, baseUrl,
     temperature, settings: picker.settings, timeScope, verdictKind, choiceScores,
     scalarRange, starterSuppliedOutputContract
-  }), !firstRun && !loading && dashboard?.viewerRole === "owner");
+  }), !loading && dashboard?.viewerRole === "owner");
 
   // The create request is short-lived: a 202 returns the immutable version
   // receipt immediately, then the visible running stage polls by that exact id.
@@ -859,6 +864,15 @@ export function SkillEditScreen() {
     );
     return (
       <FirstRunCheckSetup
+        judgePicker={<FirstRunJudgePicker
+          provider={provider} providers={providerOptions} models={models} modelId={modelId}
+          modelVersion={modelVersion} baseUrl={baseUrl} loading={modelsLoading} error={modelsError}
+          disabled={submitting} temperature={temperature} temperatureValid={temperatureValid}
+          canCheck={canCheckModel} picker={picker}
+          onProvider={(value) => { setProvider(value); setModelId(""); setModelVersion(""); setBaseUrl(""); picker.modelPicked(); }}
+          onModel={(id, version) => { setModelId(id); setModelVersion(version); picker.modelPicked(); }}
+          onBaseUrl={(value) => { setBaseUrl(value); picker.modelPicked(); }}
+        />}
         rubricProvenance={rubricProvenance}
         onAuthorshipChange={(value) => updateOnboardingDraft({ rubricProvenance: value })}
         projectName={dashboard.project.name}

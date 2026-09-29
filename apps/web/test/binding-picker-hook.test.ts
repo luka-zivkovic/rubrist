@@ -19,6 +19,7 @@ vi.mock("../src/lib/api.js", () => ({
   checkModelCapabilities: vi.fn((input: CapabilityCheckInput) => new Promise<CapabilityCheckReport>((resolve) => { pending.push({ input, resolve }); }))
 }));
 
+const { FirstRunJudgePicker } = await import("../src/components/first-run-judge-picker.js");
 const { useBindingPicker } = await import("../src/screens/skill-edit/binding-settings.js");
 
 type Model = { provider: "anthropic"; modelId: string; modelVersion: string; baseUrl: string };
@@ -70,14 +71,20 @@ let container: HTMLDivElement;
 let root: Root;
 
 // Like the editor, which owns the temperature and starts it empty.
-function Harness({ initial, base }: { initial: Model; base: ExecutionBinding | null }) {
+function Harness({ initial, base, showPicker = false }: { initial: Model; base: ExecutionBinding | null; showPicker?: boolean }) {
   const [model, set] = useState(initial);
   const [value, setValue] = useState("");
   setModel = set;
   temperature = value;
   setTemperature = setValue;
   picker = useBindingPicker(model, base, { canCheck: true, temperature: value, setTemperature: setValue });
-  return null;
+  return showPicker ? createElement(FirstRunJudgePicker, {
+    ...model, providers: [{ provider: "anthropic", label: "Anthropic", available: true, credentialSource: "project", modelSelection: "catalog" }],
+    models: [OPUS].map((item) => ({ id: item.modelId, version: item.modelVersion, label: "Opus", createdAt: null })),
+    loading: false, error: null, disabled: false, temperature: value, temperatureValid: true, canCheck: true, picker,
+    onProvider: () => undefined, onModel: (id, version) => { set({ ...model, modelId: id, modelVersion: version }); picker.modelPicked(); },
+    onBaseUrl: () => undefined
+  }) : null;
 }
 
 async function mount(initial: Model, base: ExecutionBinding | null = null) {
@@ -97,6 +104,23 @@ describe("the model picker's state", () => {
     await act(async () => root.unmount());
     container.remove();
     vi.useRealTimers();
+  });
+
+  it("checks a model chosen through first-project setup and shows pending and checked status", async () => {
+    vi.useFakeTimers();
+    await act(async () => root.render(createElement(Harness, { initial: SONNET, base: null, showPicker: true })));
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Judge model"]')!;
+    // An exact configured model stays visible even if absent from the catalog.
+    expect(select.value).toBe(SONNET.modelId);
+    expect(select.selectedOptions[0]!.textContent).toContain("configured");
+    expect(container.querySelector("details")!.open).toBe(false);
+    await act(async () => { select.value = OPUS.modelId; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(container.querySelector('[role="status"]')!.textContent).toContain("Checking model settings");
+    await act(async () => { vi.advanceTimersByTime(2_000); });
+    expect(pending.map((call) => call.input.modelId)).toEqual([OPUS.modelId]);
+    await act(async () => { pending[0]!.resolve(checkedWith(ADAPTIVE, true)); });
+    expect(container.querySelector('[role="status"]')!.textContent).toContain("Model settings checked");
+    expect(picker.savedFields(temperature)).toMatchObject({ temperature: "0", reasoning: ADAPTIVE, verdictProtocol: "anthropic.structured-output/v1" });
   });
 
   it("keeps an edit the author made while the check ran", async () => {
