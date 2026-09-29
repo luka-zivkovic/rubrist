@@ -239,7 +239,7 @@ describe("case-detail human label state", () => {
         output: { claim: "Claim" }
       } }
     }));
-    expect(html).toContain("Conversation");
+    expect(html).toContain("Case evidence");
     expect(html).toContain("Do not omit this.");
     expect(html).not.toContain("Claim to evaluate");
   });
