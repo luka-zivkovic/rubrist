@@ -153,13 +153,13 @@ export function ReviewPlayer({
 
   const receipt = lastSaved ? (
     <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-sm border border-rule-soft bg-paper-2 px-4 py-3 text-sm">
-      <span>Case {lastSaved.position}: {lastSaved.kind === "promote" ? "golden-set entry saved" : "ruling recorded"}.</span>
+      <span>Case {lastSaved.position}: {lastSaved.kind === "promote" ? "golden-set entry saved" : "human label recorded"}.</span>
       <Button variant="ghost" size="sm" onClick={() => {
         const index = items.findIndex((item) => item.key === lastSaved.key);
         if (index < 0) return;
         setSummaryOpen(false); setWalkAgain(true); setChangeKey(lastSaved.key);
         setRetryTick((value) => value + 1); pick(index);
-      }}>Change ruling</Button>
+      }}>Change human label</Button>
     </div>
   ) : null;
 
@@ -167,7 +167,7 @@ export function ReviewPlayer({
     return (
       <>
         {receipt}
-        {skipped.length > 0 ? <p className="mb-4 text-sm text-ink-2">{items.filter((item) => skipped.includes(item.key) && !item.completed).length} skipped this session; skipping does not record a ruling.</p> : null}
+        {skipped.length > 0 ? <p className="mb-4 text-sm text-ink-2">{items.filter((item) => skipped.includes(item.key) && !item.completed).length} skipped this session; skipping does not record a human label.</p> : null}
         {renderDone(() => {
           setSummaryOpen(false);
           pick(firstPendingIndex >= 0 ? firstPendingIndex : 0);
@@ -218,7 +218,7 @@ export function ReviewPlayer({
             </MarginNote>
           ) : null}
           {current.queueItemId && !current.judgeRunId ? (
-            <p className="mb-4 text-sm text-ink-2">This older task has no pinned evaluator result. It shows the latest recorded result for its criterion; your new ruling records exactly the result shown.</p>
+            <p className="mb-4 text-sm text-ink-2">This older task has no pinned evaluator result. It shows the latest recorded result for its criterion; your new human label records exactly the result shown.</p>
           ) : null}
           <TraceDetail
             reviewQueueItemId={current.queueItemId}

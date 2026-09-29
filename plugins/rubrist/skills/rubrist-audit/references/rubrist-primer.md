@@ -8,7 +8,7 @@ against a human-approved golden set.
 ## What a judging skill is
 
 A *judging skill* is rubrist's versioned judge definition: a rubric (markdown
-review guide), few-shot examples, a pinned model binding, and a structured
+rubric), few-shot examples, a pinned model binding, and a structured
 output schema. Verdicts it produces are labeled `pass`/`fail` (or scalar/
 categorical, depending on the schema). Skill versions and verdicts are
 **append-only** — history is never silently rewritten, which is also why you

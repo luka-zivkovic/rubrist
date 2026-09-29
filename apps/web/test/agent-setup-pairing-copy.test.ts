@@ -8,13 +8,13 @@ import {
 } from "../src/lib/agent-setup-copy.js";
 
 describe("external agent setup copy", () => {
-  it("prepares a context-grounded Check before requesting a secret connection", () => {
+  it("prepares a context-grounded evaluator before requesting a secret connection", () => {
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("$rubrist-setup");
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("skills/rubrist-setup/SKILL.md");
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("Inspect safe, relevant project text");
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("one short decision-changing question");
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("Finish setup");
-    expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("Refine the Check");
+    expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("Refine the evaluator");
     expect(AGENT_SETUP_PREPARATION_PROMPT).toContain("Starter · unvalidated");
     expect(AGENT_SETUP_PREPARATION_PROMPT).not.toContain("pairing token");
   });
@@ -36,9 +36,9 @@ describe("external agent setup copy", () => {
     expect(prompt).toContain("$rubrist-setup");
     expect(prompt).toContain("Support agent");
     expect(prompt).toContain("rubrist_pair_secret");
-    expect(prompt).toContain("exact Check proposal I reviewed");
+    expect(prompt).toContain("exact evaluator proposal I reviewed");
     expect(prompt).toContain("RUBRIST_PAIRING_TOKEN");
-    expect(prompt).toContain("real Run");
+    expect(prompt).toContain("real case");
     expect(prompt).toContain("Starter · unvalidated");
     expect(prompt).toContain("stop before human adjudication");
   });

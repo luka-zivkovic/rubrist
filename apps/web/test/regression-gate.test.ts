@@ -126,12 +126,12 @@ describe("evaluator-version regression state", () => {
   it("labels every state without calling any unknown or missing state clean", () => {
     const states = Object.keys(GATE_LABEL) as GateState[];
     for (const state of states) {
-      expect(GATE_LABEL[state]).toMatch(/^regression · /);
+      expect(GATE_LABEL[state]).toMatch(/^reference (check · |disagreements$)/);
       if (state !== "clean") expect(GATE_LABEL[state]).not.toContain("clean");
     }
-    expect(GATE_LABEL.unrecorded).toBe("regression · not recorded");
-    expect(GATE_LABEL.unavailable).toBe("regression · unavailable");
-    expect(GATE_LABEL.running).toBe("regression · running");
+    expect(GATE_LABEL.unrecorded).toBe("reference check · not recorded");
+    expect(GATE_LABEL.unavailable).toBe("reference check · unavailable");
+    expect(GATE_LABEL.running).toBe("reference check · running");
   });
 });
 
@@ -147,7 +147,7 @@ describe("GateChip", () => {
   it("renders the state's label and a neutral variant for missing evidence", () => {
     const html = renderToStaticMarkup(createElement(GateChip, { state: "unrecorded" }));
 
-    expect(html).toContain("regression · not recorded");
+    expect(html).toContain("reference check · not recorded");
     expect(html).toContain('data-variant="outline"');
   });
 
@@ -155,7 +155,7 @@ describe("GateChip", () => {
     for (const state of ["retired", "constructor", "toString"]) {
       const html = renderToStaticMarkup(createElement(GateChip, { state: state as GateState }));
 
-      expect(html).toContain("regression · unavailable");
+      expect(html).toContain("reference check · unavailable");
       expect(html).not.toContain("clean");
       expect(html).not.toContain('data-variant="pass"');
     }

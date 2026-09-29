@@ -7,7 +7,7 @@ const box = ({ children }: { children?: ReactNode }) => createElement("div", nul
 vi.mock("@/components/ui/card", () => ({ Card: box, CardContent: box }));
 vi.mock("@/components/rubrist", () => ({
   Eyebrow: box,
-  SectionHead: () => createElement("h1", null, "Get your first Check result"),
+  SectionHead: () => createElement("h1", null, "Get your first evaluator result"),
   ProvChip: () => null,
   VerdictChip: () => null
 }));

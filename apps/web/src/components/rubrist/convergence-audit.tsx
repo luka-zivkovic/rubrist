@@ -41,7 +41,7 @@ export function ConvergenceCard({
             <Link to="/reliability" className="underline decoration-rule-soft underline-offset-2 hover:text-ink">
               Reliability
             </Link>{" "}
-            screen to record legacy rulings. This card will then compare the evaluator with those
+            screen to record legacy human labels. This card will then compare the evaluator with those
             ungoverned, self-selected references.
           </div>
         </CardContent>
@@ -58,7 +58,7 @@ export function ConvergenceCard({
           <div className="mt-2 max-w-[70ch] text-[13px] text-ink-3">
             This version has not evaluated any of the {audit.adjudicatedTotal} adjudicated case
             {audit.adjudicatedTotal === 1 ? "" : "s"}. Run it over those cases before comparing its
-            results with the recorded rulings.
+            results with the recorded human labels.
           </div>
         </CardContent>
       </Card>
@@ -86,13 +86,13 @@ export function ConvergenceCard({
 
         {hasPredecessor ? (
           <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Stat label="Fixed" value={audit.improved} hint={`now agrees with the recorded ruling (${beforeVersionLabel ?? "prior"} didn't)`} />
-            <Stat label="Broke" value={audit.regressed} hint={`${beforeVersionLabel ?? "prior"} matched the recorded ruling; this version does not`} tone={audit.regressed > 0 ? "alert" : "default"} />
+            <Stat label="Fixed" value={audit.improved} hint={`now agrees with the recorded human label (${beforeVersionLabel ?? "prior"} didn't)`} />
+            <Stat label="Broke" value={audit.regressed} hint={`${beforeVersionLabel ?? "prior"} matched the recorded human label; this version does not`} tone={audit.regressed > 0 ? "alert" : "default"} />
             <Stat label="Agree now" value={`${audit.afterAgreed}/${audit.comparedCases}`} hint={`was ${audit.beforeAgreed}/${audit.beforeKnown} on ${beforeVersionLabel ?? "prior"}`} />
           </div>
         ) : (
           <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Stat label="Agree with rulings" value={`${audit.afterAgreed}/${audit.comparedCases}`} hint="no predecessor to compare — baseline" />
+            <Stat label="Agree with human labels" value={`${audit.afterAgreed}/${audit.comparedCases}`} hint="no predecessor to compare — baseline" />
           </div>
         )}
 
@@ -109,7 +109,7 @@ export function ConvergenceCard({
             <thead>
               <tr>
                 <th>Case</th>
-                <th style={{ width: 110 }}>Recorded ruling</th>
+                <th style={{ width: 110 }}>Recorded human label</th>
                 <th style={{ width: 130 }}>{beforeVersionLabel ?? "Previous"}</th>
                 <th style={{ width: 120 }}>This version</th>
                 <th style={{ width: 110 }}>Change</th>
@@ -119,8 +119,8 @@ export function ConvergenceCard({
               {audit.cases.map((c) => {
                 const meta = c.beforeLabel === null
                   ? c.afterLabel === c.adjudicatedLabel
-                    ? { label: "matches ruling", variant: "outline" as const }
-                    : { label: "differs from ruling", variant: "ambig" as const }
+                    ? { label: "matches human label", variant: "outline" as const }
+                    : { label: "differs from human label", variant: "ambig" as const }
                   : CHANGE_META[c.change];
                 return (
                   <tr key={c.caseId} className="row-signal">

@@ -125,7 +125,7 @@ describe("guided evaluator editing", () => {
     expect(html).toContain("threshold 0.6 → 0.7");
     expect(html).toContain("1 evaluator field changed");
     expect(html).toContain("Decision threshold: 0.7");
-    expect(html).not.toContain("Review guide");
+    expect(html).not.toContain("Rubric");
 
     // Switching a prompted version to a typed question replaces the guide and instructions, and the binding.
     const switched = renderToStaticMarkup(createElement(SkillChangeReview, {
@@ -134,7 +134,7 @@ describe("guided evaluator editing", () => {
     }));
     expect(switched).toContain("4 evaluator fields changed");
     expect(switched).toContain("threshold none → 0.7");
-    expect(switched).toContain("Review guide");
+    expect(switched).toContain("Rubric");
     expect(switched).not.toContain("# kept in the editor");
 
     // And back: the new guide and instructions are shown and counted, and the question goes.
@@ -158,7 +158,7 @@ describe("guided evaluator editing", () => {
       version: "1.2.0",
       rubricMarkdown: "A stricter guide.",
       executionBinding: { ...base.executionBinding, modelId: "mock-v2", modelVersion: "mock-v2" }
-    }, base)).toEqual(["review guide", "execution binding"]);
+    }, base)).toEqual(["rubric", "execution binding"]);
     expect(skillVersionChangeLabels(base)).toEqual(["initial version"]);
   });
 
@@ -221,7 +221,7 @@ describe("guided evaluator editing", () => {
     }));
 
     expect(blocked).toContain("Review required");
-    expect(failed).toContain("Check failed");
+    expect(failed).toContain("Evaluator failed");
     expect(`${blocked}${failed}`).not.toMatch(/version (?:is )?active|activated evaluator/i);
   });
 
@@ -244,9 +244,9 @@ describe("guided evaluator editing", () => {
     expect(regressionReceiptLabel({ ...run("passed"), compared: 0 })).toBe("recorded without comparison");
     expect(regressionReceiptLabel(run("passed", true))).toBe("recorded without comparison");
     expect(regressionReceiptLabel(run("overridden"))).toBe("override recorded");
-    expect(regressionReceiptLabel(run("blocked"))).toBe("regression found");
+    expect(regressionReceiptLabel(run("blocked"))).toBe("reference disagreements");
     expect(regressionReceiptLabel(run("error"))).toBe("check failed");
-    expect(regressionReceiptLabel(undefined)).toBe("no regression receipt");
+    expect(regressionReceiptLabel(undefined)).toBe("no reference-check receipt");
   });
 
   it("fails closed across criterion changes and governed evaluator lineages", async () => {
@@ -305,6 +305,6 @@ it("keeps the complete save result neutral when a legacy receipt passed with zer
   expect(html).toContain("No reference cases compared");
   expect(html).toContain("eligible for automatic default selection");
   expect(html).not.toContain("check passed");
-  expect(html).not.toContain("No regression found");
+  expect(html).not.toContain("No reference disagreements");
   expect(html).not.toContain("100%");
 });

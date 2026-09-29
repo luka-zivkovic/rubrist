@@ -107,7 +107,7 @@ export function normalizeReviewGuideMarkdown(markdown: string): string {
 
 export function MarkdownPreview({
   markdown,
-  emptyText = "No review guide recorded.",
+  emptyText = "No rubric recorded.",
   className
 }: {
   markdown: string;

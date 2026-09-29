@@ -138,7 +138,7 @@ export function BinaryCalibrationPanel({
             <Activity className="size-4" /> Binary calibration
           </div>
           <p className="mt-1 max-w-3xl text-[11.5px] leading-5 text-ink-3">
-            Measure this exact evaluator against the frozen sealed truth revision. Results are
+            Measure this exact evaluator against the frozen sealed truth revision. Assessments are
             policy-free, aggregate-only evidence. Artifact bytes and current status are available
             only to project-owner sessions; API keys cannot fetch them. Repeated trials and universal
             acceptance thresholds are not inferred.

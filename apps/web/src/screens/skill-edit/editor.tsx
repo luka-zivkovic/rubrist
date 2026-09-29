@@ -120,7 +120,7 @@ export function SkillVersionEditor({
         eyebrow={firstRun ? `First evaluator setup · from v${v.version}` : `Editing ${skill.name} · from v${v.version}`}
         title={firstRun ? "Define what a good result looks like" : "Edit the evaluator"}
         sub={gateKnownUnarmed
-          ? "Save creates a new immutable evaluator version. Once you promote reference cases, later edits run a known-failure regression check."
+          ? "Save creates a new immutable evaluator version. Once you promote reference cases, later edits run a known-failure reference check."
           : "Save creates a new immutable evaluator version and checks it against promoted references. Saving can change the default; check Current default in Version history."}
         right={
           <div className="flex flex-wrap items-center gap-2">
@@ -172,8 +172,8 @@ export function SkillVersionEditor({
         <MarginNote tone="signal" who={`v${v.version} · typed question`} className="mb-5">
           v{v.version} is a typed question answered by TypeSafe.{" "}
           {availableProviderOptions.some((option) => option.provider === "typesafe")
-            ? "With another provider, this draft is a prompted evaluator: write its review guide and judge instructions, or choose TypeSafe to keep the question."
-            : <>TypeSafe has no key, so this draft is a prompted evaluator: write its review guide and judge instructions, or add a TypeSafe key in{" "}
+            ? "With another provider, this draft is a prompted evaluator: write its rubric and judge instructions, or choose TypeSafe to keep the question."
+            : <>TypeSafe has no key, so this draft is a prompted evaluator: write its rubric and judge instructions, or add a TypeSafe key in{" "}
               <button type="button" className="underline cursor-pointer" onClick={() => navigate("/settings")}>Settings</button> to keep the question.</>}
         </MarginNote>
       ) : null}
@@ -215,7 +215,7 @@ export function SkillVersionEditor({
 
         {appliedStarter ? (
           <MarginNote tone="neutral" who={`Template · ${appliedStarter.name}`} className="mb-5">
-            Use this template as a starting point. Edit the review guide and prompt for your task,
+            Use this template as a starting point. Edit the rubric and prompt for your task,
             then save. Rubrist checks the new version against the active Golden references.
           </MarginNote>
         ) : null}
@@ -223,14 +223,14 @@ export function SkillVersionEditor({
         <Card className="mb-5">
           <CardHeader>
             <div>
-              <CardTitle>Review guide</CardTitle>
+              <CardTitle>Rubric</CardTitle>
               <CardDescription>
                 Defines what a good result looks like and the evidence the evaluator should use.
                 It is stored as Markdown; Preview renders it without changing the source.
               </CardDescription>
             </div>
             <div className="flex-1" />
-            <div className="flex items-center gap-1" aria-label="Review guide view">
+            <div className="flex items-center gap-1" aria-label="Rubric view">
               <Button
                 type="button"
                 size="xs"
@@ -255,7 +255,7 @@ export function SkillVersionEditor({
             {rubricMode === "source" ? (
               <textarea
                 value={rubric}
-                aria-label="Review guide Markdown source"
+                aria-label="Rubric Markdown source"
                 maxLength={EVALUATOR_DEFINITION_TEXT_MAX}
                 onChange={(e) => {
                   setRubric(e.target.value);
@@ -275,7 +275,7 @@ export function SkillVersionEditor({
             <div>
               <CardTitle>Judge prompt template · advanced</CardTitle>
               <CardDescription>
-                Builds the exact instructions sent to the judge. Place the review guide with
+                Builds the exact instructions sent to the judge. Place the rubric with
                 {" {{rubric_markdown}}"}; trace data and the result schema are injected separately
                 at runtime. This stays source text, not Markdown.
               </CardDescription>
@@ -303,7 +303,7 @@ export function SkillVersionEditor({
 
         {prompt.trim() && usesImplicitRubric ? (
           <MarginNote tone="signal" who="Judge prompt template" className="mb-5">
-            This prompt does not include {"{{rubric_markdown}}"}, so Rubrist adds the review guide
+            This prompt does not include {"{{rubric_markdown}}"}, so Rubrist adds the rubric
             before the prompt. Add {"{{rubric_markdown}}"} where you want the guide to appear in the
             compiled instructions.
           </MarginNote>
@@ -462,14 +462,14 @@ export function SkillVersionEditor({
           <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2 text-[11.5px] leading-5 text-ink-2 sm:col-span-2">
             {typed ? (
               <>
-                <span className="font-medium text-ink">Result format.</span> TypeSafe returns the
+                <span className="font-medium text-ink">Output contract.</span> TypeSafe returns the
                 probability that the answer is true, under the fixed <span className="font-mono">typed-question/v1</span>{" "}
                 contract. The verdict is binary: pass when the probability reaches the threshold,
                 fail otherwise. Changing the requested model creates a new version.
               </>
             ) : (
               <>
-                <span className="font-medium text-ink">Result format.</span> Rubrist generates the exact
+                <span className="font-medium text-ink">Output contract.</span> Rubrist generates the exact
                 JSON schema from the <span className="font-mono">{verdictKind}</span> result type and
                 validates every judge response against it. {verdictKindDescription(verdictKind, {
                   scalarRange,
@@ -552,7 +552,7 @@ export function SkillVersionEditor({
 
       {!typed && (rubric.trim() === "" || prompt.trim() === "") ? (
         <ul className="mb-4 flex list-disc flex-col gap-0.5 pl-4 text-[11.5px] text-ink-3">
-          {rubric.trim() === "" ? <li>Write the review guide.</li> : null}
+          {rubric.trim() === "" ? <li>Write the rubric.</li> : null}
           {prompt.trim() === "" ? <li>Write the judge instructions, under Judge prompt template · advanced.</li> : null}
         </ul>
       ) : null}

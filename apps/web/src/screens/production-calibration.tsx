@@ -406,7 +406,7 @@ function PersistentProductionCalibrationScreen() {
       <SectionHead
         eyebrow="Production calibration · ungoverned"
         title="Production calibration"
-        sub="A production decision is a Check whose evaluator is the agent's own decision model: the question is the criterion, each decision is a result with a probability, and the outcome that arrived later is the label. Read the project's stored decision records, or paste a ledger to preview it without storing anything."
+        sub="Compare your agent's recorded decisions and stated probabilities with outcomes received later. This is production feedback, not governed evaluator validation. Read the project's stored decision records, or paste a ledger to preview it without storing anything."
       />
 
       <p role="note" className="mb-5 rounded-sm border border-gold-tint bg-ambig-bg px-4 py-3 text-[12.5px] leading-5 text-ink-2">

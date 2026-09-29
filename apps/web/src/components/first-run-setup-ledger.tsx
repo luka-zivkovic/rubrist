@@ -43,15 +43,15 @@ export function FirstRunSetupLedger({
         },
         {
           state: states.chooseCheck,
-          title: "Choose one thing to Check",
+          title: "Choose one criterion to evaluate",
           ...(states.chooseCheck === "done"
-            ? { foot: `Check v${skill.currentVersion.version} ready` }
+            ? { foot: `Evaluator v${skill.currentVersion.version} ready` }
             : {
                 detail: owner
                   ? "Tell Rubrist one quality that matters. Technical settings stay out of the first-run path."
-                  : "An owner needs to choose the project's first Check. You can still inspect the current starter.",
+                  : "An owner needs to choose the project's first evaluator. You can still inspect the current starter.",
                 ...(states.chooseCheck === "now" && owner
-                  ? { cta: "Review the Check", onCta: () => navigate(editPath) }
+                  ? { cta: "Review the evaluator", onCta: () => navigate(editPath) }
                   : states.chooseCheck === "now"
                     ? { foot: "Waiting for an owner" }
                     : {})
@@ -59,16 +59,16 @@ export function FirstRunSetupLedger({
         },
         {
           state: states.seeResult,
-          title: "See the first Result",
+          title: "See the first assessment",
           ...(states.seeResult === "done"
             ? { foot: `${judged.toLocaleString()} result${judged === 1 ? "" : "s"}` }
             : {
-                detail: "Rubrist applies the Check to recorded evidence. This is the Check's opinion until a person reviews it separately.",
+                detail: "Rubrist applies the evaluator to recorded evidence. This is the evaluator's opinion until a person reviews it separately.",
                 ...(states.seeResult === "now"
                   ? dashboard.viewerRole === "owner" ? {
-                      cta: "Continue to first Result",
+                      cta: "Continue to first assessment",
                       onCta: () => navigate(firstResultPath(skill.currentVersion.id, skill.id, skill.criterionId))
-                    } : { foot: "An owner needs to start this Result." }
+                    } : { foot: "An owner needs to start this assessment." }
                   : {})
               })
         }

@@ -268,7 +268,7 @@ export function ExceptionsScreen() {
     return counts;
   }, [resolved]);
 
-  if (loading && !dashboard) return <PageLoading title="Loading exceptions" shape="list" />;
+  if (loading && !dashboard) return <PageLoading title="Loading review queue" shape="list" />;
 
   if (error || !dashboard) {
     return <ApiUnavailableScreen resource="the review queue" status={errorStatus} retry={() => void reload()} />;
@@ -286,7 +286,7 @@ export function ExceptionsScreen() {
         body={
           bench
             ? "This queue receives cases when the evaluator is unsure, disagrees with an expected label, or a reviewer flags a result. Add examples and run the evaluator first."
-            : "This queue receives cases when the evaluator is unsure, disagrees with a human ruling, or a reviewer flags a result. Connect a trace source to begin."
+            : "This queue receives cases when the evaluator is unsure, disagrees with a human label, or a reviewer flags a result. Connect a trace source to begin."
         }
         primary={
           <Button variant="primary" onClick={() => navigate(bench ? "/datasets" : "/")}>
@@ -315,7 +315,7 @@ export function ExceptionsScreen() {
           className="mb-4"
           text={
             <span>
-              These verdicts came from the unreviewed starter rubric. Treat them as a first draft of your
+              These assessments came from the unreviewed starter rubric. Treat them as a first draft of your
               review policy. Open cases to decide what the guide should change before sign-off.
             </span>
           }
@@ -331,8 +331,8 @@ export function ExceptionsScreen() {
         eyebrow={`Exception queue · ${dashboard.exceptionsTotal ?? "Total unavailable"}${dashboard.exceptionsTotal === undefined ? "" : " waiting"}${
           resolved !== null ? ` · ${resolvedTotal} resolved this week` : ""
         }`}
-        title="Cases that need human review"
-        sub="Review cases the evaluator flagged, marked ambiguous, or judged differently from an existing human label. Reviewers can see evaluator evidence here, so these rulings remain ungoverned legacy evidence. Resolved cases leave the active queue and remain in the history below."
+        title="Review queue"
+        sub="Review cases the evaluator flagged, marked ambiguous, or judged differently from an existing human label. Reviewers can see evaluator evidence here, so these human labels remain ungoverned legacy evidence. Resolved cases leave the active queue and remain in the history below."
         right={
           list.length > 0 ? (
             <Button
@@ -378,8 +378,8 @@ export function ExceptionsScreen() {
       {queueModalOpen ? (
         <SaveQueueModal
           caseIds={list.map((ex) => ex.id)}
-          defaultName={category !== ALL_CATEGORIES ? category : "Exceptions"}
-          context={`Saved from Exceptions · judge category ${category}`}
+          defaultName={category !== ALL_CATEGORIES ? category : "Review queue"}
+          context={`Saved from Review queue · judge category ${category}`}
           onClose={() => setQueueModalOpen(false)}
         />
       ) : null}
@@ -390,8 +390,8 @@ export function ExceptionsScreen() {
             <div>
               <CardTitle>Reviewer disagreements · {splits.length}</CardTitle>
               <CardDescription>
-                These cases have different recorded verdicts from two or more reviewers. Compare the
-                verdicts in Reliability and record the ruling that closes each disagreement.
+                These cases have different recorded human labels from two or more reviewers. Compare the
+                labels in Reliability and record the human label that closes each disagreement.
               </CardDescription>
             </div>
             <div className="flex-1" />
@@ -457,9 +457,9 @@ export function ExceptionsScreen() {
             <CardTitle>Waiting on a human</CardTitle>
             <CardDescription>
               {list.length > 0
-                ? `${list.length} ${list.length === 1 ? "case matches" : "cases match"} the current filters among the loaded cases. Expand the evaluator note here, or open Review to read the full trace and guide before recording a ruling.`
+                ? `${list.length} ${list.length === 1 ? "case matches" : "cases match"} the current filters among the loaded cases. Expand the evaluator note here, or open Review to read the full trace and guide before recording a human label.`
                 : exceptions.length === 0
-                  ? "No cases are waiting for a ruling. Resolved cases remain available in the history below."
+                  ? "No cases are waiting for a human label. Resolved cases remain available in the history below."
                   : "No loaded cases match the current filters. Change a filter to see the other loaded cases."}
             </CardDescription>
           </div>

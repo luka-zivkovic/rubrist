@@ -158,7 +158,7 @@ export function FailureTypeFindingsCard({ studyId, taxonomy, onOpenItem }: {
           {candidates.map((candidate) => <button key={candidate.observationEventId} type="button"
             onClick={() => onOpenItem(candidate.studyItemId)}
             className="block w-full px-3 py-3 text-left hover:bg-card-2">
-            <span className="text-[11px] font-medium">Run {candidate.position + 1} · {candidate.failureLabel}</span>
+            <span className="text-[11px] font-medium">Case {candidate.position + 1} · {candidate.failureLabel}</span>
             <span className="mt-1 block text-[10.5px] text-ink-3">{candidate.observationRationale}</span>
             <span className="mt-1 block text-[10px] text-signal">Open reviewed run</span>
           </button>)}
@@ -198,8 +198,8 @@ export function MemberFindingsCard() {
 export function CoverageCard({ coverage, error }: { coverage: AnalysisTaxonomyCoverage | null; error: string | null }) {
   return <Card><CardHeader><div><CardTitle>What you found</CardTitle><p className="mt-1 text-[10.5px] text-ink-3">Counts are tied to this exact analysis and current human-authored failure-type revision.</p></div></CardHeader><CardContent>
     {error ? <p role="alert" className="text-[11px] text-signal">{error}</p> : coverage ? <div className="grid gap-2 sm:grid-cols-3">
-      <Fact label="Runs sampled" value={String(coverage.selectedItemCount)} />
-      <Fact label="Runs reviewed" value={String(coverage.completedItemCount)} />
+      <Fact label="Cases sampled" value={String(coverage.selectedItemCount)} />
+      <Fact label="Cases reviewed" value={String(coverage.completedItemCount)} />
       <Fact label="No issue found" value={String(coverage.noFailureObservedItemCount)} />
       <Fact label="Issue observations" value={coverage.activeFailureObservationCount} />
       <Fact label="Organized" value={coverage.categorized} /><Fact label="Type later retired" value={coverage.assignedToRetiredCode} />

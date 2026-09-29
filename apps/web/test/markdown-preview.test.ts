@@ -13,7 +13,7 @@ import { readFeatureSource } from "./support/web-extraction-contracts.js";
 describe("MarkdownPreview", () => {
   it("renders common review-guide Markdown as semantic React elements", () => {
     const markdown = [
-      "# Review guide",
+      "# Rubric",
       "",
       "Use **grounded** answers with `evidence`.",
       "",
@@ -153,7 +153,7 @@ describe("MarkdownPreview", () => {
 
     expect(skill).toContain("<MarkdownPreview markdown={markdown}");
     expect(skill).toContain("Judge instructions · exact compiled text");
-    expect(skill).toContain("Result format · exact JSON schema");
+    expect(skill).toContain("Output contract · exact JSON schema");
     expect(skill).toContain("Execution binding · immutable settings");
     expect(skill).not.toContain("Model used");
     expect(skill).not.toContain("Rubrist flips this skill to");
@@ -163,7 +163,7 @@ describe("MarkdownPreview", () => {
     expect(versions).toContain("<TypedQuestionView question={v.typedQuestion}");
     expect(skill).toContain("<TypedQuestionView question={typedQuestion}");
     expect(editor).toContain('rubricMode === "preview"');
-    expect(editor).toContain('aria-label="Review guide Markdown source"');
+    expect(editor).toContain('aria-label="Rubric Markdown source"');
     expect(editor).toContain("requested-versus-observed mismatch is recorded evidence");
   });
 

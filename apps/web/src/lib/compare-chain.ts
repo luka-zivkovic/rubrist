@@ -135,7 +135,7 @@ export function chainTotalsGap(totals: ChainTotals): string | null {
     return `${totals.failed} ${totals.failed === 1 ? "save's run" : "saves' runs"} couldn't be loaded`;
   }
   if (totals.checkFailed > 0) {
-    return `${totals.checkFailed} ${totals.checkFailed === 1 ? "save's regression check" : "saves' regression checks"} failed`;
+    return `${totals.checkFailed} ${totals.checkFailed === 1 ? "save's reference check" : "saves' reference checks"} failed`;
   }
   if (totals.notCompared > 0) {
     return `${totals.notCompared} ${totals.notCompared === 1 ? "save" : "saves"} had no reference cases to compare`;

@@ -80,9 +80,9 @@ export function FirstRunCheckSetup({
           <Button variant="ghost" size="sm" onClick={onBack} disabled={submitting}><ArrowLeft /> Back to onboarding</Button>
         </div>
         <SectionHead
-          eyebrow="Set up your first Check · step 1 of 2"
-          title="What should this Check focus on?"
-          sub="Choose one quality question now. You can inspect and refine the proposed Review guide before anything is created."
+          eyebrow="Set up your first evaluator · step 1 of 2"
+          title="What should this evaluator focus on?"
+          sub="Choose one quality question now. You can inspect and refine the proposed Rubric before anything is created."
         />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -128,9 +128,9 @@ export function FirstRunCheckSetup({
         <Button variant="ghost" size="sm" onClick={onBack} disabled={submitting}><ArrowLeft /> Back to onboarding</Button>
       </div>
       <SectionHead
-        eyebrow="Set up your first Check · step 2 of 2"
-        title="Review the proposed Check"
-        sub="This is a usable starting point, not a claim that the Check is accurate. Read it, refine it if useful, then create it."
+        eyebrow="Set up your first evaluator · step 2 of 2"
+        title="Review the proposed evaluator"
+        sub="This is a usable starting point, not a claim that the evaluator is accurate. Read it, refine it if useful, then create it."
       />
 
       {draft.decisionSource === "rubrist" && draft.decisionReason ? (
@@ -146,13 +146,13 @@ export function FirstRunCheckSetup({
               <CardTitle>{draft.criterionName}</CardTitle>
               <Chip><span className="inline-flex items-center gap-1"><Check className="size-3" /> Starter · unvalidated</span></Chip>
             </div>
-            <CardDescription>One Check answers one quality question about each Run.</CardDescription>
+            <CardDescription>One evaluator answers one quality question about each case.</CardDescription>
           </div>
           <Button variant="ghost" size="sm" onClick={onChangeFocus} disabled={submitting}>Change focus</Button>
         </CardHeader>
         <CardContent className="space-y-5">
           <div>
-            <Eyebrow>What this Check decides</Eyebrow>
+            <Eyebrow>What this evaluator decides</Eyebrow>
             {refining ? (
               <input
                 aria-label="Quality question"
@@ -190,14 +190,14 @@ export function FirstRunCheckSetup({
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <Eyebrow>Review guide</Eyebrow>
-                <p className="mt-1 text-[11.5px] text-ink-3">The exact instructions the Check uses to decide.</p>
+                <Eyebrow>Rubric</Eyebrow>
+                <p className="mt-1 text-[11.5px] text-ink-3">The exact instructions the evaluator uses to decide.</p>
               </div>
               {!refining ? <Button variant="outline" size="sm" onClick={onRefine} disabled={submitting}><Pencil /> Refine it first</Button> : null}
             </div>
             {refining ? (
               <textarea
-                aria-label="Review guide Markdown"
+                aria-label="Rubric Markdown"
                 value={draft.rubricMarkdown}
                 onChange={(event) => onRubricChange(event.target.value)}
                 disabled={submitting}
@@ -257,23 +257,23 @@ export function FirstRunCheckSetup({
             <summary className="cursor-pointer text-[11.5px] font-medium text-ink-2">Technical details</summary>
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[11.5px]">
               <dt className="text-ink-3">Requested judge</dt><dd className="font-mono text-ink">{provider} · {modelId || "not ready"}</dd>
-              <dt className="text-ink-3">Result shape</dt><dd className="text-ink">One structured verdict and rationale per Run</dd>
-              <dt className="text-ink-3">Apply to</dt><dd className="text-ink">Saved Runs and new Runs</dd>
+              <dt className="text-ink-3">Assessment shape</dt><dd className="text-ink">One structured verdict and rationale per case</dd>
+              <dt className="text-ink-3">Apply to</dt><dd className="text-ink">Saved cases and new cases</dd>
             </dl>
           </details>
         </CardContent>
       </Card>
 
       <MarginNote tone="neutral" who="What creation means" className="mb-4">
-        This creates an immutable Check version. Its Results are model opinions—not human truth,
-        calibration, or a release decision. You can improve the Check after seeing how it behaves on real Runs.
+        This creates an immutable evaluator version. Its assessments are model opinions—not human truth,
+        calibration, or a release decision. You can improve the evaluator after seeing how it behaves on real cases.
       </MarginNote>
 
       {!preparingProvider && !providerReady ? (
         <MarginNote tone="signal" who="Judge provider needed" className="mb-4">
           {provider === "custom"
             ? "Enter the custom model ID, version, and full base URL above. "
-            : "Connect a judge provider before creating this Check. "}
+            : "Connect a judge provider before creating this evaluator. "}
           <Button variant="link" size="sm" onClick={onOpenSettings} disabled={submitting}>Open Settings</Button>
         </MarginNote>
       ) : null}
@@ -284,8 +284,8 @@ export function FirstRunCheckSetup({
         {refining ? <Button variant="outline" onClick={() => onRefine()} disabled={submitting}>Preview current draft</Button> : null}
         <Button variant="primary" size="lg" onClick={onCreate} disabled={!canCreate || submitting}>
           {submitting
-            ? <><LoaderCircle className="animate-spin" /> Creating Check…</>
-            : refining ? "Create with current draft" : "Create this Check"}
+            ? <><LoaderCircle className="animate-spin" /> Creating evaluator…</>
+            : refining ? "Create with current draft" : "Create this evaluator"}
         </Button>
       </div>
     </div>

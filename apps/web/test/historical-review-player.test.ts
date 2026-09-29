@@ -133,8 +133,8 @@ describe("historical review player", () => {
     const items = [{ key: "item_1", queueItemId: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", skillVersionId: "skillv_1", judgeRunId: detail.judgeRun.id, completed: false }];
     const container = await mount(items);
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", "skillv_1", "criterionv_1", detail.judgeRun.id);
-    expect(container.textContent).toContain("Recorded evaluator opinion");
-    const accept = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with evaluator"));
+    expect(container.textContent).toContain("Recorded assessment");
+    const accept = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with assessment:"));
     expect(accept).toBeDefined();
     await act(async () => accept!.click());
     expect(api.recordHumanVerdict).toHaveBeenCalledWith("case_1", expect.objectContaining({ choice: "fail" }), "skillv_1",
@@ -148,7 +148,7 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     api.recordHumanVerdict.mockRejectedValueOnce(new Error("Connection lost")).mockResolvedValueOnce({ id: "saved" });
     const container = await mount([{ key: "item_1", queueItemId: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", skillVersionId: "skillv_1", judgeRunId: detail.judgeRun.id, completed: false }]);
-    const accept = () => [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with evaluator"))!;
+    const accept = () => [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Agree with assessment:"))!;
     await act(async () => accept().click());
     expect(container.textContent).toContain("Connection lost");
     await act(async () => accept().click());
@@ -212,22 +212,22 @@ describe("historical review player", () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = await mount();
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Skip for now")!.click());
-    expect(container.textContent).toContain("1 skipped this session; skipping does not record a ruling");
+    expect(container.textContent).toContain("1 skipped this session; skipping does not record a human label");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
 
-  it("keeps save confirmation after advancing and can return to change that ruling", async () => {
+  it("keeps save confirmation after advancing and can return to change that human label", async () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     api.recordHumanVerdict.mockResolvedValue({ id: "human_new", skillVersionId: "skillv_1", source: "human", actorName: "Reviewer", payload: { kind: "categorical", choice: "fail", choiceScores: { pass: 1, fail: 0, ambiguous: 0.5 }, rationale: "Accepted" }, createdAt: "2026-09-28T00:00:00Z" });
     const container = await mount([
       { key: "item_1", caseId: "case_1", criterionVersionId: "criterionv_1", completed: false },
       { key: "item_2", caseId: "case_2", criterionVersionId: "criterionv_1", completed: false }
     ]);
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
-    expect(container.textContent).toContain("Case 1: ruling recorded");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
+    expect(container.textContent).toContain("Case 1: human label recorded");
     expect(dashboard.refresh).toHaveBeenCalledTimes(1);
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "criterionv_1", undefined);
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Change ruling")!.click());
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Change human label")!.click());
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.querySelector("textarea")).not.toBeNull();
     expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
@@ -245,10 +245,10 @@ describe("historical review player", () => {
     expect(container.textContent).toContain("Could not load queue");
     expect(container.textContent).toContain("Destination unavailable");
     expect(container.textContent).not.toContain("Loading queue");
-    expect(container.textContent).not.toContain("Agree with evaluator");
+    expect(container.textContent).not.toContain("Agree with assessment:");
   });
 
-  it("does not apply a late saved ruling or progress reload to another queue", async () => {
+  it("does not apply a late saved human label or progress reload to another queue", async () => {
     route.id = "queue_a";
     api.fetchCaseDetail.mockResolvedValue(detail);
     api.fetchReviewQueueDetail.mockResolvedValueOnce(queueFixture("queue_a")).mockResolvedValueOnce(queueFixture("queue_b"));
@@ -256,19 +256,19 @@ describe("historical review player", () => {
     api.recordHumanVerdict.mockReturnValueOnce(new Promise((resolve) => { resolveSave = resolve; }));
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(QueueDetailScreen)));
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
     expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
     route.id = "queue_b";
     await act(async () => root!.render(createElement(QueueDetailScreen)));
     await act(async () => resolveSave(savedRuling));
     expect(container.querySelector("h1")?.textContent).toContain("queue_b");
-    expect(container.textContent).not.toContain("ruling recorded");
+    expect(container.textContent).not.toContain("human label recorded");
     expect(api.fetchReviewQueueDetail.mock.calls.map(([id]) => id)).toEqual(["queue_a", "queue_b"]);
     expect(route.setSearch).not.toHaveBeenCalled();
     expect(dashboard.refresh).not.toHaveBeenCalled();
   });
 
-  it("preserves a saved ruling receipt when progress refresh fails and retries to the completed summary", async () => {
+  it("preserves a saved human label receipt when progress refresh fails and retries to the completed summary", async () => {
     route.id = "queue_a";
     api.fetchCaseDetail.mockResolvedValue(detail);
     api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
@@ -277,12 +277,12 @@ describe("historical review player", () => {
       .mockResolvedValueOnce(queueFixture("queue_a", true));
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(QueueDetailScreen)));
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
-    expect(container.textContent).toContain("Case 1: ruling recorded");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
+    expect(container.textContent).toContain("Case 1: human label recorded");
     expect(container.textContent).toContain("queue progress could not refresh");
     expect(container.textContent).not.toContain("Queue complete");
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Retry queue progress")!.click());
-    expect(container.textContent).toContain("1 of 1 cases have a recorded ruling");
+    expect(container.textContent).toContain("1 of 1 cases have a recorded human label");
     expect(container.textContent).toContain("Queue complete");
     expect(container.textContent).not.toContain("queue progress could not refresh");
     expect(api.recordHumanVerdict).toHaveBeenCalledTimes(1);
@@ -295,7 +295,7 @@ describe("historical review player", () => {
     api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
     dashboard.dashboard = { exceptions: [], skill: { currentVersion: { id: "skillv_after_edit", criterionVersionId: "criterionv_after_edit" } } };
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(new URLSearchParams(route.search).getAll("caseId")).toEqual(["case_1", "case_2"]);
@@ -316,12 +316,12 @@ describe("historical review player", () => {
     api.recordHumanVerdict.mockResolvedValueOnce(savedRuling);
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
-    expect(container.textContent).toContain("Case 1: ruling recorded");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
+    expect(container.textContent).toContain("Case 1: human label recorded");
     route.search = "caseId=case_1&caseId=case_2&criterionVersionId=criterionv_2";
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_2", undefined);
-    expect(container.textContent).not.toContain("ruling recorded");
+    expect(container.textContent).not.toContain("human label recorded");
     await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "Session summary")!.click());
     expect(container.textContent).toContain("0 of 2 cases reviewed this session");
     expect(container.textContent).toContain("Accepted: 0");
@@ -338,13 +338,13 @@ describe("historical review player", () => {
       .mockResolvedValueOnce(queueFixture("queue_b"));
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(QueueDetailScreen)));
-    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with evaluator"))!.click());
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent?.includes("Agree with assessment:"))!.click());
     route.id = "queue_b";
     await act(async () => root!.render(createElement(QueueDetailScreen)));
     await act(async () => resolveProgress(queueFixture("queue_a", true)));
     expect(container.querySelector("h1")?.textContent).toContain("queue_b");
     expect(container.textContent).not.toContain("Queue complete");
-    expect(container.textContent).not.toContain("ruling recorded");
+    expect(container.textContent).not.toContain("human label recorded");
     expect(api.fetchReviewQueueDetail.mock.calls.map(([id]) => id)).toEqual(["queue_a", "queue_a", "queue_b"]);
   });
 
@@ -376,7 +376,7 @@ describe("historical review player", () => {
     dashboard.error = null; dashboard.errorStatus = null;
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, entry === "partially pinned URL" ? "old_definition" : "criterionv_1", undefined);
-    expect(container.textContent).toContain("Agree with evaluator");
+    expect(container.textContent).toContain("Agree with assessment:");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
 
@@ -387,7 +387,7 @@ describe("historical review player", () => {
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "old_definition", undefined);
-    expect(container.textContent).toContain("Agree with evaluator");
+    expect(container.textContent).toContain("Agree with assessment:");
     expect(container.textContent).not.toContain("HTTP 503");
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Next")!.click());
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_2", undefined, "other_definition", undefined);
@@ -400,7 +400,7 @@ describe("historical review player", () => {
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ReviewScreen)));
     expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1", undefined);
-    expect(container.textContent).toContain("Agree with evaluator");
+    expect(container.textContent).toContain("Agree with assessment:");
   });
 
   it("reloads a Review all URL with every case and its pinned definition, independent of the current dashboard", async () => {
@@ -463,35 +463,35 @@ describe("historical review player", () => {
     const container = await mount();
     expect(api.fetchCaseDetail).toHaveBeenCalledWith("case_1", undefined, "criterionv_1", undefined);
     expect(container.textContent).toContain("The answer omitted a direct link.");
-    const accept = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Agree with evaluator"));
+    const accept = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Agree with assessment:"));
     expect(accept).toBeDefined();
-    expect(accept!.textContent).toContain(`Record ${label.toUpperCase()} as my ruling`);
+    expect(accept!.textContent).toContain(`Agree with assessment: ${label[0]!.toUpperCase()}${label.slice(1)}`);
     await act(async () => accept!.click());
     expect(api.recordHumanVerdict).toHaveBeenCalledWith("case_1", expect.objectContaining({ choice: label }), "skillv_1", undefined);
   });
 
 
-  it("disagreeing opens a different-ruling form without immediately recording a verdict", async () => {
+  it("disagreeing opens a different-human label form without immediately recording a verdict", async () => {
     api.fetchCaseDetail.mockResolvedValue(detail);
     const container = await mount();
-    const disagree = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Disagree with evaluator"));
-    expect(disagree?.textContent).toContain("Choose a different ruling and explain why");
+    const disagree = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Correct assessment"));
+    expect(disagree?.textContent).toContain("Choose a different human label and explain why");
     await act(async () => disagree!.click());
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
-    const submit = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Record PASS ruling"));
+    const submit = [...container.querySelectorAll("button")].find((button) => button.textContent?.includes("Record PASS human label"));
     expect(submit?.disabled).toBe(true);
-    expect(container.querySelector<HTMLButtonElement>('[role="radio"][title="This is already the current ruling."]')?.disabled).toBe(true);
+    expect(container.querySelector<HTMLButtonElement>('[role="radio"][title="This is already the current human label."]')?.disabled).toBe(true);
   });
 
   it("keeps unavailable scoped evidence explicit and retries the same criterion without offering review actions", async () => {
     api.fetchCaseDetail.mockRejectedValue(new Error("No recorded evaluator result is available for this case and criterion version."));
     const container = await mount();
     expect(container.textContent).toContain("No recorded evaluator result");
-    expect(container.textContent).not.toContain("Agree with evaluator");
+    expect(container.textContent).not.toContain("Agree with assessment:");
     api.fetchCaseDetail.mockResolvedValue(detail);
     await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry")!.click());
     expect(api.fetchCaseDetail).toHaveBeenLastCalledWith("case_1", undefined, "criterionv_1", undefined);
-    expect(container.textContent).toContain("Agree with evaluator");
+    expect(container.textContent).toContain("Agree with assessment:");
     expect(api.recordHumanVerdict).not.toHaveBeenCalled();
   });
 });

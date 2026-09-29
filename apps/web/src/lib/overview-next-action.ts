@@ -20,21 +20,21 @@ export function overviewNextAction(dashboard: DashboardSummary, search: string) 
     label: "Open queue", href: href("/exceptions")
   };
   if (!currentCheckIsReady(dashboard)) return {
-    title: "Review the current Check", description: "No cases are waiting for review. Inspect the current version and its recorded status before starting another Result.",
-    label: "View Check", href: href(`/skill/versions/${encodeURIComponent(skill.currentVersion.id)}`)
+    title: "Review the current evaluator", description: "No cases are waiting for review. Inspect the current version and its recorded status before starting another assessment.",
+    label: "View evaluator", href: href(`/skill/versions/${encodeURIComponent(skill.currentVersion.id)}`)
   };
   if (dashboard.currentVersionResultCount === 0) {
     const owner = dashboard.viewerRole === "owner";
     const bench = isBench(dashboard.project);
     return {
-      title: "See this Check's first Result",
-      description: owner ? "No cases are waiting for review, and this version has no recorded Result yet." : "No cases are waiting for review. An owner needs to start the first Result for this version.",
-      label: owner ? "Continue to first Result" : bench ? "Open examples" : "Open traces",
+      title: "See this evaluator's first assessment",
+      description: owner ? "No cases are waiting for review, and this version has no recorded assessment yet." : "No cases are waiting for review. An owner needs to start the first assessment for this version.",
+      label: owner ? "Continue to first assessment" : bench ? "Open examples" : "Open traces",
       href: owner ? firstResultPath(skill.currentVersion.id, skill.id, skill.criterionId) : href(bench ? "/datasets" : "/traces")
     };
   }
   return {
-    title: "Nothing is waiting for review", description: "Saved rulings remain on their cases. You can inspect protected examples or the recorded results below.",
-    label: "Open protected examples", href: href("/golden")
+    title: "Nothing is waiting for review", description: "Saved human labels remain on their cases. You can inspect golden cases or the recorded results below.",
+    label: "Open golden cases", href: href("/golden")
   };
 }

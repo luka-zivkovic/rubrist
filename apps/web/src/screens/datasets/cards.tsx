@@ -89,7 +89,7 @@ export function DatasetCard({
               disabled={starting || dataset.itemCount === 0 || dataset.archivedAt !== null}
               title={dataset.itemCount === 0 ? "Dataset has no cases to judge." : undefined}
             >
-              <Play /> {starting ? "Starting…" : "Run eval"}
+              <Play /> {starting ? "Starting…" : "Run evaluation"}
             </Button>
           </div>
         </div>
@@ -263,7 +263,7 @@ export function RunDeltaCard({
     );
   }
   if (sameVersion) {
-    notes.push("Both runs used the same skill version — any flip here is judge inconsistency, not a prompt change.");
+    notes.push("Both runs used the same evaluator version — any flip here is judge inconsistency, not a prompt change.");
   }
 
   return (
@@ -375,7 +375,7 @@ export function EvalRunDetailCard({
       <CardContent className="py-4">
         <div className="mb-3 flex items-center justify-between">
           <Eyebrow>
-            Run {detail.id} · {detail.status} · {detailAgreement(detail)}
+            Evaluation run {detail.id} · {detail.status} · {detailAgreement(detail)}
             {disagreements > 0 ? ` · ${disagreements} disagree` : ""}
           </Eyebrow>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -452,7 +452,7 @@ function TraceTestOutcomeBanner({ outcome }: { outcome: TraceTestRunOutcome }) {
   const copy = outcome === "passed"
     ? { title: "Passed", body: "The evaluator behaved as this saved test expected." }
     : outcome === "regressed"
-      ? { title: "Regressed", body: "The evaluator disagreed with the behavior this test protects." }
+      ? { title: "Reference disagreement", body: "The evaluator disagreed with the behavior this test protects." }
       : outcome === "needs_review"
         ? { title: "Needs review", body: "The evaluator could not make a clear behavior decision from this case." }
         : outcome === "could_not_run"

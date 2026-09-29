@@ -78,7 +78,7 @@ export function GoldenScreen() {
           <Eyebrow>The principle</Eyebrow>
           <div className="mt-2 font-serif text-[14px] leading-[1.55] tracking-[-0.005em] text-ink-2">
             Promote a reviewed case when future evaluator versions should preserve its result.
-            Rubrist freezes the recorded label and includes the case in later regression checks.
+            Rubrist freezes the recorded label and includes the case in later reference checks.
             This set covers only the cases you chose; it does not measure overall quality or create
             governed human truth. Retiring a case removes it from future checks while preserving its history.
           </div>

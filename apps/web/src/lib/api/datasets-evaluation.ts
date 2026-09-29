@@ -134,7 +134,7 @@ export async function ensureSkillVersionBackfill(
   if (response.ok && payload?.existingResult === true) {
     return { run: null, dispatchPending: false, retryAfterMs: 30_000 };
   }
-  throw apiError(response, payload, "First Result evaluation could not start");
+  throw apiError(response, payload, "First assessment evaluation could not start");
 }
 
 export async function createDataset(input: CreateDatasetInput): Promise<Dataset> {

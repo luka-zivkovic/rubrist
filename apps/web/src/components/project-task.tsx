@@ -48,13 +48,13 @@ export function ProjectTaskFork({
           active={mode === "bench"}
           icon={<FlaskConical className="size-3.5" />}
           title="Examples or an Agent Skill"
-          detail="Supply input-and-output examples, or let your coding agent set up a Check for one Agent Skill."
+          detail="Supply input-and-output examples, or let your coding agent set up an evaluator for one Agent Skill."
           onPick={() => setMode("bench")}
         />
       </div>
       <div className="text-[11px] leading-[1.5] text-ink-3">
-        Rubrist reads recorded Runs; it does not execute your AI. You can connect another source later
-        without losing Checks or Results.
+        Rubrist reads recorded cases; it does not execute your AI. You can connect another source later
+        without losing evaluators or assessments.
       </div>
     </div>
   );
@@ -96,13 +96,13 @@ export function ProjectTaskNextSteps({ mode }: { mode: ProjectMode }) {
     <div className="rounded-sm border border-rule-soft bg-paper-2 px-3 py-2.5 text-[11.5px] leading-[1.55] text-ink-2">
       {mode === "bench" ? (
         <>
-          <b>What happens next:</b> Add one example Run, choose one thing to Check, and see the first
-          Result. Expected labels are optional during setup.
+          <b>What happens next:</b> Add one case, choose one criterion to evaluate, and see the first
+          assessment. Expected labels are optional during setup.
         </>
       ) : (
         <>
-          <b>What happens next:</b> Connect or paste one recorded Run, choose one thing to Check, and
-          see what the starter Check concludes. Its Results remain unvalidated after setup.
+          <b>What happens next:</b> Connect or paste one recorded case, choose one criterion to evaluate, and
+          see what the starter evaluator concludes. Its assessments remain unvalidated after setup.
         </>
       )}
     </div>

@@ -7,7 +7,7 @@ describe("workspace location", () => {
   it("matches specific routes before ancestors and normalizes trailing slashes", () => {
     expect(routeMetadata("/exceptions/")).toEqual(routeMetadata("/exceptions"));
     expect(routeMetadata("/skill/versions/v1").crumbs).toEqual([
-      { label: "Skill", to: "/skill" }, { label: "Skill versions", to: "/skill/versions" }, { label: "Version" }
+      { label: "Evaluator", to: "/skill" }, { label: "Evaluator versions", to: "/skill/versions" }, { label: "Version" }
     ]);
     expect(routeMetadata("/human-truth/new/instruction").activePath).toBe("/human-truth");
     expect(routeMetadata("/human-truth/batches/b/items/i/resolve").crumbs.at(-1)?.label).toBe("Resolve item");
@@ -20,7 +20,7 @@ describe("workspace location", () => {
   it("links case parents with criterion and exact evaluation pins, without leaking selection", () => {
     const search = "?criterionId=c1&from=exceptions&skillVersionId=old&criterionVersionId=cv1&caseId=other";
     expect(routeMetadata("/cases/a/make-test", search).crumbs).toEqual([
-      { label: "Exceptions", to: "/exceptions?criterionId=c1" },
+      { label: "Review queue", to: "/exceptions?criterionId=c1" },
       { label: "Case", to: "/cases/a?criterionId=c1&from=exceptions&skillVersionId=old&criterionVersionId=cv1" },
       { label: "Make a test" }
     ]);
@@ -63,9 +63,9 @@ describe("workspace location", () => {
     main.querySelector("h1")!.setAttribute("aria-label", "Case 3 of 8 · Review session");
     await Promise.resolve();
     expect(titles.at(-1)).toBe("Case 3 of 8 · Review session · WiCE · Rubrist");
-    main.innerHTML = '<h1>Skill versions</h1>';
+    main.innerHTML = '<h1>Evaluator versions</h1>';
     await Promise.resolve();
-    expect(titles.at(-1)).toBe("Skill versions · WiCE · Rubrist");
+    expect(titles.at(-1)).toBe("Evaluator versions · WiCE · Rubrist");
     stop();
     const count = titles.length;
     main.innerHTML = '<h1>Not observed</h1>';

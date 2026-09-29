@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 import type { RegressionCaseDiff } from "@rubrist/shared";
 
 const CHANGE_LABEL: Record<RegressionCaseDiff["change"], string> = {
-  regress: "regressed",
-  improve: "improved",
-  agree: "agreed"
+  regress: "reference disagreement",
+  improve: "now matches reference",
+  agree: "matches reference"
 };
 
 function changeRank(change: RegressionCaseDiff["change"]): number {
@@ -30,7 +30,7 @@ function changeRank(change: RegressionCaseDiff["change"]): number {
 export function RegressionDiffTable({
   cases,
   title = "Case-by-case diff",
-  description = "Every promoted case re-judged against this version. Regressions first."
+  description = "Every promoted case re-judged against this version. Reference disagreements first."
 }: {
   cases: RegressionCaseDiff[];
   title?: string;
@@ -49,16 +49,16 @@ export function RegressionDiffTable({
         </div>
         <div className="flex-1" />
         <div className="flex gap-1.5">
-          {regressedCount > 0 ? <Chip variant="fail">{regressedCount} regressed</Chip> : null}
+          {regressedCount > 0 ? <Chip variant="fail">{regressedCount} reference disagreements</Chip> : null}
           <Chip variant="outline">{cases.length} compared</Chip>
         </div>
       </CardHeader>
       <Table>
         <thead>
           <tr>
-            <th style={{ width: 90 }}>Change</th>
+            <th style={{ width: 90 }}>Reference comparison</th>
             <th>Case</th>
-            <th style={{ width: 180 }}>Agreed → new</th>
+            <th style={{ width: 180 }}>Reference → assessment</th>
             <th>Reading</th>
           </tr>
         </thead>

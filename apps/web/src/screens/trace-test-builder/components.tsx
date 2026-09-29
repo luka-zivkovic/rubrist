@@ -464,7 +464,7 @@ export function DraftStage(props: DraftStageProps) {
                 ))}
               </fieldset>
               <div className="mt-3">
-                <FieldLabel label="Check name">
+                <FieldLabel label="Evaluator name">
                   <input className={INPUT_CLASS} value={props.fields.checkerLabel} onChange={(event) => props.onCheckerLabelChange(event.target.value)} />
                 </FieldLabel>
               </div>
@@ -706,7 +706,7 @@ export function ReceiptStage({
           <b>Correction recorded.</b> Rubrist saved your result on the source conversation. No product test was created.
         </Receipt>
         <h1 data-trace-test-heading tabIndex={-1} className="mt-7 font-serif text-[30px] font-medium tracking-[-0.025em] text-ink outline-none">Evaluator correction recorded</h1>
-        <p className="mt-2 max-w-[65ch] text-[13.5px] leading-[1.65] text-ink-2">The ruling is now part of the source case's ungoverned review history. It can inform later evaluator changes, but it does not create a regression test or governed calibration evidence.</p>
+        <p className="mt-2 max-w-[65ch] text-[13.5px] leading-[1.65] text-ink-2">The human label is now part of the source case's ungoverned review history. It can inform later evaluator changes, but it does not create a regression test or governed calibration evidence.</p>
         <div className="mt-6 flex flex-wrap gap-2"><Button variant="primary" onClick={onReviewAccuracy}>Review evaluator accuracy</Button><Button variant="ghost" onClick={onReturn}>Return to conversation</Button></div>
       </div>
     );
@@ -753,7 +753,7 @@ export function ReceiptStage({
 
 function traceTestRunMessage(result: TraceTestRunResult): { title: string; body: string } {
   if (result.outcome === "passed") return { title: "Passed", body: "The current evaluator behaved as this test expected." };
-  if (result.outcome === "regressed") return { title: "Regressed", body: "The evaluator's result disagreed with the behavior this test protects." };
+  if (result.outcome === "regressed") return { title: "Reference disagreement", body: "The evaluator's result disagreed with the behavior this test protects." };
   if (result.outcome === "needs_review") return { title: "Needs review", body: "The evaluator could not make a clear behavior decision from this case." };
   if (result.outcome === "could_not_run") return { title: "Could not run", body: "A runtime or provider problem stopped the check. This is not a behavior regression." };
   return { title: "Running", body: "The run has started. Open it to follow progress." };

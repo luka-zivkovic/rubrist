@@ -47,7 +47,7 @@ export function FirstResultScreen() {
       .then((criterion) => {
         if (cancelled) return;
         if (criterion.criterionId !== criterionId) {
-          setCriterionError("This first-Result link does not match the Check's quality question.");
+          setCriterionError("This first-assessment link does not match the evaluator's quality question.");
           return;
         }
         setCriterionVersion(criterion);
@@ -62,7 +62,7 @@ export function FirstResultScreen() {
     const current = () => generation === loadGeneration.current;
     if (!versionId || !skillId || !criterionId) {
       if (current()) {
-        setError("This first-Result link is missing its Check identity.");
+        setError("This first-assessment link is missing its evaluator identity.");
         setLoading(false);
       }
       return false;
@@ -107,18 +107,18 @@ export function FirstResultScreen() {
           const receiptVersion = dashboard?.skill.currentVersion.id === versionId
             ? dashboard.skill.currentVersion.version
             : versionId;
-          markSetupReceipt(`Check v${receiptVersion} returned a Result on recorded evidence.`);
+          markSetupReceipt(`Evaluator v${receiptVersion} returned an assessment on recorded evidence.`);
           void refresh();
         }
         return false;
       } else if (!dashboard) {
         return true;
       } else if (dashboard.project.importedTraceCount === 0) {
-        setError("Add a recorded Run before asking for the first Result.");
+        setError("Add a recorded case before asking for the first assessment.");
         setLoading(false);
         return false;
       } else if (dashboard.viewerRole !== "owner") {
-        setError("An owner needs to start this first Result. You can still inspect the recorded Runs.");
+        setError("An owner needs to start this first assessment. You can still inspect the recorded cases.");
         setLoading(false);
         return false;
       } else {
@@ -149,7 +149,7 @@ export function FirstResultScreen() {
             const receiptVersion = dashboard?.skill.currentVersion.id === versionId
               ? dashboard.skill.currentVersion.version
               : versionId;
-            markSetupReceipt(`Check v${receiptVersion} returned a Result on recorded evidence.`);
+            markSetupReceipt(`Evaluator v${receiptVersion} returned an assessment on recorded evidence.`);
             void refresh();
           }
           return false;
@@ -170,7 +170,7 @@ export function FirstResultScreen() {
         if (!current()) return false;
         const verdict = verdictForTrackedItem(verdicts, completedItem.verdictId!);
         if (!verdict) {
-          setError("The tracked run finished, but its exact Result record could not be loaded.");
+          setError("The tracked run finished, but its exact assessment record could not be loaded.");
           return false;
         }
         setResult({ caseId: completedItem.caseId, verdict });
@@ -180,7 +180,7 @@ export function FirstResultScreen() {
             ? dashboard.skill.currentVersion.version
             : versionId;
           markSetupReceipt(
-            `Check v${receiptVersion} returned a Result on recorded evidence.`
+            `Evaluator v${receiptVersion} returned an assessment on recorded evidence.`
           );
           void refresh();
         }
@@ -220,7 +220,7 @@ export function FirstResultScreen() {
 
   const versionLabel = dashboard?.skill.currentVersion.id === versionId
     ? `v${dashboard.skill.currentVersion.version}`
-    : "the saved Check";
+    : "the saved evaluator";
   const completed = run?.completedItems ?? (result
     ? Math.max(1, dashboard?.skill.currentVersion.id === versionId ? dashboard.currentVersionResultCount : 0)
     : 0);
@@ -235,16 +235,16 @@ export function FirstResultScreen() {
         </Button>
       </div>
       <SectionHead
-        eyebrow="First setup · Result"
+        eyebrow="First setup · assessment"
         title={result
-          ? "Your first Result is ready"
+          ? "Your first assessment is ready"
           : dispatchPending
-            ? "Waiting to start the saved Check run"
-            : `Applying ${versionLabel} to a recorded Run`}
+            ? "Waiting to start the saved evaluator run"
+            : `Applying ${versionLabel} to a recorded case`}
         sub={result
-          ? "This is the Check's opinion about evidence your AI already produced. It is not a human decision, proof of accuracy, or permission to ship."
+          ? "This is the evaluator's opinion about evidence your AI already produced. It is not a human decision, proof of accuracy, or permission to ship."
           : dispatchPending
-            ? "The Run is saved, but Rubrist has not confirmed that evaluation started. No Result exists yet."
+            ? "The case is saved, but Rubrist has not confirmed that evaluation started. No assessment exists yet."
             : "Rubrist is evaluating saved evidence. You can leave this page and return—the progress below is stored."}
       />
 
@@ -252,27 +252,27 @@ export function FirstResultScreen() {
         <StatusCard
           urgent
           icon={<CircleAlert className="size-4" />}
-          title="Could not verify which quality question produced this Result"
+          title="Could not verify which quality question produced this assessment"
           body={criterionError}
         />
       ) : versionId && skillId && criterionId && !criterionVersion ? (
         <StatusCard
           icon={<LoaderCircle className="size-4 animate-spin" />}
           title="Loading the saved quality question"
-          body="Rubrist is verifying the exact Check definition bound to this Result before showing its verdict."
+          body="Rubrist is verifying the exact evaluator definition bound to this assessment before showing its verdict."
         />
       ) : criterionVersion ? (
         <Card className="mb-4 border-gold-tint">
           <CardHeader>
             <div>
-              <Eyebrow>This Result answers</Eyebrow>
+              <Eyebrow>This assessment answers</Eyebrow>
               <CardTitle className="mt-1">{criterionVersion.name}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <p className="font-serif text-[20px] leading-7 text-ink">{criterionVersion.definition}</p>
             <p className="mt-3 text-[12px] leading-5 text-ink-2">
-              Starter · unvalidated. The verdict below is this Check's model opinion, not proof that the Check is accurate.
+              Starter · unvalidated. The verdict below is this evaluator's model opinion, not proof that the evaluator is accurate.
             </p>
           </CardContent>
         </Card>
@@ -281,8 +281,8 @@ export function FirstResultScreen() {
       {criterionError || (versionId && skillId && criterionId && !criterionVersion) ? null : loading && !run ? (
         <StatusCard
           icon={<LoaderCircle className="size-4 animate-spin" />}
-          title="Preparing the Check run"
-          body="The Check has been saved. Rubrist is creating a tracked run over the recorded evidence."
+          title="Preparing the evaluator run"
+          body="The evaluator has been saved. Rubrist is creating a tracked run over the recorded evidence."
         />
       ) : error ? (
         <StatusCard
@@ -305,8 +305,8 @@ export function FirstResultScreen() {
         <StatusCard
           urgent
           icon={<CircleAlert className="size-4" />}
-          title="Run saved, waiting to enter the evaluation queue"
-          body="Rubrist has not confirmed a live queue job yet. It will keep checking this saved run; no Result has been produced or queued successfully yet."
+          title="Case saved, waiting to enter the evaluation queue"
+          body="Rubrist has not confirmed a live queue job yet. It will keep checking this saved run; no assessment has been produced or queued successfully yet."
           actions={
             <Button size="sm" variant="outline" onClick={() => {
               setLoading(true);
@@ -320,19 +320,19 @@ export function FirstResultScreen() {
       ) : run && (run.status === "pending" || run.status === "running") ? (
         <StatusCard
           icon={<LoaderCircle className="size-4 animate-spin" />}
-          title={run.status === "pending" ? "Check queued" : "Checking recorded evidence"}
-          body={`${(completed + failed).toLocaleString()} of ${total.toLocaleString()} recorded ${total === 1 ? "Run" : "Runs"} finished${failed > 0 ? ` · ${failed} could not run` : ""}.`}
+          title={run.status === "pending" ? "Evaluator queued" : "Checking recorded evidence"}
+          body={`${(completed + failed).toLocaleString()} of ${total.toLocaleString()} recorded ${total === 1 ? "Case" : "Cases"} finished${failed > 0 ? ` · ${failed} could not run` : ""}.`}
         />
       ) : run && !result ? (
         <StatusCard
           urgent
           icon={<CircleAlert className="size-4" />}
-          title="The first Result could not be produced"
-          body={`${run.error ?? `${failed.toLocaleString()} of ${total.toLocaleString()} Check attempts failed before a Result was recorded.`} Fix the provider setup if needed, then save a new Check version to try again.`}
+          title="The first assessment could not be produced"
+          body={`${run.error ?? `${failed.toLocaleString()} of ${total.toLocaleString()} evaluator attempts failed before an assessment was recorded.`} Fix the provider setup if needed, then save a new evaluator version to try again.`}
           actions={
             <>
               <Button size="sm" variant="outline" onClick={() => navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")}>
-                {dashboard?.viewerRole === "owner" ? "Review the Check" : "View evaluator"}
+                {dashboard?.viewerRole === "owner" ? "Review the evaluator" : "View evaluator"}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => navigate("/settings")}>
                 Check provider settings
@@ -344,10 +344,10 @@ export function FirstResultScreen() {
         <Card className="border-gold-tint" role="status" aria-live="polite" aria-atomic="true">
           <CardHeader>
             <div>
-              <Eyebrow>Recorded Check Result · {versionLabel}</Eyebrow>
-              <CardTitle className="mt-1">What the Check concluded</CardTitle>
+              <Eyebrow>Recorded evaluator assessment · {versionLabel}</Eyebrow>
+              <CardTitle className="mt-1">What the evaluator concluded</CardTitle>
               <CardDescription>
-                {completed.toLocaleString()} of {total.toLocaleString()} recorded {total === 1 ? "Run has" : "Runs have"} a Result
+                {completed.toLocaleString()} of {total.toLocaleString()} recorded {total === 1 ? "Case has" : "Cases have"} an assessment
                 {failed > 0 ? ` · ${failed} could not run` : ""}.
               </CardDescription>
             </div>
@@ -356,7 +356,7 @@ export function FirstResultScreen() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <div>
-              <Eyebrow>Why the Check said this</Eyebrow>
+              <Eyebrow>Why the evaluator said this</Eyebrow>
               <div className="mt-2 text-[13px] leading-[1.65] text-ink-2">
                 {payloadRationale(result.verdict.payload) ?? <span className="text-ink-3">This evaluator states no rationale.</span>}
               </div>
@@ -365,18 +365,18 @@ export function FirstResultScreen() {
                 size="sm"
                 variant="primary"
                 onClick={() => navigate(`/cases/${result.caseId}`, {
-                  state: { backTo: firstResultPath(versionId!, skillId!, criterionId!), backLabel: "Back to first Result" }
+                  state: { backTo: firstResultPath(versionId!, skillId!, criterionId!), backLabel: "Back to first assessment" }
                 })}
               >
-                Open the recorded Run <ArrowRight />
+                Open the recorded case <ArrowRight />
               </Button>
             </div>
             <div className="border-t border-rule-soft pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
               <Eyebrow>What this does—and does not—show</Eyebrow>
               <div className="mt-2 text-[13px] leading-[1.65] text-ink-2">
-                The Check read the stored input, output, and any recorded steps or tool calls. It did
-                not replay tools or verify outside side effects. A person can review this Result later,
-                and that human ruling remains separate.
+                The evaluator read the stored input, output, and any recorded steps or tool calls. It did
+                not replay tools or verify outside side effects. A person can review this assessment later,
+                and that human label remains separate.
               </div>
               <Button className="mt-4" size="sm" variant="outline" onClick={() => navigate("/")}>
                 Finish setup
@@ -387,8 +387,8 @@ export function FirstResultScreen() {
       ) : (
         <StatusCard
           icon={<LoaderCircle className="size-4 animate-spin" />}
-          title="Waiting for the tracked Check run"
-          body="The Check passed its saved regression step. Its evaluation run will appear here as soon as it is created."
+          title="Waiting for the tracked evaluator run"
+          body="The evaluator passed its saved regression step. Its evaluation run will appear here as soon as it is created."
         />
       )}
     </div>

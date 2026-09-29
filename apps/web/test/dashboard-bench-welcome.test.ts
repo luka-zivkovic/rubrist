@@ -72,7 +72,7 @@ function dashboard(input: {
 }
 
 describe("first-run setup ledger", () => {
-  it("shows an agent-bootstrapped Check as complete and makes a Run next", () => {
+  it("shows an agent-bootstrapped evaluator as complete and makes a case next", () => {
     const html = renderToStaticMarkup(createElement(
       FirstRunSetupLedger,
       {
@@ -81,12 +81,12 @@ describe("first-run setup ledger", () => {
     ));
 
     expect(html).toContain("1 of 3 complete");
-    expect(html).toContain("Check v1.0.0 ready");
+    expect(html).toContain("Evaluator v1.0.0 ready");
     expect(html).toContain("Add an example");
-    expect(html).not.toContain("Review the Check");
+    expect(html).not.toContain("Review the evaluator");
   });
 
-  it("offers a low-friction no-Run escape hatch without technical setup terms", () => {
+  it("offers a low-friction no-case escape hatch without technical setup terms", () => {
     ledgerHarness.navigate.mockClear();
     const html = renderToStaticMarkup(createElement(FirstRunSetupLedger, {
       dashboard: dashboard({ imported: 0, judged: 0, golden: 0, starter: true })
@@ -102,7 +102,7 @@ describe("first-run setup ledger", () => {
     expect(ledgerHarness.navigate).toHaveBeenNthCalledWith(2, "/skill/edit?first=1");
   });
 
-  it("gives tracing projects an honest recorded-Run path", () => {
+  it("gives tracing projects an honest recorded-case path", () => {
     ledgerHarness.navigate.mockClear();
     const html = renderToStaticMarkup(createElement(FirstRunSetupLedger, {
       dashboard: dashboard({ imported: 0, judged: 0, golden: 0, starter: true, mode: "tracing" })
@@ -116,7 +116,7 @@ describe("first-run setup ledger", () => {
     expect(ledgerHarness.navigate).toHaveBeenCalledWith("/traces");
   });
 
-  it("completes setup at the first Result without requiring a protected example", () => {
+  it("completes setup at the first assessment without requiring a golden case", () => {
     const html = renderToStaticMarkup(createElement(
       FirstRunSetupLedger,
       {
@@ -129,37 +129,37 @@ describe("first-run setup ledger", () => {
     expect(html).not.toContain("Golden");
   });
 
-  it("shows the Result action only after the Check and Run are ready", () => {
+  it("shows the assessment action only after the evaluator and case are ready", () => {
     ledgerHarness.navigate.mockClear();
     const runHtml = renderToStaticMarkup(createElement(FirstRunSetupLedger, {
       dashboard: dashboard({ imported: 6, judged: 0, golden: 0 })
     }));
-    expect(runHtml).toContain("Continue to first Result");
+    expect(runHtml).toContain("Continue to first assessment");
     ledgerHarness.steps[2]?.onCta?.();
     expect(ledgerHarness.navigate).toHaveBeenCalledWith("/first-result?version=skillv_current&skill=skill_current&criterionId=criterion_current");
 
     const starterHtml = renderToStaticMarkup(createElement(FirstRunSetupLedger, {
       dashboard: dashboard({ imported: 6, judged: 0, golden: 0, starter: true })
     }));
-    expect(starterHtml).toContain("Review the Check");
-    expect(starterHtml).not.toContain("Continue to first Result");
+    expect(starterHtml).toContain("Review the evaluator");
+    expect(starterHtml).not.toContain("Continue to first assessment");
   });
 
-  it("does not offer members an owner-only Result action", () => {
+  it("does not offer members an owner-only assessment action", () => {
     const member = dashboard({ imported: 1, judged: 0, golden: 0 });
     member.viewerRole = "member";
     const html = renderToStaticMarkup(createElement(FirstRunSetupLedger, { dashboard: member }));
 
-    expect(html).toContain("An owner needs to start this Result.");
-    expect(html).not.toContain("Continue to first Result");
+    expect(html).toContain("An owner needs to start this assessment.");
+    expect(html).not.toContain("Continue to first assessment");
   });
 
-  it("does not send members through the owner-only first Check form", () => {
+  it("does not send members through the owner-only first evaluator form", () => {
     const member = dashboard({ imported: 1, judged: 0, golden: 0, starter: true });
     member.viewerRole = "member";
     const html = renderToStaticMarkup(createElement(FirstRunSetupLedger, { dashboard: member }));
 
     expect(html).toContain("Waiting for an owner");
-    expect(html).not.toContain("Review the Check");
+    expect(html).not.toContain("Review the evaluator");
   });
 });

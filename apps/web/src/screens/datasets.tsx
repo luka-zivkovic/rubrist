@@ -362,7 +362,7 @@ export function DatasetsScreen() {
       <div className="fadeUp max-[760px]:fixed max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:overflow-y-auto max-[760px]:overflow-x-hidden max-[760px]:bg-paper max-[760px]:px-4 max-[760px]:py-4">
         <SectionHead
           eyebrow="Regression test"
-          title="Run report"
+          title="Evaluation run report"
           sub="The current evaluator's result, linked to the exact saved test and validation evidence."
           right={<Button variant="ghost" size="sm" onClick={closeRun}><ArrowLeft /> Back to datasets</Button>}
         />
@@ -469,7 +469,7 @@ export function DatasetsScreen() {
         className="mb-3 mt-8"
         eyebrow="History"
         title="Eval runs"
-        sub="This history includes manual runs, API batches, and regression checks. Agreement uses only cases with an expected label. Select two completed runs of the same dataset to compare their case-level results."
+        sub="This history includes manual runs, API batches, and reference checks. Agreement uses only cases with an expected label. Select two completed runs of the same dataset to compare their case-level results."
       />
       {runs.length === 0 ? (
         <Card>
@@ -485,7 +485,7 @@ export function DatasetsScreen() {
                 <th style={{ width: 60 }}>Compare</th>
                 <th>Started</th>
                 <th>Dataset</th>
-                <th>Skill version</th>
+                <th>Evaluator version</th>
                 <th>Trigger</th>
                 <th>Status</th>
                 <th>Progress</th>

@@ -178,7 +178,7 @@ function RootLayoutInner() {
               <div className="hidden font-mono text-[10.5px] text-ink-3 xl:block">
                 <b className="font-medium text-ink">{importedTotal === null ? "—" : importedTotal.toLocaleString()}</b> {bench ? "examples" : "traces imported"}
                 <span className="text-ink-3"> · </span>
-                <b className={`font-medium ${exceptionsCount ? "text-signal" : "text-ink"}`}>{exceptionsCount ?? "—"}</b> exceptions
+                <b className={`font-medium ${exceptionsCount ? "text-signal" : "text-ink"}`}>{exceptionsCount ?? "—"}</b> waiting for review
               </div>
 
             </div>

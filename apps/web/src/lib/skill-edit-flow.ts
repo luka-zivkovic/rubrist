@@ -41,7 +41,7 @@ export function skillVersionChangeLabels(current: SkillVersion, previous?: Skill
     // A switch between a prompted definition and a typed question replaces the whole definition.
     labels.push("definition kind");
   } else {
-    if (current.rubricMarkdown !== previous.rubricMarkdown) labels.push("review guide");
+    if (current.rubricMarkdown !== previous.rubricMarkdown) labels.push("rubric");
     if (current.prompt !== previous.prompt) labels.push("judge instructions");
     if (JSON.stringify(current.typedQuestion) !== JSON.stringify(previous.typedQuestion)) labels.push("typed question");
     if (current.decisionThreshold !== previous.decisionThreshold) labels.push("decision threshold");
@@ -52,14 +52,14 @@ export function skillVersionChangeLabels(current: SkillVersion, previous?: Skill
     JSON.stringify(current.outputSchema) !== JSON.stringify(previous.outputSchema) ||
     JSON.stringify(current.scalarRange) !== JSON.stringify(previous.scalarRange) ||
     JSON.stringify(current.categoricalChoiceScores) !== JSON.stringify(previous.categoricalChoiceScores)
-  ) labels.push("result format");
+  ) labels.push("output contract");
   return labels.length > 0 ? labels : ["no evaluator-field change"];
 }
 
 export function regressionReceiptLabel(run: RegressionRunResult | undefined): string {
-  if (!run) return "no regression receipt";
+  if (!run) return "no reference-check receipt";
   if (run.status === "overridden") return "override recorded";
-  if (run.status === "blocked") return "regression found";
+  if (run.status === "blocked") return "reference disagreements";
   if (run.status === "error") return "check failed";
   if (run.compared === 0 || run.goldenSetMissing) return "recorded without comparison";
   return "check passed";

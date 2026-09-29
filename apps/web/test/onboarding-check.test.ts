@@ -47,7 +47,7 @@ function memoryStorage(): Storage {
 
 const taskStarter = findStarterSkill("task-outcome-quality")!;
 
-describe("guided first Check", () => {
+describe("guided first evaluator", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("recommends a focused starting question without silently selecting it", () => {
@@ -86,10 +86,10 @@ describe("guided first Check", () => {
       onOpenSettings: vi.fn()
     }));
 
-    expect(html).toContain("What should this Check focus on?");
+    expect(html).toContain("What should this evaluator focus on?");
     expect(html).toContain("Decide for me");
     expect(html).toContain("Support answer quality");
-    expect(html).not.toContain("Create this Check");
+    expect(html).not.toContain("Create this evaluator");
   });
 
   it("shows the exact proposal, limits, status, and refinement before creation", () => {
@@ -131,12 +131,12 @@ describe("guided first Check", () => {
     }));
 
     expect(html).toContain(draft.qualityQuestion.replaceAll("'", "&#x27;"));
-    expect(html).toContain("2 saved Runs · input 2/2 · output 2/2 · steps 1/2 · metadata 1/2");
+    expect(html).toContain("2 saved cases · input 2/2 · output 2/2 · steps 1/2 · metadata 1/2");
     expect(html).toContain("cannot see missing tool calls");
     expect(html).toContain("Evidence this focus needs");
     expect(html).toContain("Starter · unvalidated");
     expect(html).toContain("Refine it first");
-    expect(html).toContain("Create this Check");
+    expect(html).toContain("Create this evaluator");
     expect(html).toContain("model opinions");
     expect(html).not.toContain("Release threshold");
 
@@ -227,7 +227,7 @@ describe("guided first Check", () => {
     expect(JSON.stringify(schema)).not.toContain('"label"');
   });
 
-  it("keeps a refined proposal scoped to the current project and Check", () => {
+  it("keeps a refined proposal scoped to the current project and evaluator", () => {
     vi.stubGlobal("sessionStorage", memoryStorage());
     const draft = {
       ...draftFromStarter({

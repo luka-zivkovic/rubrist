@@ -166,9 +166,9 @@ export function TracesScreen() {
       return (
         <EmptyShell
           className="min-h-[60vh] justify-center"
-          eyebrow="Skill Bench · no judged cases yet"
+          eyebrow="Evaluator Bench · no judged cases yet"
           title="This bench runs on examples, not traces."
-          body="Add example cases on the Examples screen and run the evaluator there. Results also appear in Exceptions. You can connect a tracer later without losing the evaluator or Golden set."
+          body="Add example cases on the Examples screen and run the evaluator there. Assessments also appear in Review queue. You can connect a tracer later without losing the evaluator or Golden set."
           primary={
             <Button variant="primary" onClick={() => navigate("/datasets")}>
               Open Examples
@@ -215,7 +215,7 @@ export function TracesScreen() {
           className="mb-4"
           text={
             <span>
-              Every evaluator verdict below is <b>provisional</b> because the starter review guide
+              Every evaluator verdict below is <b>provisional</b> because the starter rubric
               has not been approved yet.
             </span>
           }
@@ -227,9 +227,9 @@ export function TracesScreen() {
         />
       ) : null}
       <SectionHead
-        eyebrow="Audit · ungoverned_legacy verdicts"
+        eyebrow="Audit · ungoverned_legacy labels"
         title="Traces"
-        sub="This page lists evaluator and human verdicts for ordinary cases. Use it to inspect, filter, sample, or export the legacy review ledger. These records are unblinded and do not count as governed human truth."
+        sub="This page lists assessment and human labels for ordinary cases. Use it to inspect, filter, sample, or export the legacy review ledger. These records are unblinded and do not count as governed human truth."
         right={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
@@ -282,7 +282,7 @@ export function TracesScreen() {
       <Card className="mb-5">
         <CardContent className="grid grid-cols-1 gap-6 py-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.4fr]">
           <SummaryCell
-            label="Verdict rows"
+            label="Recorded labels"
             value={summary.total.toLocaleString()}
             foot={`${summary.distinctCases.toLocaleString()} distinct ${summary.distinctCases === 1 ? "case" : "cases"}`}
           />
@@ -308,7 +308,7 @@ export function TracesScreen() {
       <Card className="mb-5">
         <CardContent className="flex flex-col gap-3 py-4">
           <div className="flex flex-wrap items-center gap-3">
-            <Eyebrow>Verdict</Eyebrow>
+            <Eyebrow>Label</Eyebrow>
             <Chips
               options={VERDICT_OPTIONS}
               value={verdictFilter}
@@ -319,7 +319,7 @@ export function TracesScreen() {
             <Chips options={SOURCE_OPTIONS} value={sourceFilter} onChange={setSourceFilter} />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Eyebrow>Skill version</Eyebrow>
+            <Eyebrow>Evaluator version</Eyebrow>
             <select
               value={versionFilter}
               onChange={(e) => setVersionFilter(e.target.value)}
@@ -381,10 +381,10 @@ export function TracesScreen() {
               <tr>
                 <th style={{ width: 130 }}>When</th>
                 <th>Case</th>
-                <th style={{ width: 120 }}>Verdict</th>
+                <th style={{ width: 120 }}>Label</th>
                 <th style={{ width: 72 }} className="text-right">Score</th>
                 <th style={{ width: 110 }}>Source</th>
-                <th style={{ width: 140 }}>Skill version</th>
+                <th style={{ width: 140 }}>Evaluator version</th>
                 <th style={{ width: 30 }}></th>
               </tr>
             </thead>
@@ -434,7 +434,7 @@ export function TracesScreen() {
           </Table>
           <div className="flex items-center justify-between border-t border-rule-soft px-[18px] py-3">
             <div className="font-mono text-[11px] text-ink-3">
-              Showing {visible.length} of {filtered.length} matching verdict rows ·{" "}
+              Showing {visible.length} of {filtered.length} matching labels ·{" "}
               {visibleCaseCount} distinct {visibleCaseCount === 1 ? "case" : "cases"}
               {sampleSeed != null ? " · random sample" : " · sorted newest first"}
             </div>
@@ -451,8 +451,8 @@ export function TracesScreen() {
         <CardContent className="py-4">
           <Eyebrow>How this ledger works</Eyebrow>
           <div className="mt-2 font-serif text-[14px] leading-[1.55] tracking-[-0.005em] text-ink-2">
-            Every recorded verdict remains available here, including cases that were not sent to
-            Exceptions. Open any case to inspect the evidence or add a human ruling.
+            Every recorded label remains available here, including cases that were not sent to
+            Review queue. Open any case to inspect the evidence or add a human label.
           </div>
         </CardContent>
       </Card>

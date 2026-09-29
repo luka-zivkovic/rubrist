@@ -100,28 +100,28 @@ const detail: ExceptionDetail = {
   goldenSetEntry: null
 };
 
-describe("case-detail human ruling state", () => {
-  it("makes the durable human ruling primary and the evaluator opinion secondary", () => {
+describe("case-detail human label state", () => {
+  it("makes the durable human label primary and the assessment secondary", () => {
     const html = renderToStaticMarkup(createElement(TraceDetail, { detail }));
 
-    expect(html).toContain("Recorded human ruling");
+    expect(html).toContain("Recorded human label");
     expect(html).toContain("Ungoverned legacy review evidence");
     expect(html).toContain("not governed human truth");
     expect(html).toContain("At review time, overrode the evaluator");
     expect(html).toContain("The response follows the review guide.");
     expect(html).toContain("Maya");
-    expect(html).toContain("Latest evaluator opinion");
-    expect(html).toContain("overridden by ruling");
-    expect(html).toContain("Ruled pass");
-    expect(html).toContain("Change ruling");
+    expect(html).toContain("Latest assessment");
+    expect(html).toContain("overridden by human label");
+    expect(html).toContain("Labeled pass");
+    expect(html).toContain("Change human label");
     expect(html).toContain("Add to golden set");
     expect(html).toContain("Decision history · 2 append-only records");
     expect(html).toContain("Evaluator output");
-    expect(html).not.toContain("Agree with evaluator");
+    expect(html).not.toContain("Agree with assessment:");
     expect(html).not.toContain("next week");
   });
 
-  it("keeps an owner ruling effective over a later ordinary review", () => {
+  it("keeps an owner human label effective over a later ordinary review", () => {
     const ownerRuling: VerdictRecord = {
       ...humanRuling,
       id: "verdict_owner",
@@ -148,15 +148,15 @@ describe("case-detail human ruling state", () => {
       }
     }));
 
-    expect(html).toContain("Owner ruling");
+    expect(html).toContain("Owner human label");
     expect(html).toContain("Owner Ada");
     expect(html).toContain("Owner reviewed the full case and ruled fail.");
-    expect(html).toContain("does not override owner ruling");
+    expect(html).toContain("does not override owner human label");
     expect(html).toContain("Add another review");
-    expect(html).not.toContain("Change ruling");
+    expect(html).not.toContain("Change human label");
   });
 
-  it("keeps the ruling comparison pinned to the evaluator output available at review time", () => {
+  it("keeps the human label comparison pinned to the evaluator output available at review time", () => {
     const laterJudge: VerdictRecord = {
       ...judgeBeforeRuling,
       id: "verdict_judge_after",
@@ -311,9 +311,9 @@ describe("review attention and progressive disclosure", () => {
     expect(question?.textContent).toContain("Is every factual part supported?");
     expect(question?.textContent).toContain("0.5");
     expect(call?.textContent).toContain("skillv_1");
-    expect(html.indexOf("Latest evaluator opinion")).toBeLessThan(html.indexOf("Claim and supplied evidence"));
-    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Typed question and decision threshold"));
-    expect(html.indexOf("Record your ruling")).toBeLessThan(html.indexOf("Judge call and version details"));
+    expect(html.indexOf("Latest assessment")).toBeLessThan(html.indexOf("Claim and supplied evidence"));
+    expect(html.indexOf("Record your human label")).toBeLessThan(html.indexOf("Typed question and decision threshold"));
+    expect(html.indexOf("Record your human label")).toBeLessThan(html.indexOf("Judge call and version details"));
     expect(html).toContain("Probability answer is true: 20%");
     expect(html).toContain("not measured accuracy");
     expect(html).toContain("does not provide an explanation");
@@ -322,11 +322,11 @@ describe("review attention and progressive disclosure", () => {
     expect(html).toContain("Reference context.");
   });
 
-  it("keeps a saved human ruling ahead of the highlighted model output", () => {
+  it("keeps a saved human label ahead of the highlighted model output", () => {
     const html = renderToStaticMarkup(createElement(TraceDetail, { detail }));
-    expect(html.indexOf("Recorded human ruling")).toBeLessThan(html.indexOf("Latest evaluator opinion"));
-    expect(html).toContain("overridden by ruling");
-    expect(html).not.toContain("Agree with evaluator");
+    expect(html.indexOf("Recorded human label")).toBeLessThan(html.indexOf("Latest assessment"));
+    expect(html).toContain("overridden by human label");
+    expect(html).not.toContain("Agree with assessment:");
   });
 
   it("keeps ordinary LLM rationale visible without a typed-question disclosure", () => {

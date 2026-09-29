@@ -30,13 +30,13 @@ export function JourneyPipeline({
     {
       state: states.defineGood,
       act: "Act 1",
-      title: "Choose what to Check",
+      title: "Choose what to evaluate",
       detail: dashboard.skill.isStarter
         ? dashboard.viewerRole === "owner"
-          ? "Review the starter Check against a recorded Run."
-          : "An owner needs to choose the first Check. You can inspect the starter."
+          ? "Review the starter evaluator against a recorded case."
+          : "An owner needs to choose the first evaluator. You can inspect the starter."
         : skillVersionStateLabel(dashboard.skill.currentVersion),
-      action: dashboard.viewerRole === "owner" ? "Review Check" : "View evaluator",
+      action: dashboard.viewerRole === "owner" ? "Review evaluator" : "View evaluator",
       // A still-starter Check routes through the guided choice and proposal;
       // anything already configured opens the full editor.
       path: dashboard.viewerRole !== "owner" ? "/skill"
@@ -45,13 +45,13 @@ export function JourneyPipeline({
     {
       state: states.judgeRealWork,
       act: "Act 2",
-      title: "See Results on real Runs",
+      title: "See assessments on real cases",
       detail: judged > 0
-        ? `${judged.toLocaleString()} recorded ${bench ? "example" : "Run"}${judged === 1 ? "" : "s"} checked · ungoverned triage`
+        ? `${judged.toLocaleString()} recorded ${bench ? "example" : "case"}${judged === 1 ? "" : "s"} checked · ungoverned triage`
         : recorded > 0
-          ? `${recorded.toLocaleString()} recorded ${bench ? "example" : "Run"}${recorded === 1 ? " is" : "s are"} waiting for this Check.${dashboard.viewerRole === "member" ? " An owner needs to start it." : ""}`
-          : `Add the first ${bench ? "example and run it" : "recorded Run or live source"}.`,
-      action: recorded > 0 && dashboard.viewerRole === "owner" ? "Continue to first Result" : bench ? "Open examples" : "Open traces",
+          ? `${recorded.toLocaleString()} recorded ${bench ? "example" : "case"}${recorded === 1 ? " is" : "s are"} waiting for this evaluator.${dashboard.viewerRole === "member" ? " An owner needs to start it." : ""}`
+          : `Add the first ${bench ? "example and run it" : "recorded case or live source"}.`,
+      action: recorded > 0 && dashboard.viewerRole === "owner" ? "Continue to first assessment" : bench ? "Open examples" : "Open traces",
       path: recorded > 0 && dashboard.viewerRole === "owner"
         ? firstResultPath(dashboard.skill.currentVersion.id, dashboard.skill.id, dashboard.skill.criterionId)
         : bench ? "/datasets" : "/traces"
@@ -59,11 +59,11 @@ export function JourneyPipeline({
     {
       state: states.earnTrust,
       act: "Act 3",
-      title: "Protect reviewed examples",
+      title: "Build a golden set",
       detail: golden >= GOLDEN_GATE_RECOMMENDED
-        ? `${golden} protected examples · recommended starting set reached`
-        : `${golden}/${GOLDEN_GATE_RECOMMENDED} protected examples · regression check ${golden > 0 ? "active" : "empty"}`,
-      action: dashboard.exceptions.length > 0 ? "Review Results" : "Open protected examples",
+        ? `${golden} golden cases · recommended starting set reached`
+        : `${golden}/${GOLDEN_GATE_RECOMMENDED} golden cases · reference check ${golden > 0 ? "active" : "empty"}`,
+      action: dashboard.exceptions.length > 0 ? "Review assessments" : "Open golden cases",
       path: dashboard.exceptions.length > 0 ? "/exceptions" : "/golden"
     }
   ];

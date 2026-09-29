@@ -31,7 +31,7 @@ const OUTCOME_LABEL: Record<SkillEditOutcome, string> = {
   uncompared: "No reference comparison",
   blocked: "Review required",
   overridden: "Override recorded",
-  error: "Check failed"
+  error: "Evaluator failed"
 };
 
 export function SkillEditFlow({
@@ -224,7 +224,7 @@ export function SkillChangeReview({
           {showPrompted ? (
             <>
               <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2">
-                <div className="text-ink-3">Review guide</div>
+                <div className="text-ink-3">Rubric</div>
                 <div className="mt-0.5 font-medium text-ink">{rubricChanged ? "Changed" : "No change"}</div>
                 <div className="text-[10.5px] text-ink-3">{lineCount(base.rubricMarkdown ?? "")} → {lineCount(afterRubric)} lines</div>
               </div>
@@ -241,7 +241,7 @@ export function SkillChangeReview({
             <div className="truncate font-mono text-[10.5px] text-ink-3">{base.executionBinding.modelId} → {executionBinding.modelId}</div>
           </div>
           <div className="rounded-sm border border-rule-soft bg-paper-3 px-3 py-2">
-            <div className="text-ink-3">Result / apply scope</div>
+            <div className="text-ink-3">Assessment / apply scope</div>
             <div className="mt-0.5 font-medium text-ink">{verdictChanged ? `${base.verdictKind} → ${verdictKind}` : verdictKind}</div>
             <div className="text-[10.5px] text-ink-3">{TIME_SCOPE_COPY[timeScope]}</div>
           </div>
@@ -260,7 +260,7 @@ export function SkillChangeReview({
                 />
               ) : null}
               {rubricChanged ? (
-                <SourceComparison label="Review guide" version={base.version} before={base.rubricMarkdown ?? ""} after={afterRubric} />
+                <SourceComparison label="Rubric" version={base.version} before={base.rubricMarkdown ?? ""} after={afterRubric} />
               ) : null}
               {promptChanged ? (
                 <SourceComparison label="Judge instructions" version={base.version} before={base.prompt ?? ""} after={afterPrompt} />

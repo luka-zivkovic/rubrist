@@ -109,7 +109,7 @@ function productionBench(input: { judged: number; golden: number }): DashboardSu
   } as DashboardSummary;
 }
 
-describe("Skill Bench dashboard routing", () => {
+describe("Evaluator Bench dashboard routing", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("keeps the first-run ledger mounted after examples are imported", async () => {
@@ -121,7 +121,7 @@ describe("Skill Bench dashboard routing", () => {
     expect(html).not.toContain("three-act-journey");
   });
 
-  it("keeps the same ledger mounted after the first Result", async () => {
+  it("keeps the same ledger mounted after the first assessment", async () => {
     const { DashboardScreen } = await import("../src/screens/dashboard.js");
     state.dashboard = productionBench({ judged: 6, golden: 1 });
     const html = renderToStaticMarkup(createElement(DashboardScreen));
@@ -129,14 +129,14 @@ describe("Skill Bench dashboard routing", () => {
     expect(html).toContain("three-step-first-run-journey");
   });
 
-  it("shows a no-Run completion update immediately on the day-zero Overview", async () => {
+  it("shows a no-case completion update immediately on the day-zero Overview", async () => {
     const { DashboardScreen } = await import("../src/screens/dashboard.js");
     const dashboard = productionBench({ judged: 0, golden: 0 });
     dashboard.project.importedTraceCount = 0;
     state.dashboard = dashboard;
     vi.stubGlobal("sessionStorage", {
       getItem: (key: string) => key === "rubrist.setup-receipt"
-        ? "Starter Check v1.0.0 created. Add a Run to see its first Result."
+        ? "Starter evaluator v1.0.0 created. Add a case to see its first assessment."
         : null,
       removeItem: vi.fn()
     });
@@ -144,7 +144,7 @@ describe("Skill Bench dashboard routing", () => {
     const html = renderToStaticMarkup(createElement(DashboardScreen));
 
     expect(html).toContain("Setup update.");
-    expect(html).toContain("Add a Run to see its first Result");
+    expect(html).toContain("Add a case to see its first assessment");
     expect(html).toContain("bench-welcome");
   });
 });
@@ -164,8 +164,8 @@ it("shows the full backlog while distinguishing the loaded review batch", async 
   expect(html).toMatch(/Showing 5 of 137 waiting cases/);
   expect(html).toMatch(/Review 50 loaded cases/);
   expect(html).not.toContain("Review all 50");
-  expect(html.indexOf("Next")).toBeLessThan(html.indexOf("Result distribution"));
-  expect(html.indexOf("Exceptions waiting")).toBeLessThan(html.indexOf("Result distribution"));
+  expect(html.indexOf("Next")).toBeLessThan(html.indexOf("Assessment distribution"));
+  expect(html.indexOf("Review queue waiting")).toBeLessThan(html.indexOf("Assessment distribution"));
   expect(html.match(/variant="primary"/g)).toHaveLength(1);
   expect(html).toContain('aria-label="Waiting case preview"');
   expect(html).toContain('at=case_4');
@@ -173,7 +173,7 @@ it("shows the full backlog while distinguishing the loaded review batch", async 
   expect(html).toContain('cv.4=definition_4');
   expect(html).not.toContain('href="/cases/case_4"');
   expect(html).not.toContain('Manage integrations');
-  expect(html).toContain('Setup progress and first Result');
+  expect(html).toContain('Setup progress and first assessment');
   expect(html).not.toContain("50 are waiting on a person");
 
   delete state.dashboard.exceptionsTotal;

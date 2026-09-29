@@ -318,7 +318,7 @@ function ComparisonDetail({
           </CardTitle>
           <CardDescription>
             {detail.status === "pending"
-              ? "Runs still executing — the diff below fills in as verdicts land."
+              ? "Evaluation runs still executing — the diff below fills in as verdicts land."
               : "Both runs are done. Flips are listed first."}
           </CardDescription>
         </div>
@@ -355,7 +355,7 @@ function ComparisonDetail({
             deltaKind={flippedFailing > 0 ? "signal" : "default"}
           />
           <KPI
-            label="Run progress"
+            label="Evaluation run progress"
             num={`${detail.runA.completedItems + detail.runA.failedItems}/${detail.runA.totalItems} · ${detail.runB.completedItems + detail.runB.failedItems}/${detail.runB.totalItems}`}
             delta={detail.status === "pending" ? "still judging…" : "both runs terminal"}
           />

@@ -41,7 +41,7 @@ describe("governed blind router boundary", () => {
   it("marks the historical review navigation as ungoverned", async () => {
     const sidebar = await source("../src/components/layout/sidebar.tsx");
     expect(sidebar).toContain("Human truth · governed");
-    expect(sidebar).toContain("Review sessions · ungoverned");
-    expect(sidebar).toContain("Needs a human · ungoverned");
+    expect(sidebar).toContain("Saved review queues · ungoverned");
+    expect(sidebar).toContain("Review queue · ungoverned");
   });
 });

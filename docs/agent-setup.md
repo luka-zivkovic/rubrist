@@ -44,7 +44,7 @@ and local changes. Do not overwrite configuration or reset a database.
 Follow the README's from-source start, generate the auth secret locally, and
 keep secrets out of chat and Git. Start Postgres, the API, and the web app.
 Verify the API health endpoint and show me the signup URL. Guide me through
-the owner account and first Check, then install both bundled skills for
+the owner account and first evaluator, then install both bundled skills for
 this harness. Identify any missing prerequisite clearly.
 ```
 
@@ -68,8 +68,8 @@ alone neither starts Rubrist nor installs its skills into your harness.
 
 | Skill | What it does |
 | --- | --- |
-| [rubrist-setup](../plugins/rubrist/skills/rubrist-setup/) | Reads safe project context, proposes a **Starter · unvalidated** Check, and connects it after **Finish setup**. |
-| [rubrist-audit](../plugins/rubrist/skills/rubrist-audit/) | Captures real input/output examples, submits Runs, and explains the resulting assessments. |
+| [rubrist-setup](../plugins/rubrist/skills/rubrist-setup/) | Reads safe project context, proposes a **Starter · unvalidated** Evaluator, and connects it after **Finish setup**. |
+| [rubrist-audit](../plugins/rubrist/skills/rubrist-audit/) | Captures real input/output examples, submits cases, and explains the resulting assessments. |
 
 The Claude Code plugin above installs both. Every other harness gets them by
 copying the folders.
@@ -130,8 +130,8 @@ scripts require Node.js 18 or newer; the application requires Node.js 24+.
 
 1. Create the owner account in the web app. Copy the no-secret setup prompt
    from onboarding or the project's Overview into your coding-agent session.
-2. Review the proposed **Check**. The setup skill reads safe project context
-   and presents the Check as **Starter · unvalidated**.
+2. Review the proposed **Evaluator**. The setup skill reads safe project context
+   and presents the evaluator as **Starter · unvalidated**.
 3. Choose **Finish setup**, then create the private agent connection in Rubrist.
    Follow the generated connection instructions locally. The connection is
    project-scoped, single-use, and expires after 15 minutes.

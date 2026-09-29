@@ -25,7 +25,7 @@ project grows, and it hands that evidence to whoever decides what ships.
 ## Ten-minute start
 
 Pick the path that matches what you already have. Every path ends at the same
-place: a running Rubrist, an owner account, and one Check over one real Run.
+place: a running Rubrist, an owner account, and one evaluator over one real case.
 
 ### a. Claude Code plugin
 
@@ -39,7 +39,7 @@ do the rest:
 
 Open Claude Code in the project you want to evaluate and run
 `/rubrist:rubrist-setup`. The skill reads safe project text, asks one short
-question, shows a plain-language proposed Check, and connects it after you
+question, shows a plain-language proposed evaluator, and connects it after you
 choose **Finish setup**. `/rubrist:rubrist-audit` then captures real examples
 and submits them. The agent connection it uses needs a Rubrist running in
 Postgres mode (paths b or c). Codex and other harnesses copy the same two
@@ -163,7 +163,7 @@ connection used by the plugin, `RUBRIST_BOOTSTRAP_TOKEN`, independent
 runtime, and evaluator activation all require the persistent Postgres
 workspace.
 
-### Your first Check
+### Your first evaluator
 
 You do not need to learn evaluator-governance terminology first. Rubrist
 uses one workspace that keeps evidence, review, evaluator work, and governed
@@ -190,14 +190,14 @@ the distinction between operational review and governed human truth remain uncha
 To onboard with an external AI agent, copy the no-secret setup prompt after
 creating the owner account (or from a new project's Overview). The bundled
 `rubrist-setup` skill inspects safe project context, asks one short question,
-and shows a plain-language proposed Check. After you choose **Finish setup**,
+and shows a plain-language proposed evaluator. After you choose **Finish setup**,
 create the private agent connection and paste those instructions into Claude,
 Codex, or another agent. The connection is project-scoped, single-use, and
 expires after 15 minutes; no deployment secret is required. The returned
 `rubrist_sk_` key is project-scoped and shown exactly once.
 `RUBRIST_BOOTSTRAP_TOKEN` remains an optional advanced fallback for fully
-headless administration. Agents may create an explicitly unvalidated Check
-and submit real Runs, but human adjudication and Golden promotion remain
+headless administration. Agents may create an explicitly unvalidated evaluator
+and submit real cases, but human adjudication and Golden promotion remain
 session-only.
 
 #### Submit a first batch
@@ -229,20 +229,20 @@ Trajectory items may also include `steps`, an ordered array of `{ name?, input, 
 
 ## Concepts
 
-The UI and contracts currently use the following terms. A broader vocabulary
-consolidation remains deferred under proposed ADR-0015.
+The app and onboarding use one vocabulary under ADR-0015. Existing API field
+names and historical evidence remain stable.
 
 | Term | Plain meaning |
 | --- | --- |
-| **Run** | One recorded example of what your AI did: input, output, and optionally the steps in between. |
-| **Check** | One reusable automated evaluation of one thing that matters, with a review guide saying when it passes, fails, or lacks evidence. |
-| **Result** | What a Check concluded about one Run. It is the evaluator's opinion, not a human decision or permission to ship. |
-| **Criterion** | The named quality question a Check measures. Each evaluator measures exactly one; its definition is versioned and never edited in place. |
-| **Evaluator version** | One exact rubric, prompt, output contract, and pinned model for a criterion. Runs are judged by a named version, never by "latest". |
-| **Human truth** | A person's independent label and rationale for a Run, collected without seeing the evaluator's Result. |
+| **Case** | One recorded example of what your AI did: input, output, and optionally the steps in between. |
+| **Evaluator** | One reusable automated evaluation of one thing that matters, with a rubric saying when it passes, fails, or lacks evidence. |
+| **Assessment** | What an evaluator concluded about one case. It is model output, not a human decision or permission to ship. |
+| **Criterion** | The named quality question an evaluator measures. Each evaluator measures exactly one; its definition is versioned and never edited in place. |
+| **Evaluator version** | One exact rubric, judge instructions, output contract, and pinned model for a criterion. Cases are judged by a named version, never by "latest". |
+| **Human truth** | A person's independent label and rationale for a case, collected without seeing the evaluator's assessment. |
 | **Calibration** | Measuring how often an exact evaluator version agrees with human truth on a set it has never been tuned on, with the uncertainty of that measurement shown. |
-| **Dataset roles** | Every immutable set of Runs is marked by how it has been used: analysis, iterative development, sealed validation, or regression/golden. Rubrist records exposure so a set used for tuning cannot later be passed off as a blind validation set. |
-| **Receipt** | The persisted, byte-exact record of one assessment: which evaluator version judged which Runs and what it returned. It carries no pass threshold or ship decision. |
+| **Dataset roles** | Every immutable set of cases is marked by how it has been used: analysis, iterative development, sealed validation, or regression/golden. Rubrist records exposure so a set used for tuning cannot later be passed off as a blind validation set. |
+| **Receipt** | The persisted, byte-exact record of one assessment: which evaluator version judged which cases and what it returned. It carries no pass threshold or ship decision. |
 | **Suite** | An ordered list of criteria, each bound to an exact evaluator version, with no weights, thresholds, or combined score. |
 
 ## Rubrist is not
@@ -331,8 +331,8 @@ in [`plugins/rubrist`](plugins/rubrist/) ships both:
 
 | Skill | What it does |
 | --- | --- |
-| [rubrist-setup](plugins/rubrist/skills/rubrist-setup/) | Reads safe project context, proposes a **Starter · unvalidated** Check, and connects it after **Finish setup**. |
-| [rubrist-audit](plugins/rubrist/skills/rubrist-audit/) | Captures real input/output examples, submits Runs, and explains the resulting assessments. |
+| [rubrist-setup](plugins/rubrist/skills/rubrist-setup/) | Reads safe project context, proposes a **Starter · unvalidated** Evaluator, and connects it after **Finish setup**. |
+| [rubrist-audit](plugins/rubrist/skills/rubrist-audit/) | Captures real input/output examples, submits cases, and explains the resulting assessments. |
 
 Claude Code users install the plugin as shown in the
 [ten-minute start](#a-claude-code-plugin). Codex and other harnesses
@@ -354,7 +354,7 @@ Set up Rubrist locally from https://github.com/luka-zivkovic/rubrist.
 Read its README and docs/agent-setup.md first, check the prerequisites,
 and follow the local installation steps. Keep existing files and services
 intact. Start the API and web app, verify their URLs, and guide me through
-owner signup and my first Check. Keep credentials out of chat and Git.
+owner signup and my first evaluator. Keep credentials out of chat and Git.
 Then help me install rubrist-setup and rubrist-audit for this harness.
 ```
 

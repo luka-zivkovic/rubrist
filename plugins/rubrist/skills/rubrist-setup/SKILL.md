@@ -1,13 +1,13 @@
 ---
 name: rubrist-setup
-description: Guide a beginner through setting up Rubrist for an AI agent, workflow, prompt, or skill. Inspect safe project text, identify the target and recorded evidence, ask a short context-aware question, propose one plain-language Check, then connect and create it as Starter · unvalidated. Use when the user asks to initialize, set up, configure, connect, onboard, or get started with Rubrist, especially when they do not know eval terminology or say "use your best judgment" or "decide for me". Do not use it to adjudicate Results, promote Golden examples, or make release decisions.
+description: Guide a beginner through setting up Rubrist for an AI agent, workflow, prompt, or skill. Inspect safe project text, identify the target and recorded evidence, ask a short context-aware question, propose one plain-language evaluator, then connect and create it as Starter · unvalidated. Use when the user asks to initialize, set up, configure, connect, onboard, or get started with Rubrist, especially when they do not know eval terminology or say "use your best judgment" or "decide for me". Do not use it to adjudicate assessments, promote Golden examples, or make release decisions.
 ---
 
 # Rubrist setup
 
-Help the user create one useful first Check without requiring them to know eval
-terminology. A **Run** is a record of what their AI did. A **Check** asks one
-reusable quality question about that record. A **Result** is the Check's
+Help the user create one useful first evaluator without requiring them to know eval
+terminology. A **Case** is a record of what their AI did. An **Evaluator** asks one
+reusable quality question about that record. An **Assessment** is the evaluator's
 opinion, not a human decision or permission to ship.
 
 Treat "initialize it" as permission to begin discovery, not permission to
@@ -30,13 +30,13 @@ customer data. Ask permission before inspecting or transmitting content that
 may be sensitive. Do not scan the whole repository when a few likely files can
 answer the setup question.
 
-Reflect the facts found, the likely target, the available Run evidence, and
+Reflect the facts found, the likely target, the available case evidence, and
 material uncertainty. Ask the user to correct the reflection instead of
 making them repeat information already present.
 
 ### 2. Ask only a decision-changing question
 
-Ask when the answer can change the target, first Check, available evidence,
+Ask when the answer can change the target, first evaluator, available evidence,
 data permission, or required authority. Do not ask about cosmetic or technical
 preferences that can be chosen reversibly.
 
@@ -51,20 +51,20 @@ preferences that can be chosen reversibly.
 
 Never use **Decide for me** to choose an unknown system or repository, grant
 access to sensitive data, enter credentials, create human labels, adjudicate a
-Run, promote a protected/Golden example, approve or activate a governed
+Case, promote a protected/Golden example, approve or activate a governed
 evaluator, change shared hooks, or make a release decision.
 
 If the target is still ambiguous, ask what is being evaluated. If no evidence
 source can be found, ask where the AI's recorded input, output, steps, or tool
 calls live. These questions are not skippable because guessing would change
-the meaning of the Check.
+the meaning of the evaluator.
 
-### 3. Show the proposed Check
+### 3. Show the proposed evaluator
 
 After the minimum clarification, show this compact proposal:
 
 ```text
-What this Check decides
+What this evaluator decides
   <one plain-language quality question>
 
 What it reads
@@ -73,7 +73,7 @@ What it reads
 What it cannot know
   <missing side effects, external state, or absent evidence>
 
-Review guide
+Rubric
   Pass when: ...
   Fail when: ...
   Insufficient evidence when: ...
@@ -87,8 +87,8 @@ Status
 
 Then offer exactly two paths:
 
-1. **Finish setup (Recommended)** — create the Check from this proposal.
-2. **Refine the Check** — ask one next highest-impact question, update the
+1. **Finish setup (Recommended)** — create the evaluator from this proposal.
+2. **Refine the evaluator** — ask one next highest-impact question, update the
    proposal, and show both paths again.
 
 Do not treat silence or a default selection as approval. Keep **Finish setup**
@@ -120,36 +120,36 @@ the bundled transport in the sibling `rubrist-audit` skill to apply it. If that
 skill is unavailable, tell the user to install both bundled skills or finish
 in the Rubrist app; do not invent an API contract.
 
-Submit a first batch only when at least one real Run is already available and
-the user has authorized its use. Never invent a demonstration Run. If no Run
-exists, create the Check and say plainly that no Result exists yet.
+Submit a first batch only when at least one real case is already available and
+the user has authorized its use. Never invent a demonstration case. If no case
+exists, create the evaluator and say plainly that no assessment exists yet.
 
 ### 6. Return an honest receipt
 
 State:
 
 - the exact quality question created;
-- the Run fields it can read and what remains invisible;
-- whether a real Run was submitted and whether a Result exists;
-- that the Check is **Starter · unvalidated**;
+- the case fields it can read and what remains invisible;
+- whether a real case was submitted and whether an assessment exists;
+- that the evaluator is **Starter · unvalidated**;
 - the non-secret setup and draft file paths;
 - the next source-specific action.
 
 For an Agent Skill, hand ongoing capture and submission to `rubrist-audit`.
-For supplied examples, use the bench batch flow. For production Runs, use the
+For supplied examples, use the bench batch flow. For production cases, use the
 selected trace integration or manual import. Automatic capture is currently a
 Claude Code-only option; do not claim that Codex, Gemini, Cursor, or a generic
 MCP client is automatically captured.
 
 Stop before human adjudication, Golden promotion, governed activation,
 calibration approval, release thresholds, or deployment decisions. Never say
-that an unvalidated Check is accurate, trusted, calibrated, or verified.
+that an unvalidated evaluator is accurate, trusted, calibrated, or verified.
 
 ## Failure behavior
 
 - If the target cannot be found, ask one short target question and pause.
-- If evidence is absent, offer to create an untested Check or wait for a real
-  Run; do not fabricate evidence.
+- If evidence is absent, offer to create an untested evaluator or wait for a real
+  Case; do not fabricate evidence.
 - If the connection expires, preserve the non-secret draft and ask for a new
   connection only when ready to retry.
 - If setup partly fails, name the last confirmed durable artifact. Do not

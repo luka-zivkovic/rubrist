@@ -1,6 +1,6 @@
 ---
 name: rubrist-audit
-description: Audit a developer's own agent skill with a Rubrist instance — connect an approved first Check, capture real skill runs, submit them for judging, and report Results honestly. Use when the user says "audit my skill with rubrist", "submit results to rubrist", "capture skill runs", or "judge these outputs". For a new or unclear setup, begin with the sibling rubrist-setup skill's context-first interview and approved proposal. Do not use it for human adjudication, Golden promotion, or release decisions; those stay in the Rubrist dashboard.
+description: Audit a developer's own agent skill with a Rubrist instance — connect an approved first evaluator, capture real skill runs, submit them for judging, and report assessments honestly. Use when the user says "audit my skill with rubrist", "submit results to rubrist", "capture skill runs", or "judge these outputs". For a new or unclear setup, begin with the sibling rubrist-setup skill's context-first interview and approved proposal. Do not use it for human adjudication, Golden promotion, or release decisions; those stay in the Rubrist dashboard.
 ---
 
 # rubrist-audit
@@ -23,7 +23,7 @@ Never read the user's `.env` file directly — unrelated secrets live there.
 
 For a new or unclear project, use the sibling `rubrist-setup` skill first. It
 inspects safe project context, asks only a short decision-changing question,
-shows the exact proposed Check, and waits for **Finish setup** before requesting
+shows the exact proposed evaluator, and waits for **Finish setup** before requesting
 the short-lived connection. Do not replace that flow with a one-shot rubric
 guess. If `rubrist-setup` is not installed, follow its published instructions at
 https://github.com/luka-zivkovic/rubrist/blob/main/plugins/rubrist/skills/rubrist-setup/SKILL.md.
@@ -42,9 +42,9 @@ Resume here after the user has approved the non-secret setup proposal.
    The included `rubrist_pair_...` token is project-scoped, single-use, and
    expires after 15 minutes. Keep it only in `RUBRIST_PAIRING_TOKEN`; never
    write it to a file or repeat it in output.
-4. **Use the approved Check.** Translate the exact proposal accepted through
+4. **Use the approved evaluator.** Translate the exact proposal accepted through
    `rubrist-setup` into concrete pass/fail/insufficient-evidence clauses. Keep
-   every claim checkable from the recorded Run; do not require evidence the
+   every claim checkable from the recorded case; do not require evidence the
    hook cannot capture. See `references/rubrist-primer.md`.
 5. **Write the final non-secret setup plan** at `.rubrist/<skillName>.setup.json`:
 
@@ -54,7 +54,7 @@ Resume here after the user has approved the non-secret setup proposal.
      "project": { "name": "my-skill audit", "apiKeyName": "my-skill agent" },
      "check": {
        "name": "Follows the skill contract",
-       "question": "Did this Run follow the target skill's required workflow and constraints?"
+       "question": "Did this case follow the target skill's required workflow and constraints?"
      },
      "skill": {
        "name": "My skill audit",
@@ -148,7 +148,7 @@ node scripts/rubrist-submit.mjs submit .rubrist/<skillName>.jsonl [--skill-versi
 - Submission is idempotent: content-hash (`ci_`) source ids mean re-submitting
   unchanged lines reuses recorded verdicts with no provider spend.
 - `setup --first-batch` supplies `--skill-version` automatically so the first
-  Result is pinned to the exact Check version just created. For later manual
+  Assessment is pinned to the exact evaluator version just created. For later manual
   submissions, provide it whenever the run must stay pinned across concurrent
   evaluator edits.
 - `--env-var RUBRIST_KEY_MY_SKILL` selects a per-skill key from `config.json`.

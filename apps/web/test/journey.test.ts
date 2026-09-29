@@ -56,7 +56,7 @@ const apiKey: CreatedApiKey = {
 };
 
 describe("journey state", () => {
-  it("pins the exact criterion so a new viewer can open a multi-criterion Result", () => {
+  it("pins the exact criterion so a new viewer can open a multi-criterion assessment", () => {
     expect(firstResultPath("skillv_1", "skill_1", "criterion_1"))
       .toBe("/first-result?version=skillv_1&skill=skill_1&criterionId=criterion_1");
   });
@@ -115,7 +115,7 @@ describe("journey state", () => {
     });
   });
 
-  it("does not treat historical Results or a failed edit as a ready current Check", () => {
+  it("does not treat historical assessments or a failed edit as a ready current evaluator", () => {
     const failedCurrent = dashboard({
       starter: false,
       imported: 4,

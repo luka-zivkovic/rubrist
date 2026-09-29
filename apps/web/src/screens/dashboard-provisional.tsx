@@ -32,14 +32,14 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
 
   async function signOffAsIs() {
     if (!window.confirm(
-      `Sign off Check v${version.version} as-is? Existing results held for this exact version will be sent to their connected tracing provider after sign-off (normally within 30 seconds while the worker is running). This does not re-run evaluation or calibrate the Check. Results from other unsigned versions stay held.`
+      `Sign off evaluator v${version.version} as-is? Existing results held for this exact version will be sent to their connected tracing provider after sign-off (normally within 30 seconds while the worker is running). This does not re-run evaluation or calibrate the evaluator. Assessments from other unsigned versions stay held.`
     )) return;
     setSigningOff(true);
     setSignOffError(null);
     try {
       await signOffSkillVersion(skill.id, version.id);
       markSetupReceipt(
-        `Check v${version.version} signed off. It is ready to use, but it has not been calibrated against governed human truth.`
+        `Evaluator v${version.version} signed off. It is ready to use, but it has not been calibrated against governed human truth.`
       );
       onSignedOff();
     } catch (error) {
@@ -64,27 +64,27 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
             bench ? (
               <span>
                 {judged === 0
-                  ? `${imported.toLocaleString()} example${imported === 1 ? "" : "s"} ready. No complete Result is recorded yet.`
-                  : `${judged.toLocaleString()} of ${imported.toLocaleString()} examples have a Result.`}{" "}
-                Results remain <b>provisional</b> until an owner reviews and signs off the guide.
+                  ? `${imported.toLocaleString()} example${imported === 1 ? "" : "s"} ready. No complete assessment is recorded yet.`
+                  : `${judged.toLocaleString()} of ${imported.toLocaleString()} examples have an assessment.`}{" "}
+                Assessments remain <b>provisional</b> until an owner reviews and signs off the guide.
               </span>
             ) : (
               <span>
                 {judged === 0
-                  ? `No complete Result is recorded for the ${imported.toLocaleString()} imported run${imported === 1 ? "" : "s"}.`
-                  : `The starter Check returned a Result for ${judged.toLocaleString()} of ${imported.toLocaleString()} runs.`}{" "}
-                Recorded Results are <b>provisional</b>. Review the guide before asking an owner to sign it off.
+                  ? `No complete assessment is recorded for the ${imported.toLocaleString()} imported run${imported === 1 ? "" : "s"}.`
+                  : `The starter evaluator returned an assessment for ${judged.toLocaleString()} of ${imported.toLocaleString()} runs.`}{" "}
+                Recorded assessments are <b>provisional</b>. Review the guide before asking an owner to sign it off.
               </span>
             )
           }
           cta2={owner ? (
             <Button size="sm" variant="ghost" disabled={signingOff} onClick={() => void signOffAsIs()}>
-              {signingOff ? "Signing off…" : "Use this starter Check"}
+              {signingOff ? "Signing off…" : "Use this starter evaluator"}
             </Button>
           ) : undefined}
           cta={
             <Button size="sm" onClick={() => navigate(owner ? firstRunEditorPath() : "/skill")}>
-              {owner ? "Review the Check" : "View the Check"}
+              {owner ? "Review the evaluator" : "View the evaluator"}
             </Button>
           }
         />
@@ -94,30 +94,30 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
       </div>
 
       <SectionHead
-        eyebrow={bench ? "First examples · Skill Bench" : `First import · ${project.traceProvider}`}
+        eyebrow={bench ? "First examples · evaluator Bench" : `First import · ${project.traceProvider}`}
         title={
           bench
             ? judged > 0
-              ? `${judged.toLocaleString()} of ${imported.toLocaleString()} examples have a provisional Result.`
-              : `${imported.toLocaleString()} example${imported === 1 ? "" : "s"} ready. Run your Check.`
+              ? `${judged.toLocaleString()} of ${imported.toLocaleString()} examples have a provisional assessment.`
+              : `${imported.toLocaleString()} example${imported === 1 ? "" : "s"} ready. Run your evaluator.`
             : judged > 0
-              ? `${imported.toLocaleString()} run${imported === 1 ? "" : "s"} imported. Here is what the starter Check found.`
-              : `${imported.toLocaleString()} run${imported === 1 ? "" : "s"} imported. No complete Check Result yet.`
+              ? `${imported.toLocaleString()} run${imported === 1 ? "" : "s"} imported. Here is what the starter evaluator found.`
+              : `${imported.toLocaleString()} run${imported === 1 ? "" : "s"} imported. No complete evaluator assessment yet.`
         }
         sub={
           exceptions.length > 0
-            ? `${dashboard.exceptionsTotal ?? "Some"} Result${dashboard.exceptionsTotal === 1 ? " needs" : "s need"} a closer look. Open one to compare the recorded evidence with the starter guide.`
+            ? `${dashboard.exceptionsTotal ?? "Some"} assessment${dashboard.exceptionsTotal === 1 ? " needs" : "s need"} a closer look. Open one to compare the recorded evidence with the starter guide.`
             : bench
               ? judged === 0
                 ? "Nothing has been evaluated yet. Start one run from Examples. A supplied expected label is optional and is not governed human truth."
                 : withoutResult > 0
-                  ? `The Check did not flag the ${judged.toLocaleString()} completed example${judged === 1 ? "" : "s"}. ${withoutResult.toLocaleString()} still ${withoutResult === 1 ? "has" : "have"} no complete Result.`
-                  : `The Check did not flag the ${judged.toLocaleString()} example${judged === 1 ? "" : "s"} it evaluated. These Results are still provisional.`
+                  ? `The evaluator did not flag the ${judged.toLocaleString()} completed example${judged === 1 ? "" : "s"}. ${withoutResult.toLocaleString()} still ${withoutResult === 1 ? "has" : "have"} no complete assessment.`
+                  : `The evaluator did not flag the ${judged.toLocaleString()} example${judged === 1 ? "" : "s"} it evaluated. These assessments are still provisional.`
               : judged === 0
-                ? "The runs are recorded, but this Check has not returned a complete Result. It may still be running or need a retry; open Runs to inspect their status."
+                ? "The runs are recorded, but this evaluator has not returned a complete assessment. It may still be running or need a retry; open cases to inspect their status."
                 : withoutResult > 0
-                  ? `The Check did not flag the ${judged.toLocaleString()} completed Run${judged === 1 ? "" : "s"}. ${withoutResult.toLocaleString()} still ${withoutResult === 1 ? "has" : "have"} no complete Result.`
-                  : `The starter Check did not flag the ${judged.toLocaleString()} Run${judged === 1 ? "" : "s"} it evaluated. These Results are still provisional.`
+                  ? `The evaluator did not flag the ${judged.toLocaleString()} completed case${judged === 1 ? "" : "s"}. ${withoutResult.toLocaleString()} still ${withoutResult === 1 ? "has" : "have"} no complete assessment.`
+                  : `The starter evaluator did not flag the ${judged.toLocaleString()} case${judged === 1 ? "" : "s"} it evaluated. These assessments are still provisional.`
         }
       />
 
@@ -134,9 +134,9 @@ export function DashboardProvisional({ dashboard, onSignedOff }: DashboardProvis
           foot={bench ? "supplied · no production traces" : `${project.traceProvider} · first poll`}
         />
         <KPI
-          label="Results · provisional"
+          label="Assessments · provisional"
           num={judged.toLocaleString()}
-          foot={`starter Check v${version.version}`}
+          foot={`starter evaluator v${version.version}`}
         />
         <KPI
           label="Need a closer look"

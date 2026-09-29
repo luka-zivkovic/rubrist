@@ -40,7 +40,7 @@ export function CriteriaScreen() {
         eyebrow="Evaluation scope · demo mode"
         title="Criterion management needs a persistent workspace."
         description="Criteria and their evaluator history must be saved to a signed-in project, so you cannot create or switch them in the in-memory demo."
-        demoAlternative="The demo includes one example criterion. You can inspect it from Overview or Review guide."
+        demoAlternative="The demo includes one example criterion. You can inspect it from Overview or Evaluator."
       />
     );
   }
