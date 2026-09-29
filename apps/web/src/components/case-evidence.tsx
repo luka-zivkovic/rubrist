@@ -1,7 +1,9 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { evidenceClaim } from "../lib/recorded-evaluation.js";
 
-export function CaseEvidence({ input, output }: { input: unknown; output: unknown }) {
+import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
+
+export function CaseEvidence({ input, output, steps }: { input: unknown; output: unknown; steps?: unknown }) {
   const content = evidenceClaim(input, output);
   if (!content) return null;
   return (
@@ -9,10 +11,11 @@ export function CaseEvidence({ input, output }: { input: unknown; output: unknow
       <CardHeader>
         <div>
           <CardTitle className="text-[16px] font-semibold">Claim and supplied evidence</CardTitle>
-          <CardDescription>Read the claim against the complete source text below.</CardDescription>
+          <CardDescription>Read the claim against the supplied source text below.</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
+        <EvidenceTruncationWarning input={input} output={output} steps={steps} />
         <section className="border-l-4 border-ink bg-card-2 p-4">
           <h3 className="mb-2 text-[13px] font-medium">Claim to evaluate</h3>
           <p className="whitespace-pre-wrap break-words text-[18px] font-medium leading-7">{content.claim}</p>

@@ -35,6 +35,13 @@ Without `DATABASE_URL`, the API uses `DemoRepository`. It contains representativ
 
 ### Trace ingestion
 
+CURRENT: accepted strings are retained without an implicit length cap. Explicit
+integration caps still mark shortened strings; default read-side redaction
+preserves retained length while scrubbing sensitive keys. Existing HTTP limits
+are unchanged. Review surfaces warn when recorded evidence contains a truncation
+marker. This does not restore old clipped text or revalidate historical results;
+see [retained trace evidence](long-evidence.md).
+
 1. A trace arrives through the manual endpoint, the judge API, LangSmith, Langfuse, or Ironside with an exact evaluator-version pin. Ironside supplies a settled remote trace-version identity and an opaque continuation cursor; Rubrist does not reproduce Ironside's settlement policy. Singleton projects may resolve the evaluator pin when the request is accepted; multi-criterion projects require it explicitly.
 2. The raw provider payload is retained for auditability.
 3. A normalized case is created with configured exclusions and sensitive-key redaction.
