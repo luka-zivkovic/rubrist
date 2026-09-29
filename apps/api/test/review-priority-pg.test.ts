@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { runMigrations } from "@rubrist/db";
 import { PgRepository } from "../src/repository.pg.js";
@@ -39,7 +40,7 @@ runPgSmoke("suggested review batches", () => {
       const next = await repo.suggestReviewQueue("proj_test", "skillv_test", 10);
       expect(next.items.find(item => item.caseId === target.caseId)!.judgeRunId).toBe("newer");
       const item = (await repo.getReviewQueueDetail("proj_test", queue.id))!.items[0]!;
-      await repo.recordVerdict({ projectId: "proj_test", caseId: target.caseId, source: "human", payload: { kind: "binary", pass: false, rationale: "Old result reviewed" }, reviewContext: { queueItemId: item.id, judgeRunId: target.runId, submissionId: "review-old" } });
+      await repo.recordVerdict({ projectId: "proj_test", caseId: target.caseId, source: "human", payload: { kind: "binary", pass: false, rationale: "Old result reviewed" }, reviewContext: { queueItemId: item.id, judgeRunId: target.runId, submissionId: randomUUID() } });
       expect((await repo.suggestReviewQueue("proj_test", "skillv_test", 10)).items.find(item => item.caseId === target.caseId)!.judgeRunId).toBe("newer");
     } finally { await cleanup(); }
   }, 60_000);
