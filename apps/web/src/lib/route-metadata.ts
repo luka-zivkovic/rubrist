@@ -1,15 +1,15 @@
 export interface RouteCrumb { label: string; to?: string }
 export interface RouteMetadata { crumbs: RouteCrumb[]; activePath: string }
 
-// CURRENT route names only. Vocabulary consolidation remains a separate decision.
+// Shared product vocabulary; route identities remain stable.
 export function routeMetadata(pathname: string, search = "", bench = false): RouteMetadata {
   const path = pathname.replace(/\/+$/, "") || "/";
   const names: Record<string, string> = {
-    "/": "Overview", "/traces": "Traces", "/exceptions": "Exceptions",
+    "/": "Overview", "/traces": "Traces", "/exceptions": "Review queue",
     "/reliability": "Reliability", "/production-calibration": "Production calibration",
-    "/review-queues": "Review queues", "/criteria": "Criteria", "/analyze": "Analyze",
-    "/human-truth": "Human truth", "/skill": "Skill", "/first-result": "First Result",
-    "/golden": "Golden set", "/datasets": bench ? "Examples" : "Datasets",
+    "/review-queues": "Saved review queues", "/criteria": "Criteria", "/analyze": "Analyze",
+    "/human-truth": "Human truth", "/skill": "Evaluator", "/first-result": "First assessment",
+    "/golden": "Golden set", "/datasets": bench ? "Cases & evaluation runs" : "Datasets",
     "/integrations": "Integrations", "/settings": "Settings"
   };
   const parent = (to: string): RouteCrumb => ({ label: names[to]!, to: contextualHref(to, search) });
@@ -28,13 +28,13 @@ export function routeMetadata(pathname: string, search = "", bench = false): Rou
   if (path.startsWith("/skill/")) {
     const crumbs = [parent("/skill")];
     if (path.startsWith("/skill/versions")) {
-      crumbs.push({ label: "Skill versions", ...(path !== "/skill/versions" ? { to: contextualHref("/skill/versions", search) } : {}) });
+      crumbs.push({ label: "Evaluator versions", ...(path !== "/skill/versions" ? { to: contextualHref("/skill/versions", search) } : {}) });
       if (path !== "/skill/versions") crumbs.push({ label: "Version" });
-    } else crumbs.push({ label: path === "/skill/edit" ? "Edit skill" : path === "/skill/compare" ? "Compare versions" : "Skill" });
+    } else crumbs.push({ label: path === "/skill/edit" ? "Edit skill" : path === "/skill/compare" ? "Compare versions" : "Evaluator" });
     return result("/skill", crumbs);
   }
   if (path.startsWith("/human-truth/")) return result("/human-truth", [parent("/human-truth"), { label: path.endsWith("/resolve") ? "Resolve item" : "Create human truth" }]);
-  if (/^\/review-queues\/[^/]+$/.test(path)) return result("/review-queues", [parent("/review-queues"), { label: "Review session" }]);
+  if (/^\/review-queues\/[^/]+$/.test(path)) return result("/review-queues", [parent("/review-queues"), { label: "Review queue" }]);
   return result("", [{ label: "Page not found" }]);
 }
 

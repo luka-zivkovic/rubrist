@@ -292,7 +292,7 @@ export function ReliabilityScreen() {
         throw new Error(`The version-pinned run ${status}. Open Examples to inspect the run details.`);
       }
       if (status === "pending" || status === "running") {
-        setActionStatus(`Run ${started.run.id} is still processing. Refresh after it completes to update this diagnostic.`);
+        setActionStatus(`Evaluation run ${started.run.id} is still processing. Refresh after it completes to update this diagnostic.`);
         return;
       }
       setActionStatus(`${started.caseId} is now covered by this evaluator version.`);
@@ -312,7 +312,7 @@ export function ReliabilityScreen() {
       <SectionHead
         eyebrow="Ungoverned legacy diagnostics"
         title="Reliability"
-        sub="Compare the current evaluator with recorded legacy human rulings, then inspect where reviewers disagree. These cases were not collected blind or as a representative sample, so use this page for diagnosis rather than governed human truth."
+        sub="Compare the current evaluator with recorded legacy human labels, then inspect where reviewers disagree. These cases were not collected blind or as a representative sample, so use this page for diagnosis rather than governed human truth."
       />
 
       <ReliabilityHero
@@ -360,7 +360,7 @@ export function ReliabilityScreen() {
         className="mb-3"
         eyebrow="Next action"
         title="Review judge–reviewer disagreements"
-        sub="Open each trace and compare the evaluator result with the recorded human labels. Add a ruling only after reading the evidence; this legacy workflow does not establish governed human truth."
+        sub="Open each trace and compare the evaluator result with the recorded human labels. Add a human label only after reading the evidence; this legacy workflow does not establish governed human truth."
         right={
           <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-ink-3">
             <Scale className="size-3.5" /> {judgeOpen} need a human call
@@ -454,7 +454,7 @@ export function ReliabilityScreen() {
           <div className="border-t border-rule-soft">
             <div className="px-[18px] py-3 text-[11px] text-ink-3">{splitPct == null ? "No double-coded cases yet." : `${humanHuman.disagreedCases} of ${humanHuman.comparedCases} double-coded cases split.`}</div>
             <Table>
-              <thead><tr><th>Case</th><th>Reviewer verdicts</th><th style={{ width: 90 }} className="text-right">Distinct</th><th style={{ width: 130 }}>Severity</th><th style={{ width: 150 }}>Resolution</th></tr></thead>
+              <thead><tr><th>Case</th><th>Human labels</th><th style={{ width: 90 }} className="text-right">Distinct</th><th style={{ width: 130 }}>Severity</th><th style={{ width: 150 }}>Resolution</th></tr></thead>
               <tbody>
                 {humanHuman.cases.length === 0 ? <tr><td colSpan={5} className="text-center text-ink-3">Double-code cases to inspect reviewer disagreement here.</td></tr> : null}
                 {humanHuman.cases.map((c) => <tr key={c.caseId} className="row-link row-signal" onClick={() => navigate(`/cases/${c.caseId}`)}>
@@ -507,7 +507,7 @@ function ReliabilityHero({ audit, version, actionLabel, actionDisabled, onNext }
   return <Card className="mb-3 border-ink">
     <CardHeader className="justify-between">
       <div>
-        <CardTitle>Current evaluator vs recorded rulings</CardTitle>
+        <CardTitle>Current evaluator vs recorded human labels</CardTitle>
         <CardDescription>Version {version} · pinned legacy adjudication slice</CardDescription>
       </div>
       <Chip variant="outline" className="font-mono text-[10px]">ungoverned · self-selected</Chip>
@@ -657,14 +657,14 @@ function AdjudicateModal({
           <div>
             <CardTitle id="adjudicate-title">Record a legacy adjudication</CardTitle>
             <CardDescription>
-              Record the team's ungoverned ruling for <span className="font-mono text-[12px]">{caseId}</span>.
+              Record the team's ungoverned human label for <span className="font-mono text-[12px]">{caseId}</span>.
               Later evaluator versions can be compared with it, but it is not governed human truth.
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <div id="adjudicate-label-title" className="eyebrow">Team ruling</div>
+            <div id="adjudicate-label-title" className="eyebrow">Team human label</div>
             <div className="flex gap-1.5" role="group" aria-labelledby="adjudicate-label-title">
               {(["pass", "fail"] as const).map((opt) => (
                 <button
@@ -684,7 +684,7 @@ function AdjudicateModal({
               ))}
             </div>
             <div className="font-mono text-[10.5px] text-ink-4">
-              {lean ? `Reviewers leaned ${lean} — your call records the ruling.` : "Reviewers were evenly split."}
+              {lean ? `Reviewers leaned ${lean} — your call records the human label.` : "Reviewers were evenly split."}
             </div>
           </div>
 
@@ -697,7 +697,7 @@ function AdjudicateModal({
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
               rows={3}
-              placeholder="Why the team is recording this ruling. Saved on the adjudication."
+              placeholder="Why the team is recording this human label. Saved on the adjudication."
               className="resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-ink"
             />
           </div>
@@ -713,7 +713,7 @@ function AdjudicateModal({
               owner only
             </Chip>
             <Button variant="primary" onClick={() => void submit()} disabled={submitting || label === null}>
-              {submitting ? "Recording…" : "Record ruling"}
+              {submitting ? "Recording…" : "Record human label"}
             </Button>
           </div>
         </CardContent>

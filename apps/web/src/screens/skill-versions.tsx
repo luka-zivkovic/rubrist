@@ -42,11 +42,11 @@ const STATUS_LABEL: Record<SkillStatus, string> = {
   production:   "recorded: production",
   approved:     "recorded: approved",
   validated:    "recorded: validated",
-  calibrating:  "regression running",
+  calibrating:  "reference check running",
   needs_review: "needs review",
   draft:        "draft · held",
-  regressing:   "regressing",
-  failed:       "regression check failed",
+  regressing:   "reference disagreements",
+  failed:       "reference check failed",
   deprecated:   "deprecated"
 };
 
@@ -149,7 +149,7 @@ export function SkillVersionsScreen() {
   if (error || !skill) {
     return (
       <PageLoadError
-        eyebrow="Every version of the skill"
+        eyebrow="Every version of the evaluator"
         title="Couldn't load versions"
         failure={error ?? NO_SKILL_FAILURE}
         onRetry={() => void load()}
@@ -167,7 +167,7 @@ export function SkillVersionsScreen() {
       <SectionHead
         eyebrow="Immutable evaluator history"
         title="Evaluator versions"
-        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a guide and prompt, or a typed question), result format, and evidence attached to it."
+        sub="Each row is a saved evaluator version with its model settings and recorded Golden-set check. Open a version to inspect its definition (a rubric and judge instructions, or a typed question), output contract, and evidence attached to it."
         right={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
@@ -478,7 +478,7 @@ export function SkillVersionDetailScreen() {
             <>
               <Card>
                 <CardContent className="py-4">
-                  <Eyebrow>Review guide · stored as Markdown</Eyebrow>
+                  <Eyebrow>Rubric · stored as Markdown</Eyebrow>
                   <p className="mt-2 text-[12px] leading-5 text-ink-2">
                     Defines what a good result looks like and the evidence this evaluator should use.
                   </p>
@@ -489,7 +489,7 @@ export function SkillVersionDetailScreen() {
                 <CardContent className="py-4">
                   <Eyebrow>Judge instructions · exact compiled text</Eyebrow>
                   <p className="mt-2 text-[12px] leading-5 text-ink-2">
-                    Exact source sent to the judge after inserting the review guide. It is intentionally
+                    Exact source sent to the judge after inserting the rubric. It is intentionally
                     not rendered as Markdown.
                   </p>
                   <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-3 py-3 font-mono text-[12px] leading-[1.6] text-ink">
@@ -504,7 +504,7 @@ export function SkillVersionDetailScreen() {
         <div className="flex flex-col gap-5">
           <Card>
             <CardContent className="py-4">
-              <Eyebrow>Known-failure regression</Eyebrow>
+              <Eyebrow>Golden-set reference check</Eyebrow>
               <p className="mt-2 text-[12px] leading-5 text-ink-2">
                 Compares this version with promoted reference cases. It does not measure overall
                 evaluator quality or make a release decision.
@@ -540,7 +540,7 @@ export function SkillVersionDetailScreen() {
                 <div className="font-mono">{v.executionBinding.modelVersion}</div>
                 <div className="text-ink-3">Binding</div>
                 <div className="font-mono">{describeExecutionBinding(v.executionBinding)}</div>
-                <div className="text-ink-3">Result type</div>
+                <div className="text-ink-3">Assessment type</div>
                 <div>
                   <div className="font-mono">{v.verdictKind}</div>
                   <div className="mt-0.5 text-[11.5px] leading-5 text-ink-3">
@@ -576,7 +576,7 @@ export function SkillVersionDetailScreen() {
 
           <Card>
             <CardContent className="py-4">
-              <Eyebrow>Result format · exact JSON schema</Eyebrow>
+              <Eyebrow>Output contract · exact JSON schema</Eyebrow>
               <p className="mt-2 text-[12px] leading-5 text-ink-2">
                 Fields and allowed values the judge must return. Rubrist validates results against
                 this exact contract, so it remains source text rather than Markdown.
@@ -595,10 +595,10 @@ export function SkillVersionDetailScreen() {
 
       <div className="mt-6">
         {regression.status === "loading" ? (
-          <SectionLoading label="Loading the regression run…" />
+          <SectionLoading label="Loading the reference check…" />
         ) : regression.status === "failed" ? (
           <SectionLoadError
-            title="Couldn't load the regression run."
+            title="Couldn't load the reference check."
             failure={regression.failure}
             retrying={regression.retrying}
             onRetry={regression.retry}
@@ -606,11 +606,11 @@ export function SkillVersionDetailScreen() {
         ) : regressionRun && regressionRun.cases.length > 0 ? (
           <RegressionDiffTable
             cases={regressionRun.cases}
-            title="Regression at version creation"
+            title="Reference check at version creation"
             description={`The immutable reference revision pinned when this version was created was re-judged${regressionRun.datasetRevisionId ? ` (${regressionRun.datasetRevisionId})` : ""}. Click a row to open the trace.`}
           />
         ) : regressionRun && regressionRun.compared > 0 ? (
-          <MarginNote tone="neutral" who="Regression">
+          <MarginNote tone="neutral" who="Reference check">
             {regressionRun.compared} case{regressionRun.compared === 1 ? "" : "s"} were re-judged when this
             version was created, but this run didn't capture a per-case breakdown (older run format).
           </MarginNote>
@@ -765,12 +765,12 @@ function JudgeCardPanel({ card, skillId, versionId }: { card: JudgeCard; skillId
               ? "no comparable promoted reference cases"
               : `recorded ratio ${agreement.toFixed(2)}${card.regression ? ` over ${card.regression.compared} case(s) at version creation` : ""}`}
           </div>
-          <div className="text-ink-3">Evaluator regression</div>
+          <div className="text-ink-3">Reference check</div>
           <div className="font-mono">
             {card.regression
               ? card.regression.status === "passed" && card.regression.compared === 0
                 ? "No reference cases compared"
-                : `${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} regressed, ${card.regression.flipped} flipped`
+                : `${card.regression.status} · ${card.regression.compared} compared, ${card.regression.regressed} reference disagreements, ${card.regression.flipped} flipped`
               : "no recorded run"}
           </div>
           <div className="text-ink-3">Judge–human κ</div>
@@ -873,7 +873,7 @@ function SelfConsistencyCard({
             <div className="mt-2 text-[11px] text-ink-3">
               This measures only whether the evaluator repeated its verdict on cases judged at
               least twice. A repeated verdict can still be wrong, so read it separately from
-              Golden-set agreement and convergence with human rulings.
+              Golden-set agreement and convergence with human labels.
             </div>
           </>
         )}

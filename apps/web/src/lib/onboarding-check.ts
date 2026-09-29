@@ -54,19 +54,19 @@ export function recommendationReason(starter: StarterSkill, projectName: string)
   if (starter.id === "task-outcome-quality") {
     return "The project name did not point to a narrower quality question, so this starts with overall task completion.";
   }
-  return `“${projectName}” looks closest to ${starter.fit.toLocaleLowerCase()}, so this starts with that focused Check.`;
+  return `“${projectName}” looks closest to ${starter.fit.toLocaleLowerCase()}, so this starts with that focused evaluator.`;
 }
 
 export function evidenceReadDescription(inventory: OnboardingEvidenceInventory | null): string {
   if (!inventory) {
-    return "Rubrist could not inspect the saved Run fields right now. The Check will only read fields that are actually stored.";
+    return "Rubrist could not inspect the saved case fields right now. The evaluator will only read fields that are actually stored.";
   }
   if (inventory.runCount === 0) {
-    return "No Run is saved yet. The Check will read only the input, output, steps, and metadata you record later.";
+    return "No case is saved yet. The evaluator will read only the input, output, steps, and metadata you record later.";
   }
   const denominator = inventory.runCount.toLocaleString();
   return [
-    `${denominator} saved ${inventory.runCount === 1 ? "Run" : "Runs"}`,
+    `${denominator} saved ${inventory.runCount === 1 ? "case" : "cases"}`,
     `input ${inventory.inputCount.toLocaleString()}/${denominator}`,
     `output ${inventory.outputCount.toLocaleString()}/${denominator}`,
     `steps ${inventory.stepsCount.toLocaleString()}/${denominator}`,
@@ -75,7 +75,7 @@ export function evidenceReadDescription(inventory: OnboardingEvidenceInventory |
 }
 
 export function evidenceLimitDescription(): string {
-  return "It cannot see missing tool calls, file changes, policies, or context that were not captured in the Run or written into the Review guide.";
+  return "It cannot see missing tool calls, file changes, policies, or context that were not captured in the case or written into the Rubric.";
 }
 
 export function draftFromStarter(input: {

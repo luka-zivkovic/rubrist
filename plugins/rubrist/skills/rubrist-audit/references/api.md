@@ -58,7 +58,7 @@ curl -s -X POST "$RUBRIST_URL/api/v1/bootstrap" \
     "project": { "name": "my-skill audit", "apiKeyName": "audit agent" },
     "check": {
       "name": "Follows the skill contract",
-      "question": "Did this Run follow the target skill's required workflow and constraints?"
+      "question": "Did this case follow the target skill's required workflow and constraints?"
     },
     "skill": {
       "name": "My skill audit",
@@ -77,7 +77,7 @@ require `modelId`, `baseUrl`, and a provider key.
 
 The server appends `check.question` as an immutable criterion definition and
 atomically binds the new evaluator version to it. The `201` response includes
-that exact Check id, version, question, and digest alongside project/skill/version ids, the pinned model,
+that exact evaluator id, version, question, and digest alongside project/skill/version ids, the pinned model,
 `rubricProvenance: "agent-drafted"`, `apiKey`, and `connect` — ready-to-paste
 agent wiring snippets (Claude Code one-liner, generic `mcp.json` block, plain
 CLI) with the URL and the one-time key pre-filled. The raw

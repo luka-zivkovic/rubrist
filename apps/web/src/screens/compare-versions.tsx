@@ -281,7 +281,7 @@ export function CompareVersionsScreen() {
               }
             />
             <KPI
-              label="Regressions across versions"
+              label="Reference disagreements across versions"
               num={totals?.regressed ?? "—"}
               delta={totalsNote("changes against recorded labels")}
               deltaKind={totals?.regressed ? "signal" : "default"}
@@ -303,7 +303,7 @@ export function CompareVersionsScreen() {
               <div>
                 <CardTitle>The path, run by run</CardTitle>
                 <CardDescription>
-                  Each row is one saved version and the regression check recorded when it was saved, if any.
+                  Each row is one saved version and the reference check recorded when it was saved, if any.
                 </CardDescription>
               </div>
               {loaded && chainRetryable(loaded.steps, loaded.baseline) ? (
@@ -326,10 +326,10 @@ export function CompareVersionsScreen() {
             <Table className="ledger-stacked" role="table" aria-label="Recorded comparison runs">
               <thead role="rowgroup">
                 <tr role="row">
-                  <th scope="col" role="columnheader" style={{ width: 180 }}>Run</th>
-                  <th scope="col" role="columnheader" style={{ width: 170 }}>Regression check</th>
+                  <th scope="col" role="columnheader" style={{ width: 180 }}>Evaluator version</th>
+                  <th scope="col" role="columnheader" style={{ width: 170 }}>Reference check</th>
                   <th scope="col" role="columnheader" style={{ width: 170 }}>Pinned corpus</th>
-                  <th scope="col" role="columnheader" style={{ width: 100 }} className="text-right">Regressed</th>
+                  <th scope="col" role="columnheader" style={{ width: 100 }} className="text-right">Reference disagreements</th>
                   <th scope="col" role="columnheader" style={{ width: 100 }} className="text-right">Improved</th>
                   <th scope="col" role="columnheader">On the record</th>
                 </tr>
@@ -352,12 +352,12 @@ export function CompareVersionsScreen() {
                         className="row-link"
                         onClick={() => navigate(`/skill/versions/${version.id}`)}
                       >
-                        <td role="cell" data-label="Run">
+                        <td role="cell" data-label="Evaluator version">
                           <RowLink to={`/skill/versions/${version.id}`} className="font-mono">
                             v{version.version}
                           </RowLink>
                         </td>
-                        <td role="cell" data-label="Regression check">
+                        <td role="cell" data-label="Reference check">
                           <GateChip
                             state={gateStateForVersion(version, chainStepRun(step))}
                             title={version.knownLimitations.join(" · ")}
@@ -370,7 +370,7 @@ export function CompareVersionsScreen() {
                           {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId)?.slice(0, 18) ?? "not pinned"}
                           {(run?.datasetRevisionId ?? version.regressionDatasetRevisionId) ? "…" : ""}
                         </td>
-                        <td role="cell" data-label="Regressed"
+                        <td role="cell" data-label="Reference disagreements"
                           className="text-left font-mono md:text-right tabular-nums"
                           style={measured && run.regressed ? { color: "var(--signal)" } : undefined}
                         >
@@ -384,7 +384,7 @@ export function CompareVersionsScreen() {
                             </span>
                           ) : run?.status === "error" ? (
                             <span className="text-signal" title={run.error ?? undefined}>
-                              Regression check failed
+                              Reference check failed
                             </span>
                           ) : run
                             ? run.overrideReason

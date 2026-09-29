@@ -15,17 +15,17 @@ export type GateState =
   | "loading";
 
 export const GATE_LABEL: Record<GateState, string> = {
-  clean: "regression · clean",
-  blocked: "regression · found",
-  error: "regression · error",
-  override: "regression · override recorded",
-  inactive: "regression · inactive",
-  first: "regression · no comparison",
-  running: "regression · running",
-  unrecorded: "regression · not recorded",
-  unavailable: "regression · unavailable",
+  clean: "reference check · matched",
+  blocked: "reference disagreements",
+  error: "reference check · error",
+  override: "reference check · override recorded",
+  inactive: "reference check · inactive",
+  first: "reference check · no comparison",
+  running: "reference check · running",
+  unrecorded: "reference check · not recorded",
+  unavailable: "reference check · unavailable",
   // Shown while the run is being read; gateStateForVersion never returns it.
-  loading: "regression · loading"
+  loading: "reference check · loading"
 };
 
 // Stored disagreement counts are zeros until a check measures them; while a

@@ -8,7 +8,7 @@ export function skillEditConsequence(goldenSetSize: number | null): string {
   }
   return goldenSetSize > 0
     ? `Editing creates a new immutable version and compares it with ${goldenSetSize} current Golden reference${goldenSetSize === 1 ? "" : "s"}.`
-    : "Editing creates a new immutable version. Add a Golden reference to enable known-failure regression checks.";
+    : "Editing creates a new immutable version. Add a Golden reference to enable known-failure reference checks.";
 }
 
 export function skillVersionStateLabel(

@@ -305,12 +305,12 @@ describe("version page", () => {
     api.fetchSkillVersionRegression.mockResolvedValue(run(current.id, { compared: 0, cases: [] }));
     await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
     expect(text()).toContain("Current default: v1.0.2");
-    expect(text()).toContain("regression · no comparison");
+    expect(text()).toContain("reference check · no comparison");
     expect(text()).toContain("0 reference cases compared");
     expect(text()).not.toContain("100%");
     expect(text()).toContain("Too strict—");
     expect(text()).toContain("Too lenient—");
-    expect(text()).not.toContain("regression · clean");
+    expect(text()).not.toContain("reference check · matched");
   });
 
   it("keeps the version readable when one evidence read fails, and retries only that section", async () => {
@@ -325,7 +325,7 @@ describe("version page", () => {
     await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
 
     expect(text()).toContain("Guide 1.0.2");
-    expect(text()).toContain("regression · not recorded");
+    expect(text()).toContain("reference check · not recorded");
     expect(text()).toContain("Couldn't load self-consistency.");
     expect(text()).toContain("Self-consistency request failed: 503");
     // A refused read offers no Retry: retrying fails the same way.
@@ -391,13 +391,13 @@ describe("version page", () => {
 
     expect(text()).toContain("Guide 1.0.2");
     expect(text()).not.toContain("Loading version");
-    expect(text()).toContain("regression · loading");
+    expect(text()).toContain("reference check · loading");
     expect(text()).toContain("Loading the Judge Card…");
-    expect(text()).toContain("Loading the regression run…");
+    expect(text()).toContain("Loading the reference check…");
     expect(text()).toContain("Loading self-consistency…");
     // A section still loading never reads as empty.
     expect(text()).not.toContain("No repeat runs under this version yet.");
-    expect(text()).not.toContain("regression · not recorded");
+    expect(text()).not.toContain("reference check · not recorded");
   });
 
   it("shows unmeasured disagreement counts as unknown", async () => {
@@ -415,24 +415,24 @@ describe("version page", () => {
 
   it("reads a run that couldn't be loaded as unavailable, never as not recorded or clean", async () => {
     readsSucceed();
-    api.fetchSkillVersionRegression.mockRejectedValue(new ApiError("Regression run request failed: 500", 500));
+    api.fetchSkillVersionRegression.mockRejectedValue(new ApiError("Reference check request failed: 500", 500));
 
     await render("/skill/versions/skillv_2", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
 
-    expect(text()).toContain("regression · unavailable");
-    expect(text()).toContain("Couldn't load the regression run.");
-    expect(text()).not.toContain("regression · not recorded");
-    expect(text()).not.toContain("regression · clean");
+    expect(text()).toContain("reference check · unavailable");
+    expect(text()).toContain("Couldn't load the reference check.");
+    expect(text()).not.toContain("reference check · not recorded");
+    expect(text()).not.toContain("reference check · matched");
   });
 
   it("shows a failed page read as an error with Retry, and a missing version as not found", async () => {
     readsSucceed();
-    api.fetchSkillVersions.mockRejectedValueOnce(new ApiError("Skill versions request failed: 500", 500));
+    api.fetchSkillVersions.mockRejectedValueOnce(new ApiError("Evaluator versions request failed: 500", 500));
 
     await render("/skill/versions/skillv_9", "/skill/versions/:id", () => createElement(SkillVersionDetailScreen));
 
     expect(text()).toContain("Couldn't load this version");
-    expect(text()).toContain("Skill versions request failed: 500");
+    expect(text()).toContain("Evaluator versions request failed: 500");
     expect(text()).not.toContain("Version not found");
 
     await act(async () => buttons("Retry")[0]!.click());
@@ -499,7 +499,7 @@ describe("version history", () => {
     api.fetchSkillVersionHistory.mockResolvedValue({ versions: [empty], regressionRuns: [run(empty.id, { compared: 0, cases: [] })] });
     await render("/skill/versions", "/skill/versions", () => createElement(SkillVersionsScreen));
     const row = container.querySelector("tbody tr");
-    expect(row?.textContent).toContain("regression · no comparison");
+    expect(row?.textContent).toContain("reference check · no comparison");
     expect(row?.textContent).not.toContain("100%");
     expect([...(row?.querySelectorAll("td") ?? [])].slice(3, 6).map((cell) => cell.textContent)).toEqual(["—", "—", "—"]);
   });
@@ -520,12 +520,12 @@ describe("version history", () => {
     const row = (label: string) => container.querySelector(`tbody tr:has(a[href="/skill/versions/${label}"])`);
     const cells = (label: string) => [...(row(label)?.querySelectorAll("td") ?? [])].map((cell) => cell.textContent);
     expect(row("skillv_3")?.textContent).toContain("candidate");
-    expect(row("skillv_3")?.textContent).toContain("regression · clean");
+    expect(row("skillv_3")?.textContent).toContain("reference check · matched");
     expect(row("skillv_3")?.textContent).not.toContain("regression running");
-    expect(row("skillv_2")?.textContent).toContain("regression · clean");
+    expect(row("skillv_2")?.textContent).toContain("reference check · matched");
     expect(row("skillv_2")?.textContent).toContain("Current default");
     expect(row("skillv_1")?.textContent).toContain("Saved version");
-    expect(row("skillv_1")?.textContent).toContain("regression · not recorded");
+    expect(row("skillv_1")?.textContent).toContain("reference check · not recorded");
     // Agreement, strict, and lenient: stored zeros are not shown as results.
     expect(cells("skillv_1").slice(3, 6)).toEqual(["—", "—", "—"]);
   });
@@ -579,7 +579,7 @@ describe("run comparison", () => {
       if (versionId === v3.id) return run(v3.id, { status: "error", compared: 0, error: "judge timed out", cases: [] });
       if (versionId === v1.id) return run(v1.id);
       v2Reads += 1;
-      if (v2Reads === 1) throw new ApiError("Regression run request failed: 503", 503);
+      if (v2Reads === 1) throw new ApiError("Reference check request failed: 503", 503);
       return run(v2.id);
     });
 
@@ -588,9 +588,9 @@ describe("run comparison", () => {
     expect(text()).toContain("3 saves between them · 2 with a recorded run · 1 couldn't be loaded");
     expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's run couldn't be loaded");
     expect(kpi("Improvements")).toContain("Improvements: — |");
-    expect(text()).toContain("Regression check failed");
+    expect(text()).toContain("Reference check failed");
     expect(text()).toContain("Couldn't load this save's run");
-    expect(text()).toContain("regression · unavailable");
+    expect(text()).toContain("reference check · unavailable");
     expect(text()).not.toContain("0 reference cases compared");
     // The failed check's stored zeros are not shown as counts.
     const failedCheckRow = [...container.querySelectorAll("tbody tr")].find((row) => row.textContent?.includes("v1.0.3"));
@@ -600,7 +600,7 @@ describe("run comparison", () => {
     await act(async () => buttons("Retry")[0]!.click());
     await settle();
 
-    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's regression check failed");
+    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's reference check failed");
     expect(text()).not.toContain("Couldn't load this save's run");
     expect(buttons("Retry")).toHaveLength(0);
   });
@@ -642,7 +642,7 @@ describe("run comparison", () => {
     api.fetchCurrentSkill.mockResolvedValue(skillWith(v3));
     api.fetchSkillVersions.mockResolvedValue([v3, v2, v1]);
     api.fetchSkillVersionRegression.mockImplementation(async (_skillId: string, versionId: string) => {
-      if (versionId === v1.id) throw new ApiError("Regression run request failed: 503", 503);
+      if (versionId === v1.id) throw new ApiError("Reference check request failed: 503", 503);
       return run(versionId, { improved: 1 });
     });
 
@@ -724,7 +724,7 @@ describe("evaluator editor", () => {
     api.fetchSkillVersions.mockResolvedValue([running, base]);
     api.fetchSkillVersionRegression
       .mockResolvedValueOnce(null)
-      .mockRejectedValueOnce(new ApiError("Skill version not found", 404));
+      .mockRejectedValueOnce(new ApiError("Evaluator version not found", 404));
     api.fetchDatasetRevisionMetadata.mockReturnValue(new Promise((resolve) => {
       finishCount = resolve;
     }));
@@ -734,7 +734,7 @@ describe("evaluator editor", () => {
     await render("/skill/edit?criterion=criterion_1&version=skillv_2", "/skill/edit", () => createElement(SkillEditScreen));
 
     expect(text()).toContain("count=null unavailable=false");
-    expect(text()).toContain("poll=Skill version not found (stopped)");
+    expect(text()).toContain("poll=Evaluator version not found (stopped)");
     // The refused read fails the same way every time, so no next poll is set.
     expect(timers.mock.calls.some(([, delay]) => delay === 2000)).toBe(false);
     timers.mockRestore();
@@ -762,7 +762,7 @@ describe("evaluator editor", () => {
   });
 
   it("replaces the loading state with a load error when a criterion is selected", async () => {
-    api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("Skill request failed: 503", 503));
+    api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("Evaluator request failed: 503", 503));
     api.fetchLatestSkill.mockRejectedValueOnce(new ApiError("No evaluator exists for this criterion", 404));
     api.fetchJudgeProviders.mockResolvedValue({ providers: [] });
 
@@ -770,7 +770,7 @@ describe("evaluator editor", () => {
 
     expect(text()).not.toContain("Loading skill");
     expect(text()).toContain("Couldn't load the skill");
-    expect(text()).toContain("Skill request failed: 503");
+    expect(text()).toContain("Evaluator request failed: 503");
 
     await act(async () => buttons("Retry")[0]!.click());
     await settle();

@@ -16,7 +16,7 @@ describe("exception queue rows", () => {
     expect(source).toContain("expanded ? exception.reason : rationalePreview(exception.reason)");
     expect(source).toContain('<Table className="ledger-stacked table-fixed" role="table" aria-label="Waiting cases">');
     expect(source).toContain('"truncate whitespace-nowrap"');
-    expect(source).toContain("open Review to read the full trace and guide before recording a ruling");
+    expect(source).toContain("open Review to read the full trace and guide before recording a human label");
     expect(source).toContain('exceptions.length === 0 ? "Queue cleared" : "No matches"');
     expect(source).toContain("<Link to={reviewHref ?? caseReviewUrl(exception.id, exception.capabilityGap, search, exception.criterionVersionId)}");
   });
@@ -47,9 +47,9 @@ describe("exception queue rows", () => {
     expect(exceptionsSource).toContain("Judge category");
     expect(exceptionsSource).toContain("Save this category as a queue");
     expect(exceptionsSource).not.toContain("Queue this cluster");
-    expect(dashboardSource).toContain("Exact failure categories supplied by the Check");
+    expect(dashboardSource).toContain("Exact failure categories supplied by the evaluator");
     expect(dashboardSource).not.toContain("Clusters of disagreement");
     expect(dashboardSource).toContain("High unresolved volume");
-    expect(dashboardSource).not.toContain("Skill too strict or lenient");
+    expect(dashboardSource).not.toContain("Evaluator too strict or lenient");
   });
 });

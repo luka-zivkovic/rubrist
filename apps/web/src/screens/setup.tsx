@@ -84,7 +84,7 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
             nameClassName="font-serif text-[17px] font-semibold tracking-[-0.025em] text-ink"
           />
           <CardTitle className="text-[20px]">What are you evaluating?</CardTitle>
-          <CardDescription>Choose where the first recorded Runs will come from. Rubrist creates the project and a starter Check with your owner account.</CardDescription>
+          <CardDescription>Choose where the first recorded cases will come from. Rubrist creates the project and a starter evaluator with your owner account.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-3" onSubmit={(event) => void submit(event)}>

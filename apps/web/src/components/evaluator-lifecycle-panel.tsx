@@ -186,7 +186,7 @@ export function EvaluatorLifecyclePanel({
         </div>
         <Textarea value={skillDescription} onChange={(event)=>setSkillDescription(event.target.value)} placeholder="Description" />
         <Textarea value={rubric} onChange={(event)=>setRubric(event.target.value)} placeholder="Rubric" />
-        <Textarea className="md:col-span-2" value={prompt} onChange={(event)=>setPrompt(event.target.value)} placeholder="Prompt" />
+        <Textarea className="md:col-span-2" value={prompt} onChange={(event)=>setPrompt(event.target.value)} placeholder="Judge instructions" />
         <Button className="md:col-span-2" onClick={() => void createCandidate()} disabled={working || !frozenBatch || mutableModelAlias(modelId) !== null}>
           {frozenBatch ? "Create candidate and queue regression" : "Freeze an eligible governed batch first"}
         </Button>

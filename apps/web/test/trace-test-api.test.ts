@@ -18,7 +18,7 @@ const input: CreateTraceTestInput = {
   desiredBehavior: "Check eligibility before promising a refund.",
   scenario: "A customer asks for a refund.",
   expectedBehavior: "Check eligibility before promising a refund.",
-  mustDo: ["Check eligibility"],
+  mustDo: ["Evaluator eligibility"],
   mustAvoid: ["Promise a refund"],
   goodExample: { text: "I will check eligibility." },
   badExample: { text: "Your refund is guaranteed." },
@@ -114,7 +114,7 @@ describe("trace-test web API", () => {
       content: {
         scenario: "A customer asks for a refund.",
         expectedBehavior: "Check eligibility.",
-        mustDo: ["Check eligibility"],
+        mustDo: ["Evaluator eligibility"],
         mustAvoid: ["Guarantee a refund"],
         goodExample: "I can check eligibility.",
         badExample: "Your refund is guaranteed.",

@@ -66,7 +66,7 @@ describe("beginner-first hierarchy", () => {
 
     expect(projectCreate.match(/window\.location\.assign\("\/"\)/g)).toHaveLength(2);
     expect(projectCreate).not.toContain("firstRunEditorPath");
-    expect(skillEdit).toContain("Starter Check v${result.version.version} created. Add a Run to see its first Result.");
+    expect(skillEdit).toContain("Starter evaluator v${result.version.version} created. Add a case to see its first assessment.");
     expect(skillEdit).toContain('useState<SkillVersionTimeScope>(firstRun ? "both" : "new")');
     expect(skillEdit).toContain("navigate(firstResultPath(result.version.id, skill.id, skill.criterionId))");
     expect(firstResultState).toContain('run.trigger === "backfill"');
@@ -77,11 +77,11 @@ describe("beginner-first hierarchy", () => {
     expect(firstResult).toContain('evidenceScope: "customer"');
     expect(firstResult).toContain("setRetryNonce((value) => value + 1)");
     expect(firstResult).toContain("Date.now() >= nextEnsureAt.current");
-    expect(firstResult).toContain("Run saved, waiting to enter the evaluation queue");
-    expect(firstResult).toContain("No Result exists yet");
+    expect(firstResult).toContain("Case saved, waiting to enter the evaluation queue");
+    expect(firstResult).toContain("No assessment exists yet");
     expect(firstResult).toContain("ensured.dispatchPending");
-    expect(firstResult).toContain("Your first Result is ready");
-    expect(firstResult).toContain("The first Result could not be produced");
+    expect(firstResult).toContain("Your first assessment is ready");
+    expect(firstResult).toContain("The first assessment could not be produced");
     expect(firstResult).toContain('navigate(dashboard?.viewerRole === "owner" ? "/skill/edit" : "/skill")');
     expect(firstResult).not.toContain("navigate(firstRunEditorPath())");
     expect(firstResult).toContain('aria-live={urgent ? "assertive" : "polite"}');
@@ -89,7 +89,7 @@ describe("beginner-first hierarchy", () => {
     expect(dashboard).toContain("setReceipt(takeSetupReceipt())");
     expect(tracingWelcome).toContain("emphasizeAction={false}");
     expect(benchWelcome).toContain("emphasizeAction={false}");
-    expect(importTrace).toContain("Its Check is queued");
+    expect(importTrace).toContain("Its evaluator is queued");
     expect(importTrace).not.toContain("The skill ran on the case you imported");
   });
 

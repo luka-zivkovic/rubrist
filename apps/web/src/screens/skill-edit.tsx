@@ -123,7 +123,7 @@ export function SkillEditScreen() {
   const [rubric, setRubric] = useState("");
   const [rubricMode, setRubricMode] = useState<"source" | "preview">("source");
   const [prompt, setPrompt] = useState("");
-  // A TypeSafe evaluator's definition is a typed question in place of the guide and prompt.
+  // A TypeSafe evaluator's definition is a typed question in place of the rubric and judge instructions.
   const [typedDraft, setTypedDraft] = useState<TypedQuestionDraft>(EMPTY_TYPED_QUESTION_DRAFT);
   const [provider, setProvider] = useState<JudgeProviderId>("mock");
   const typed = provider === "typesafe";
@@ -801,13 +801,13 @@ export function SkillEditScreen() {
             ? "Back to onboarding"
             : evidenceCount === 0
               ? "Finish for now"
-              : "See first Result"
-          : "View skill versions"}
+              : "See first assessment"
+          : "View evaluator versions"}
         onDone={() => {
           if (firstRun && result.regressionRun.status !== "error" && result.regressionRun.status !== "blocked") {
             clearOnboardingCheckDraft(skill.projectId, skill.id);
             if (evidenceCount === 0) {
-              markSetupReceipt(`Starter Check v${result.version.version} created. Add a Run to see its first Result.`);
+              markSetupReceipt(`Starter evaluator v${result.version.version} created. Add a case to see its first assessment.`);
               navigate("/");
             } else {
               navigate(firstResultPath(result.version.id, skill.id, skill.criterionId));
@@ -837,18 +837,18 @@ export function SkillEditScreen() {
 
   if (firstRun) {
     if (!dashboardReady) {
-      return <div className="fadeUp"><SectionHead eyebrow="Set up your first Check" title="Loading project" /></div>;
+      return <div className="fadeUp"><SectionHead eyebrow="Set up your first evaluator" title="Loading project" /></div>;
     }
     if (dashboard.viewerRole !== "owner") {
       return (
         <div className="fadeUp mx-auto max-w-[760px]">
           <SectionHead
-            eyebrow="Set up your first Check"
-            title="An owner needs to create this Check"
-            sub="You can inspect the current starter Check, Runs, and Results. Creating or replacing the project's Check changes shared evaluation behavior, so this setup step is owner-only."
+            eyebrow="Set up your first evaluator"
+            title="An owner needs to create this evaluator"
+            sub="You can inspect the current starter evaluator, cases, and assessments. Creating or replacing the project's evaluator changes shared evaluation behavior, so this setup step is owner-only."
           />
           <Button variant="outline" onClick={() => navigate("/skill")}>
-            View the current Check
+            View the current evaluator
           </Button>
         </div>
       );

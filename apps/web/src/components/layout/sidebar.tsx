@@ -51,12 +51,12 @@ function workspaceNavigation(bench: boolean): WorkspaceNavGroup[] {
     { label: "Evidence & review", items: [
       ...(!bench ? [{ to: "/traces", label: "Live traces", icon: ListChecks }] : []),
       { to: "/datasets", label: bench ? "Examples & runs" : "Saved datasets", icon: Database },
-      { to: "/exceptions", label: "Needs a human · ungoverned", icon: Flag, withBadge: true },
-      { to: "/review-queues", label: "Review sessions · ungoverned", icon: Inbox }
+      { to: "/exceptions", label: "Review queue · ungoverned", icon: Flag, withBadge: true },
+      { to: "/review-queues", label: "Saved review queues · ungoverned", icon: Inbox }
     ] },
     { label: "Evaluator work", items: [
       { to: "/criteria", label: "Criteria", icon: Layers3 },
-      { to: "/skill", label: "Review guide", icon: FileCog },
+      { to: "/skill", label: "Evaluator", icon: FileCog },
       { to: "/golden", label: "Golden set", icon: Star }
     ] },
     { label: "Governed lifecycle", items: [

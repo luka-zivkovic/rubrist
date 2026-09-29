@@ -28,7 +28,7 @@ export function HumanTruthScreen() {
         eyebrow="Governed human truth · demo mode"
         title="Governed human truth needs authenticated reviewers."
         description="Independent assignments, blind views, immutable instructions, and adjudication provenance require persistent reviewer identities."
-        demoAlternative="The demo includes ungoverned legacy review examples under Needs a human and Reliability; they never become governed truth."
+        demoAlternative="The demo includes ungoverned legacy review examples under Review queue and Reliability; they never become governed truth."
       />
     );
   }
@@ -99,7 +99,7 @@ function PersistentHumanTruthScreen() {
       <SectionHead
         eyebrow="Governed human truth · append-only"
         title="Human truth"
-        sub="Set up a review where people label the same frozen evidence independently, without seeing the evaluator's answer. Rubrist preserves the instructions, assignments, disagreements, and final rulings. Ordinary review queues remain ungoverned."
+        sub="Set up a review where people label the same frozen evidence independently, without seeing the evaluator's answer. Rubrist preserves the instructions, assignments, disagreements, and final human labels. Ordinary review queues remain ungoverned."
         right={
           <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCcw /> Refresh

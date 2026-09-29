@@ -96,7 +96,7 @@ export function SettingsScreen() {
       </section>
       <section id="settings-connections" aria-labelledby="settings-connections-title" className="scroll-mt-36 sm:scroll-mt-24 space-y-4">
         <h2 id="settings-connections-title" className="font-serif text-[20px] font-medium">Connections</h2>
-        <p className="text-[12.5px] text-ink-3">Manage credentials here. Configure trace sources in <Link className="underline" to={contextualHref("/integrations", location.search)}>Integrations</Link>; choose models and evaluator settings in <Link className="underline" to={contextualHref("/skill", location.search)}>Review guide</Link>.</p>
+        <p className="text-[12.5px] text-ink-3">Manage credentials here. Configure trace sources in <Link className="underline" to={contextualHref("/integrations", location.search)}>Integrations</Link>; choose models and evaluator settings in <Link className="underline" to={contextualHref("/skill", location.search)}>Rubric</Link>.</p>
         <ProviderKeysCard canEdit={canEdit} reportState={reportState} />
         <ApiKeysCard canEdit={canEdit} reportState={reportState} />
       </section>

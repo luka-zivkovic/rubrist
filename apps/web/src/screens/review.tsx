@@ -107,7 +107,7 @@ function ReviewSession() {
   return (
     <ReviewPlayer
       eyebrow="Review"
-      name={categoryFilter ? `Exceptions · ${categoryFilter.toLowerCase()}` : "Exceptions waiting"}
+      name={categoryFilter ? `Review queue · ${categoryFilter.toLowerCase()}` : "Review queue waiting"}
       items={items}
       onExit={exitToQueue}
       onItemChanged={(caseId, kind) => setDecisions((prev) => ({ ...prev, [caseId]: kind }))}
@@ -156,13 +156,13 @@ function DoneView({
 
   return (
     <div className="fadeUp max-w-[720px]">
-      <Eyebrow>Review session summary</Eyebrow>
+      <Eyebrow>Review summary</Eyebrow>
       <h1 className="mt-2 font-serif text-[30px] font-medium leading-[1.08] tracking-[-0.02em]">
         {Object.keys(decisions).length} of {total} cases reviewed this session
         {categoryFilter ? ` in ${categoryFilter.toLowerCase()}` : ""}.
       </h1>
       <div className="mt-3 max-w-[60ch] text-[14px] leading-[1.55] text-ink-3">
-        {total - Object.keys(decisions).length} cases were not reviewed in this session. Saved rulings remain on their cases.
+        {total - Object.keys(decisions).length} cases were not reviewed in this session. Saved human labels remain on their cases.
         {counts.promote
           ? ` ${counts.promote} promoted ${counts.promote === 1 ? "case is" : "cases are"} now part of the golden set and will regression-test every future skill edit.`
           : ""}

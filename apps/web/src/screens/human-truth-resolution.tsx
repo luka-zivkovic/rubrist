@@ -56,7 +56,7 @@ export function HumanTruthResolutionScreen() {
           <h1 className="mt-2 font-serif text-[26px] font-medium tracking-[-0.025em]">Alignment and adjudication</h1>
           <p className="mt-2 max-w-[72ch] text-[12.5px] leading-6 text-ink-3">
             The original reviewer labels remain unchanged. Use alignment to record discussion, or
-            adjudication to add a final ruling for the active set of labels.
+            adjudication to add a final human label for the active set of labels.
           </p>
         </div>
         <div className="flex rounded-sm border border-rule bg-paper-2 p-0.5">

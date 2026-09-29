@@ -21,8 +21,8 @@ export function DashboardBenchWelcome({ dashboard, canPairAgent }: DashboardBenc
       <FirstProjectKeyCard project={project} className="mb-5" />
       <SectionHead
         eyebrow="New project · no runs yet"
-        title="Get your first Check result"
-        sub="Start with one example of what your AI received and produced. Choose one thing that matters, then Rubrist will apply that Check to the recorded run."
+        title="Get your first evaluator result"
+        sub="Start with one example of what your AI received and produced. Choose one thing that matters, then Rubrist will apply that evaluator to the recorded run."
       />
 
       <div className="mt-2 grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
@@ -33,10 +33,10 @@ export function DashboardBenchWelcome({ dashboard, canPairAgent }: DashboardBenc
 
           <Card className="bg-paper-2">
             <CardContent className="py-4">
-              <Eyebrow>What a Result means</Eyebrow>
+              <Eyebrow>What an assessment means</Eyebrow>
               <div className="mt-2 font-serif text-[14.5px] leading-[1.6] tracking-[-0.005em] text-ink-2">
-                A Result is the Check's opinion about one recorded run. It is not a human decision,
-                proof of accuracy, or permission to ship. You can review it and improve the Check later.
+                A assessment is the evaluator's opinion about one recorded run. It is not a human decision,
+                proof of accuracy, or permission to ship. You can review it and improve the evaluator later.
               </div>
             </CardContent>
           </Card>

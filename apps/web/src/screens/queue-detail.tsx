@@ -110,7 +110,7 @@ export function QueueDetailScreen() {
     );
   }
 
-  return <><div role="status">{error ? <Card className="mb-4"><CardContent>Saved rulings are preserved, but queue progress could not refresh. <Button variant="ghost" onClick={() => void load()}>Retry queue progress</Button></CardContent></Card> : null}</div><QueueDetailBody key={detail.queue.id} detail={detail} reload={load} /></>;
+  return <><div role="status">{error ? <Card className="mb-4"><CardContent>Saved human labels are preserved, but queue progress could not refresh. <Button variant="ghost" onClick={() => void load()}>Retry queue progress</Button></CardContent></Card> : null}</div><QueueDetailBody key={detail.queue.id} detail={detail} reload={load} /></>;
 }
 
 function QueueDetailBody({ detail, reload }: { detail: ReviewQueueDetail; reload: () => void }) {
@@ -180,15 +180,15 @@ function DoneView({
   return (
     <div className="fadeUp max-w-[1760px]">
       <SectionHead
-        eyebrow={completed === items.length ? "Queue complete" : "Review session summary"}
+        eyebrow={completed === items.length ? "Queue complete" : "Review summary"}
         title={queue.name}
-        sub={`${completed} of ${items.length} cases have a recorded ruling. Each ruling remains attached to its case and can be reopened from Traces.`}
+        sub={`${completed} of ${items.length} cases have a recorded human label. Each human label remains attached to its case and can be reopened from Traces.`}
       />
       <Card className="mb-6">
         <CardHeader>
           <div>
             <CardTitle>Summary</CardTitle>
-            <CardDescription>Saved progress and recorded case rulings.</CardDescription>
+            <CardDescription>Saved progress and recorded case human labels.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -199,8 +199,8 @@ function DoneView({
               <Chip variant="outline">{items.length - completed} pending</Chip>
             ) : null}
           </div>
-          <MarginNote tone="neutral" who="Rulings are preserved">
-            Closing the queue does not change or remove its rulings. Reopen it at any time to see
+          <MarginNote tone="neutral" who="Human labels are preserved">
+            Closing the queue does not change or remove its human labels. Reopen it at any time to see
             which reviewer recorded each decision.
           </MarginNote>
           <div className="flex flex-wrap gap-2">

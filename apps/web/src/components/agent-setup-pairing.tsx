@@ -121,7 +121,7 @@ export function AgentSetupPairingCard({
           </div>
         </div>
         <CardDescription>
-          First ask Claude, Codex, or another agent to inspect your project and propose one plain-language Check.
+          First ask Claude, Codex, or another agent to inspect your project and propose one plain-language evaluator.
           Create the private 15-minute connection only after you choose Finish setup.
         </CardDescription>
       </CardHeader>
@@ -149,7 +149,7 @@ export function AgentSetupPairingCard({
               <Check className="size-4" /> Agent setup completed
             </div>
             <p className="mt-1 text-[12px] leading-[1.55] text-ink-3">
-              The connection is closed. Inspect the new Starter · unvalidated Check and its first Result when a real Run was submitted.
+              The connection is closed. Inspect the new Starter · unvalidated evaluator and its first assessment when a real case was submitted.
             </p>
             {onContinue ? <Button variant={emphasizeAction ? "primary" : "default"} className="mt-3" onClick={onContinue}>Open the project</Button> : null}
           </div>

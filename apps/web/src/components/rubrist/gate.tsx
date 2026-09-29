@@ -98,9 +98,9 @@ function GateProgress({ goldenSize }: { goldenSize: number }) {
       </div>
       <div className="mt-1 text-[10.5px] text-ink-4">
         {goldenSize === 0
-          ? "The first human-promoted case enables evaluator regression checks."
+          ? "The first human-promoted case enables evaluator reference checks."
           : goldenSize < recommended
-            ? `Regression checks enabled · promote ${recommended - goldenSize} more for the recommended starting set.`
+            ? `Reference checks enabled · promote ${recommended - goldenSize} more for the recommended starting set.`
             : "Recommended starting set reached · keep adding evaluator boundary cases."}
       </div>
     </div>
@@ -116,7 +116,7 @@ export function GateStrip({ state, goldenSize, mode, onStartEvidence, onOpenExce
         className={className}
         body={
           <>
-            <b>Build evaluator-version regression evidence.</b>
+            <b>Build evaluator reference-check evidence.</b>
             <ol className="mt-2 grid grid-cols-3 gap-2 text-[11.5px] leading-[1.45]">
               <li className="rounded-sm bg-paper-2 px-2.5 py-2">
                 <b>1.</b> {bench ? "Add labeled examples so the judge produces verdicts." : "Submit runs so the judge produces verdicts."}
@@ -125,7 +125,7 @@ export function GateStrip({ state, goldenSize, mode, onStartEvidence, onOpenExce
                 <b>2.</b> {bench ? "Review disagreements and adjudicate them with human labels." : "Adjudicate exceptions with human labels."}
               </li>
               <li className="rounded-sm bg-paper-2 px-2.5 py-2">
-                <b>3.</b> Promote agreed cases — the first promotion enables regression checks; aim for {GOLDEN_GATE_RECOMMENDED}+.
+                <b>3.</b> Promote agreed cases — the first promotion enables reference checks; aim for {GOLDEN_GATE_RECOMMENDED}+.
               </li>
             </ol>
             <GateProgress goldenSize={goldenSize} />
@@ -146,7 +146,7 @@ export function GateStrip({ state, goldenSize, mode, onStartEvidence, onOpenExce
         className={className}
         body={
           <>
-            <b>Evaluator regression check inactive.</b> There are no promoted reference cases yet, so a new
+            <b>Evaluator reference check inactive.</b> There are no promoted reference cases yet, so a new
             evaluator version has no known-failure comparison. Promote your first agreed case to enable the check —
             aim for {GOLDEN_GATE_RECOMMENDED}+ before treating the result as strong evidence.
             <GateProgress goldenSize={goldenSize} />
@@ -166,8 +166,8 @@ export function GateStrip({ state, goldenSize, mode, onStartEvidence, onOpenExce
       className={className}
       body={
         <>
-          <b>Evaluator regression check enabled.</b> Saving re-judges all {goldenSize} promoted reference cases
-          and records the outcome. Regressions require review or a recorded override reason.
+          <b>Evaluator reference check enabled.</b> Saving re-judges all {goldenSize} promoted reference cases
+          and records the outcome. Reference disagreements require review or a recorded override reason.
           Check Version history for the current default; a reference check does not establish general accuracy.
           <GateProgress goldenSize={goldenSize} />
         </>

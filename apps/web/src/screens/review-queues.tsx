@@ -47,7 +47,7 @@ export function ReviewQueuesScreen() {
     <div className="fadeUp max-w-[1760px]">
       <SectionHead
         eyebrow={`Ungoverned legacy · Review queues · ${open.length} open`}
-        title="Review queues"
+        title="Saved review queues"
         sub="Save ordinary cases in a named list and work through them with the legacy review flow. Reviewers can see existing evaluator evidence, so these queues do not create independent, blind, representative, or governed human truth."
         right={
           <div className="flex items-center gap-2">
@@ -116,8 +116,8 @@ export function ReviewQueuesScreen() {
         <CardContent className="py-4">
           <Eyebrow>Evidence class · ungoverned_legacy</Eyebrow>
           <div className="mt-2 font-serif text-[14px] leading-[1.55] tracking-[-0.005em] text-ink-2">
-            A queue is a saved list of ordinary cases from the same review flow as Exceptions.
-            Closing it does not remove any rulings; they remain attached to each case and searchable
+            A queue is a saved list of ordinary cases from the same review flow as Review queue.
+            Closing it does not remove any human labels; they remain attached to each case and searchable
             in Traces. Use Human Truth when you need fixed instructions, independent assignments,
             and governed review evidence.
           </div>

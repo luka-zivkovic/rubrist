@@ -116,8 +116,8 @@ function ImportTraceModal({ onClose }: { onClose: () => void }) {
             </CardTitle>
             <CardDescription>
               {result
-                ? "The recorded Run now appears in Traces. Its Check is queued; a Result or exception appears after evaluation finishes."
-                : "For one-off cases, dry runs, or workspaces without an upstream tracer. Rubrist queues the current Check after import."}
+                ? "The recorded case now appears in Traces. Its evaluator is queued; an assessment or exception appears after evaluation finishes."
+                : "For one-off cases, dry runs, or workspaces without an upstream tracer. Rubrist queues the current evaluator after import."}
             </CardDescription>
           </div>
           <button
@@ -187,7 +187,7 @@ function ImportTraceModal({ onClose }: { onClose: () => void }) {
 
             <div className="text-[11.5px] leading-[1.55] text-ink-3">
               The skill runs against this case once, locally to your workspace. The verdict is
-              stored on the new trace and surfaces in Traces & Exceptions. Manually-imported
+              stored on the new trace and surfaces in Traces & Review queue. Manually-imported
               cases do not sync back to any provider.
             </div>
 
@@ -201,7 +201,7 @@ function ImportTraceModal({ onClose }: { onClose: () => void }) {
               <Button variant="primary" onClick={() => void submit()} disabled={!canSubmit}>
                 {submitting ? "Running skill…" : (
                   <>
-                    Run skill on this trace <ArrowRight />
+                    Run evaluator on this case <ArrowRight />
                   </>
                 )}
               </Button>
@@ -285,7 +285,7 @@ function ImportDone({
         Trace <span className="font-mono">{result.rawTraceId}</span> · source{" "}
         <span className="font-mono">{result.sourceTraceId}</span>.{" "}
         {result.queued
-          ? "The skill will judge it shortly; the verdict will appear in Traces. If it's flagged as fail or ambiguous it also lands on the Exceptions queue."
+          ? "The evaluator will assess it shortly; the assessment will appear in Traces. If it's flagged as fail or ambiguous it also lands on the review queue."
           : "No judge job was queued — the case is stored but unjudged."}{" "}
         Manually-imported cases don't sync back to any provider.
       </MarginNote>
@@ -294,7 +294,7 @@ function ImportDone({
           View in Traces
         </Button>
         <Button variant="default" onClick={onOpenExceptions}>
-          Open Exceptions
+          Open Review queue
         </Button>
         <div className="flex-1" />
         <Button variant="ghost" onClick={onImportAnother}>

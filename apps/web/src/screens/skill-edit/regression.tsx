@@ -47,7 +47,7 @@ export function GovernedEvaluatorEditBoundary({
       <SectionHead
         eyebrow="Governed evaluator lifecycle"
         title={`Create the next ${skill.name} candidate from governed evidence`}
-        sub="This evaluator came from an Analyze promotion. Its successors require an eligible frozen governed batch, an exact truth revision, calibration, and a complete regression receipt."
+        sub="This evaluator came from an Analyze promotion. Its successors require an eligible frozen governed batch, an exact truth revision, calibration, and a complete reference-check receipt."
       />
       <Card>
         <CardContent className="space-y-4 py-5">
@@ -100,9 +100,9 @@ export function RegressionRunning({
     return (
       <div className="fadeUp mx-auto max-w-[900px]">
         <SectionHead
-          eyebrow="First setup · Check saved"
-          title="Creating your first Result"
-          sub="The quality question and Review guide are now an immutable Check. Rubrist is finishing its saved setup step before applying it to a recorded Run."
+          eyebrow="First setup · evaluator saved"
+          title="Creating your first assessment"
+          sub="The quality question and Rubric are now an immutable evaluator. Rubrist is finishing its saved setup step before applying it to a recorded case."
         />
         <Card className="mb-4" role="status" aria-live="polite">
           <CardHeader>
@@ -111,7 +111,7 @@ export function RegressionRunning({
                 <CardTitle>{criterionVersion?.name ?? skill.name}</CardTitle>
                 <Chip>Starter · unvalidated</Chip>
               </div>
-              <CardDescription>The exact quality question bound to Check v{version.version}</CardDescription>
+              <CardDescription>The exact quality question bound to evaluate v{version.version}</CardDescription>
             </div>
             {statusIcon}
           </CardHeader>
@@ -120,7 +120,7 @@ export function RegressionRunning({
               {criterionVersion?.definition ?? skill.description}
             </p>
             <p className="mt-4 text-[12.5px] leading-5 text-ink-2">
-              This saved step does not validate the Check. It only records the version and checks any protected Runs already in the project.
+              This saved step does not validate the evaluator. It only records the version and checks any protected cases already in the project.
             </p>
           </CardContent>
         </Card>
@@ -129,8 +129,8 @@ export function RegressionRunning({
           <MarginNote tone="signal" who="Status refresh" className="mb-4">
             {pollError.message}{" "}
             {pollError.retryable
-              ? "The Check is still saved; this page will keep checking."
-              : "The Check is still saved. Open the saved version to follow it."}
+              ? "The evaluator is still saved; this page will keep checking."
+              : "The evaluator is still saved. Open the saved version to follow it."}
           </MarginNote>
         ) : null}
         <div className="flex justify-end">
@@ -166,7 +166,7 @@ export function RegressionRunning({
           <span className="mt-0.5 shrink-0">{statusIcon}</span>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium text-ink">
-              {stopped ? "Regression check status unavailable" : "Regression check running"}
+              {stopped ? "Reference check status unavailable" : "Reference check running"}
             </div>
             <p className="mt-1 max-w-[72ch] text-[12px] leading-5 text-ink-2">
               Rubrist records the full outcome only after every case in the pinned revision finishes.
@@ -260,11 +260,11 @@ export function RegressionResult({
     return (
       <div className="fadeUp mx-auto max-w-[900px]">
         <SectionHead
-          eyebrow={couldNotFinish ? "First setup · Check needs attention" : "First setup · Check ready"}
-          title={couldNotFinish ? "The saved Check could not finish setup" : "Your first Check is ready"}
+          eyebrow={couldNotFinish ? "First setup · evaluator needs attention" : "First setup · evaluator ready"}
+          title={couldNotFinish ? "The saved evaluator could not finish setup" : "Your first evaluator is ready"}
           sub={couldNotFinish
             ? (run.error ?? "A protected Run disagreed with this first Check. Refine it before continuing.")
-            : "The exact quality question and Review guide are saved. The next step is to see what this Check says about a real recorded Run."}
+            : "The exact quality question and Rubric are saved. The next step is to see what this evaluator says about a real recorded case."}
         />
         <Card className="mb-4">
           <CardHeader>
@@ -273,7 +273,7 @@ export function RegressionResult({
                 <CardTitle>{criterionVersion?.name ?? skill.name}</CardTitle>
                 <Chip>Starter · unvalidated</Chip>
               </div>
-              <CardDescription>The quality question bound to Check v{result.version.version}</CardDescription>
+              <CardDescription>The quality question bound to evaluate v{result.version.version}</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -281,7 +281,7 @@ export function RegressionResult({
               {criterionVersion?.definition ?? skill.description}
             </p>
             <p className="mt-4 text-[12.5px] leading-5 text-ink-2">
-              “Ready” means the Check can run. It has not been validated against governed human judgment, calibrated, or approved for a release decision.
+              “Ready” means the evaluator can run. It has not been validated against governed human judgment, calibrated, or approved for a release decision.
             </p>
           </CardContent>
         </Card>
@@ -289,7 +289,7 @@ export function RegressionResult({
         <div className="flex flex-wrap items-center justify-end gap-2">
           {couldNotFinish ? (
             <Button variant="outline" onClick={onBackToEdit} disabled={submitting}>
-              <ArrowLeft /> Refine the Check
+              <ArrowLeft /> Refine the evaluator
             </Button>
           ) : null}
           <Button variant="primary" onClick={onDone} disabled={submitting || blocked}>
@@ -305,9 +305,9 @@ export function RegressionResult({
       <SectionHead
         eyebrow={
           failed
-            ? "Evaluator edit · regression check failed"
+            ? "Evaluator edit · reference check failed"
             : blocked
-            ? "Evaluator edit · regression found"
+            ? "Evaluator edit · reference disagreements"
             : overridden
               ? "Evaluator edit · override recorded"
               : uncompared ? "Evaluator edit · no reference comparison" : "Evaluator edit · reference check passed"
@@ -316,7 +316,7 @@ export function RegressionResult({
           failed
             ? `v${result.version.version} was recorded, but its check did not finish`
             : blocked
-            ? `${run.regressed} pinned reference case${run.regressed === 1 ? "" : "s"} would regress`
+            ? `${run.regressed} pinned reference case${run.regressed === 1 ? "" : "s"} disagree with their reference labels`
             : overridden
               ? `v${result.version.version} recorded with an override`
               : uncompared
@@ -325,7 +325,7 @@ export function RegressionResult({
         }
         sub={
           failed
-            ? run.error ?? "The provider or worker failed before a complete regression result was available."
+            ? run.error ?? "The provider or worker failed before a complete reference comparison was available."
             : blocked
                 ? "Rubrist is holding this evaluator version out of current selection until you record an override reason or revise the edit."
                 : overridden
@@ -349,7 +349,7 @@ export function RegressionResult({
           <CardContent className="flex items-start gap-3 py-4">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-signal" />
             <div className="flex-1">
-              <Eyebrow tone="signal">No complete regression result</Eyebrow>
+              <Eyebrow tone="signal">No complete reference comparison</Eyebrow>
               <div className="mt-1 text-[13px] leading-[1.5] text-ink-2">
                 This version remains in history, but a failed or partial check cannot count as a
                 pass. Review the operational error, then create a corrected version or retry from the editor.
@@ -362,9 +362,9 @@ export function RegressionResult({
           <CardContent className="flex items-start gap-3 py-4">
             <ShieldAlert className="mt-0.5 size-4 shrink-0 text-signal" />
             <div className="flex-1">
-              <Eyebrow tone="signal">Regression found · review required</Eyebrow>
+              <Eyebrow tone="signal">Reference disagreements · review required</Eyebrow>
               <div className="mt-1 text-[13px] leading-[1.5] text-ink-2">
-                This edit flips {run.regressed} previously-agreed case{run.regressed === 1 ? "" : "s"} in
+                This version disagrees with {run.regressed} golden case{run.regressed === 1 ? "" : "s"} in
                 the pinned reference revision. Either go back and revert, or record why the
                 evaluator change is acceptable.
               </div>
@@ -378,7 +378,7 @@ export function RegressionResult({
           <KPI label="Cases re-judged" num={run.compared} foot="pinned reference revision" />
           <KPI label="Agreed" num={agreed} delta="kept good or kept bad" deltaKind="default" />
           <KPI
-            label="Regressed"
+            label="Reference disagreements"
             num={run.regressed}
             delta={run.regressed > 0 ? regressionDirectionSummary(run.cases) : "none"}
             deltaKind={run.regressed > 0 ? "signal" : "default"}
@@ -404,7 +404,7 @@ export function RegressionResult({
           </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-y-1 py-4 text-[13px] sm:grid-cols-[180px_1fr] sm:gap-y-2">
-          <div className="text-ink-3">Skill</div>
+          <div className="text-ink-3">Evaluator</div>
           <div>{skill.name}</div>
           <div className="text-ink-3">Version</div>
           <div className="font-mono">{result.version.version}</div>
@@ -418,13 +418,13 @@ export function RegressionResult({
               ? "—"
               : `${Math.round(result.version.goldenSetAgreement * 100)}%`}
           </div>
-          <div className="text-ink-3">Evaluator regression</div>
+          <div className="text-ink-3">Reference check</div>
           <div className={cn("font-medium", blocked || failed ? "text-signal" : "text-ink")}>
             {failed
-              ? "Check failed — no pass recorded"
+              ? "Evaluator failed — no pass recorded"
               : blocked
-                ? "Regression found — review required"
-                : overridden ? "Override recorded" : uncompared ? "No reference cases compared" : "No regression found on compared cases"}
+                ? "Reference disagreements — review required"
+                : overridden ? "Override recorded" : uncompared ? "No reference cases compared" : "No reference disagreements on compared cases"}
           </div>
         </CardContent>
       </Card>
@@ -450,7 +450,7 @@ export function RegressionResult({
               <CardTitle>Override with reason</CardTitle>
               <CardDescription>
                 The blocked version stays immutable. This creates another version with the same
-                edit and stores your reason with its overridden regression receipt.
+                edit and stores your reason with its overridden reference-check receipt.
               </CardDescription>
             </div>
           </CardHeader>
@@ -462,7 +462,7 @@ export function RegressionResult({
               id="skill-regression-override-reason"
               value={overrideReason}
               onChange={(e) => onOverrideReasonChange(e.target.value)}
-              placeholder="Why is this regression acceptable? (e.g. the regressed cases reflect an old tone policy we're intentionally changing — they'll be retired this week.)"
+              placeholder="Why are these reference disagreements acceptable? Explain the intended change and which reference labels need review."
               className="min-h-[120px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-signal"
             />
             <div className="flex flex-wrap items-center gap-2">

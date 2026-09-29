@@ -163,7 +163,7 @@ export function DashboardScreen() {
         eyebrow="Overview"
         title="Overview"
         sub={bench
-          ? "See what is ready, what still needs an example or Run, and the next action for this Check."
+          ? "See what is ready, what still needs an example or case, and the next action for this evaluator."
           : "See what is set up, what needs a human, and the next action for this criterion before opening detailed evidence."}
         when={`Data as of ${new Date(project.updatedAt).toLocaleString(undefined, {
           month: "short",
@@ -188,7 +188,7 @@ export function DashboardScreen() {
       <Card className="mb-7">
         <CardHeader>
           <div>
-            <CardTitle>Exceptions waiting</CardTitle>
+            <CardTitle>Review queue waiting</CardTitle>
             <CardDescription>Showing {Math.min(exceptions.length, 5)} of {exceptionsTotal ?? "an unknown number of"} waiting cases. The review queue loads up to 50 at a time.</CardDescription>
           </div>
           <div className="flex-1" />
@@ -201,7 +201,7 @@ export function DashboardScreen() {
             <tr role="row">
               <th scope="col" role="columnheader" style={{ width: 130 }}>When</th>
               <th scope="col" role="columnheader">Case</th>
-              <th scope="col" role="columnheader" style={{ width: 150 }}>Skill said</th>
+              <th scope="col" role="columnheader" style={{ width: 150 }}>Assessment</th>
               <th scope="col" role="columnheader">Reason</th>
             </tr>
           </thead>
@@ -232,7 +232,7 @@ export function DashboardScreen() {
                     <InlineDetails label="Trace ID">{ex.traceId}</InlineDetails>
                   </div>
                 </td>
-                <td role="cell" data-label="Skill said">
+                <td role="cell" data-label="Assessment">
                   <VerdictChip verdict={ex.verdict} />
                 </td>
                 <td role="cell" data-label="Reason" className="text-ink-3"><span className="line-clamp-2">{ex.reason || "No explanation recorded."}</span></td>
@@ -244,7 +244,7 @@ export function DashboardScreen() {
 
       ) : null}
       <details className="mb-7 rounded-sm border border-rule-soft px-4 py-3">
-        <summary className="cursor-pointer text-sm font-medium">Setup progress and first Result</summary>
+        <summary className="cursor-pointer text-sm font-medium">Setup progress and first assessment</summary>
         <div className="mt-4">
       {bench ? (
         <FirstRunSetupLedger dashboard={dashboard} className="mb-7" />
@@ -281,7 +281,7 @@ export function DashboardScreen() {
         />
         {bench ? (
           <KPI
-            label="Protected examples"
+            label="Golden set"
             num={goldenSetSize}
             delta={goldenSetSize === 0 ? "gate advisory only" : "gate armed"}
             deltaKind={goldenSetSize === 0 ? "signal" : "default"}
@@ -315,9 +315,9 @@ export function DashboardScreen() {
       <Card className="mb-7">
         <CardHeader>
           <div>
-          <CardTitle>Result distribution</CardTitle>
+          <CardTitle>Assessment distribution</CardTitle>
             <CardDescription>
-              The latest Check result for each recorded case. Earlier results and repeated
+              The latest evaluator result for each recorded case. Earlier results and repeated
               runs are excluded.
             </CardDescription>
           </div>
@@ -342,9 +342,9 @@ export function DashboardScreen() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Check categories</CardTitle>
+              <CardTitle>Evaluator categories</CardTitle>
               <CardDescription>
-                Exact failure categories supplied by the Check, counted within the loaded cases. They filter those cases; they do not imply similarity.
+                Exact failure categories supplied by the evaluator, counted within the loaded cases. They filter those cases; they do not imply similarity.
               </CardDescription>
             </div>
             <div className="flex-1" />
@@ -389,7 +389,7 @@ export function DashboardScreen() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>{bench ? "Skill on the bench" : "Skill in production"}</CardTitle>
+              <CardTitle>{bench ? "Evaluator on the bench" : "Evaluator in production"}</CardTitle>
               <CardDescription>
                 {bench ? "The artifact judging your examples." : "The artifact judging your traces."}
               </CardDescription>
@@ -438,7 +438,7 @@ export function DashboardScreen() {
               </div>
             </div>
             <Button variant="default" className="mt-2 self-start" onClick={() => navigate(contextualHref("/skill", location.search))}>
-              Open Check <ArrowRight />
+              Open evaluator <ArrowRight />
             </Button>
           </CardContent>
         </Card>

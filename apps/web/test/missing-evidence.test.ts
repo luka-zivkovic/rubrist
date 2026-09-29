@@ -52,7 +52,7 @@ describe("missing evidence never reads as a result", () => {
       message: "Rubrist returned a response this page couldn't read.",
       retryable: false
     });
-    expect(loadFailure(new ApiError("Skill request failed: 503", 503))).toEqual({ message: "Skill request failed: 503", retryable: true });
+    expect(loadFailure(new ApiError("Evaluator request failed: 503", 503))).toEqual({ message: "Evaluator request failed: 503", retryable: true });
     expect(loadFailure(new ApiError("Request timed out", 408)).retryable).toBe(true);
     expect(loadFailure(new ApiError("Too many requests", 429)).retryable).toBe(true);
     expect(loadFailure(new ApiError("No evaluator exists for this criterion", 404)).retryable).toBe(false);
@@ -79,7 +79,7 @@ describe("missing evidence never reads as a result", () => {
     const retryable = renderToStaticMarkup(createElement(PageLoadError, {
       eyebrow: "Judge card",
       title: "Couldn't load this version",
-      failure: { message: "Skill versions request failed: 500", retryable: true },
+      failure: { message: "Evaluator versions request failed: 500", retryable: true },
       onRetry: () => undefined,
       back
     }));
@@ -91,7 +91,7 @@ describe("missing evidence never reads as a result", () => {
     }));
 
     expect(retryable).toContain("Couldn&#x27;t load this version");
-    expect(retryable).toContain("Skill versions request failed: 500");
+    expect(retryable).toContain("Evaluator versions request failed: 500");
     expect(retryable).toContain("Retry");
     expect(retryable).toContain("Back to versions");
     expect(refused).toContain("No evaluator exists for this criterion");
@@ -160,16 +160,16 @@ describe("missing evidence never reads as a result", () => {
       }));
 
     const retrying = running({ message: "Regression run request failed: 503", retryable: true });
-    const stopped = running({ message: "Skill version not found", retryable: false });
+    const stopped = running({ message: "Evaluator version not found", retryable: false });
 
     expect(retrying).toContain("this page will keep retrying");
-    expect(stopped).toContain("Skill version not found");
+    expect(stopped).toContain("Evaluator version not found");
     expect(stopped).toContain("Open Version history to follow it");
     expect(stopped).not.toContain("keep retrying");
     // The page no longer follows the check, so it doesn't claim it's running.
-    expect(retrying).toContain("Regression check running");
+    expect(retrying).toContain("Reference check running");
     expect(retrying).toContain("animate-spin");
-    expect(stopped).toContain("Regression check status unavailable");
+    expect(stopped).toContain("Reference check status unavailable");
     expect(stopped).not.toContain("animate-spin");
   });
 

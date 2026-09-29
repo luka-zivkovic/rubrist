@@ -21,7 +21,7 @@ export function reliabilityHeroProjection(audit: ConvergenceAudit): ReliabilityH
       agreementPercent: null,
       agreementSentence: "No recorded legacy adjudications are available for this evaluator version yet.",
       coverageSentence: "0 adjudicated cases are available to compare.",
-      sampleCaveat: "Record rulings from exact exception traces before reading this as an agreement diagnostic.",
+      sampleCaveat: "Record human labels from exact exception traces before reading this as an agreement diagnostic.",
       nextDisagreementCaseId: null
     };
   }
@@ -31,7 +31,7 @@ export function reliabilityHeroProjection(audit: ConvergenceAudit): ReliabilityH
       agreementPercent: null,
       agreementSentence: `This evaluator version has not judged any of the ${audit.adjudicatedTotal} recorded legacy adjudication${audit.adjudicatedTotal === 1 ? "" : "s"}.`,
       coverageSentence: `0 of ${audit.adjudicatedTotal} adjudicated cases were covered by this version.`,
-      sampleCaveat: "Re-run those exact cases with this version before comparing its output with the recorded rulings.",
+      sampleCaveat: "Re-run those exact cases with this version before comparing its output with the recorded human labels.",
       nextDisagreementCaseId: null
     };
   }
@@ -77,11 +77,11 @@ export function reliabilityHeroAction(
 export function convergenceCaseComparisonLabel(item: ConvergenceAuditCase): string {
   if (item.beforeLabel === null) {
     return item.afterLabel === item.adjudicatedLabel
-      ? "No prior judgment; this version matches the recorded ruling"
-      : "No prior judgment; this version differs from the recorded ruling";
+      ? "No prior judgment; this version matches the recorded human label"
+      : "No prior judgment; this version differs from the recorded human label";
   }
-  if (item.change === "improved") return "Now matches the recorded ruling";
-  if (item.change === "regressed") return "Now differs from the recorded ruling";
-  if (item.change === "still_agree") return "Still matches the recorded ruling";
-  return "Still differs from the recorded ruling";
+  if (item.change === "improved") return "Now matches the recorded human label";
+  if (item.change === "regressed") return "Now differs from the recorded human label";
+  if (item.change === "still_agree") return "Still matches the recorded human label";
+  return "Still differs from the recorded human label";
 }

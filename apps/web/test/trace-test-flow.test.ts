@@ -50,7 +50,7 @@ describe("manual trace-to-test flow", () => {
       desiredBehavior: "Check eligibility before promising a refund.",
       job: "response"
     });
-    fields.mustDo = "Check eligibility\nExplain the next step";
+    fields.mustDo = "Evaluator eligibility\nExplain the next step";
     fields.mustAvoid = "Guarantee a refund";
 
     const draft = createManualTraceTestInput({
@@ -65,7 +65,7 @@ describe("manual trace-to-test flow", () => {
       sourceCaseId: "case_refund",
       sourceScope: { responsePath: ["output", "messages", 0], turnIndexes: [0, 1, 2], stepIndexes: [0] },
       expectedBehavior: "Check eligibility before promising a refund.",
-      mustDo: ["Check eligibility", "Explain the next step"],
+      mustDo: ["Evaluator eligibility", "Explain the next step"],
       mustAvoid: ["Guarantee a refund"],
       goodExample: { text: "" },
       badExample: { text: "Your refund is guaranteed." },

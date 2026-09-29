@@ -23,8 +23,8 @@ function run(input: Partial<EvalRun> & Pick<EvalRun, "id" | "skillVersionId" | "
   };
 }
 
-describe("first Result tracked run", () => {
-  it("selects only the durable backfill for the exact Check version", () => {
+describe("first assessment tracked run", () => {
+  it("selects only the durable backfill for the exact evaluator version", () => {
     const expected = run({ id: "evr_backfill", skillVersionId: "skillv_new", trigger: "backfill" });
     expect(backfillRunForVersion([
       run({ id: "evr_manual", skillVersionId: "skillv_new", trigger: "manual" }),

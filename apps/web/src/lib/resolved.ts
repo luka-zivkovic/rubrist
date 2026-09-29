@@ -65,8 +65,8 @@ export function resolvedDecisions(
       note:
         kind === "adjudicated"
           ? rationale
-            ? `ungoverned ruling recorded · “${rationale}”`
-            : "ungoverned ruling recorded by adjudication"
+            ? `ungoverned human label recorded · “${rationale}”`
+            : "ungoverned human label recorded by adjudication"
           : kind === "override"
             ? rationale
               ? `“${rationale}”`

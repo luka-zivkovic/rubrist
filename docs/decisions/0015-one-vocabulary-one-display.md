@@ -1,6 +1,6 @@
 # ADR-0015: One product vocabulary and one display with a help layer
 
-Status: **Proposed**
+Status: **Accepted for vocabulary and the single display; help-layer additions remain proposed**
 
 Date: 2026-09-26
 
@@ -10,12 +10,17 @@ Decision owner: Luka Živković (founder).
   simplified for beginners, with friendly explanations for people new to
   evaluation; and, after reviewing a two-mode design the same day, one display
   with a help layer instead of display modes.
-- **Awaiting founder review:** the term mapping below and the
-  [open questions](#open-questions-for-the-founder).
+- **Accepted by the founder on 2026-09-29:** the shared vocabulary below,
+  with **Judge instructions** instead of **Prompt**. The review actions are
+  **Agree with assessment: Pass/Fail** and **Correct assessment**. Display
+  reviewer choices as **human labels**, with their evidence class explained
+  nearby. Label current golden-label mismatch counts **reference disagreements**;
+  reserve **regression** for the glossary's actual baseline comparison.
+- The single display was separately authorized on 2026-09-28 and shipped in
+  PR179. This decision does not authorize additional help-layer preferences,
+  onboarding state, or runtime behavior changes.
 
-Nothing in this ADR is implemented until it is accepted.
-
-## Context
+## Context (historical, 2026-09-26)
 
 Rubrist currently speaks two vocabularies:
 
@@ -68,7 +73,7 @@ Terms follow `docs/glossary.md` where it defines them.
 | The automated evaluation of one criterion | evaluator; a prompted LLM judging skill and a typed-question evaluator are its current types | Check, Skill, judge |
 | One immutable version of it | evaluator version | skill version, Check version |
 | The evaluator's written grading instructions | rubric | Review guide, guide |
-| The model prompt around the rubric | prompt | Judge instructions |
+| The model instructions around the rubric | judge instructions | Prompt (proposed, not adopted) |
 | The question a typed-question evaluator's model answers | typed question | — |
 | Which answer to that question counts as pass | polarity | — |
 | The probability cut-off that maps the answer to pass or fail | decision threshold | — |
@@ -76,13 +81,13 @@ Terms follow `docs/glossary.md` where it defines them.
 | Exactly what is sent to the model | execution binding | Binding, model binding |
 | The unit an evaluator assesses | case: one imported trace, or one dataset example in a bench project | Run, and trace or example used as the unit |
 | The result of applying an evaluator to cases, and its per-case value | assessment; its per-case pass, fail, or ambiguous value is the assessment label | Result, verdict, "Skill said", evaluator opinion |
-| A label a reviewer records while seeing the assessment | ungoverned human label, recorded by "Accept assessment" or "Correct assessment" | human verdict, ruling; "Correct this result" in the onboarding contract |
+| A label a reviewer records while seeing the assessment | human label, recorded by "Agree with assessment: Pass/Fail" or "Correct assessment"; its ungoverned evidence class stays visible | human verdict, ruling; "Correct this result" in the onboarding contract |
 | A reviewed human label or adjudicated result with rater and provenance information | human truth | — |
-| A person judging a case without seeing its assessment | blind human review (open question 3) | "Independent human review" in the onboarding contract |
-| How often an evaluator matches human truth on a named set of cases | human agreement (open question 3) | "Agreement with people" in the onboarding contract |
+| A person judging a case without seeing its assessment | blind human review | "Independent human review" in the onboarding contract |
+| How often an evaluator matches human truth on a named set of cases | human agreement | "Agreement with people" in the onboarding contract |
 | Cases waiting for a person | review queue | Exceptions, Needs a human, Waiting on a person, Humans next |
 | Curated cases that guard against regressions | golden set, whose members are golden cases | Protected examples, regression references |
-| The golden-set run on each new evaluator version | regression check (open question 2) | gate, known-failure check, check |
+| The golden-set comparison on each new evaluator version | reference check; mismatches are reference disagreements | regression check, gate, known-failure check |
 
 When copy talks about a source system, it uses that system's word for the
 source and Rubrist's word for the result, for example "12 LangSmith traces
@@ -98,7 +103,7 @@ imported as 12 cases".
 - If stakeholders need a status view, the job Summary approximated, it is a
   page or a shareable report, not a display setting.
 
-### A help layer
+### A help layer — proposed follow-up, not accepted in this batch
 
 - Every product term has on-demand help that shows its definition.
 - Explanations also appear where the need is predictable: the first-run
@@ -117,7 +122,7 @@ The onboarding journey's steps and its truth and safety rules stay, including
 
 ## Consequences
 
-- When accepted, this supersedes the onboarding contract's beginner words
+- The accepted vocabulary supersedes the onboarding contract's beginner words
   wherever it uses them as product copy, and its Guided-display word rules:
   - its Beginner mental model (`docs/beginner-onboarding-journey.md:36-48`);
   - its Product language section (`:56-77`), which is rewritten as a table of
@@ -128,13 +133,15 @@ The onboarding journey's steps and its truth and safety rules stay, including
 - The README's Concepts and "Your first Check" sections are rewritten in this
   vocabulary, and its description of the Guided and Technical views is
   removed.
-- `apps/web/src/lib/display-mode.ts` and `apps/web/src/hooks/use-mode.ts` give
-  way to the "Show explanations" preference. Content marked `.dev-only`
+- `apps/web/src/lib/display-mode.ts` and `apps/web/src/hooks/use-mode.ts` were
+  removed in PR179. A "Show explanations" preference remains proposed. Content
+  marked `.dev-only`
   becomes visible to everyone, navigation filtering by mode is removed, and
   stored mode values are ignored.
 - Terms used here but not defined in `docs/glossary.md` (case, review queue,
-  regression check, golden set, golden case, ungoverned human label, and the
-  answers to open question 3) are added to all three vendored copies of the
+  reference check, reference disagreement, golden set, golden case, human label,
+  blind human review and human agreement) are added to all three vendored
+  copies of the
   glossary together.
 - Route paths and API names, such as `/skill`, `/exceptions`, and the
   `verdicts` endpoints, are unchanged by this ADR. Renaming them is a separate
@@ -142,17 +149,27 @@ The onboarding journey's steps and its truth and safety rules stay, including
 - The UX audits in `docs/ux-audit/` write their proposals in this vocabulary
   and display, and mark which of their decisions wait for this ADR.
 
-## Open questions for the founder
+## Resolved vocabulary decisions — 2026-09-29
 
-1. **The term mapping.** Accept the table as written, or change individual
-   terms before acceptance.
-2. **"Regression check" and "regression".** The glossary defines a
-   regression as a paired case whose accepted baseline passed and whose
-   candidate failed (`docs/glossary.md:78-79`). CURRENT: the regression check
-   counts a case as regressed whenever the new evaluator version disagrees
-   with the golden label (`apps/api/src/repository/golden-helpers.ts`), with
-   no baseline pass required. Should the UI word follow the check's meaning,
-   with the glossary extended, or should the check's counts change to match
-   the glossary?
-3. **New terms.** "Blind human review" and "human agreement" are proposed here
-   for concepts the glossary does not name. Keep them, or choose others.
+1. Use the mapping above, keeping **Judge instructions**. A source agent skill
+   remains an **Agent Skill**; an evaluation run remains a **run**. These are
+   distinct from the evaluator and the case it assesses.
+2. Change display wording, not computation: the existing `regressed` field
+   counts disagreement with the reference label and is displayed as **reference
+   disagreements**. Do not imply that the earlier evaluator matched the label.
+   Preserve API fields, status values, persisted records and baseline-based
+   regression definitions. Historical raw evidence retains its original text.
+3. Keep **blind human review** and **human agreement**. Ordinary visible review
+   records **human labels**, never automatically **human truth**. Supporting
+   text retains `ungoverned_legacy` provenance and its limits.
+4. The `/exceptions` destination is **Review queue**; `/review-queues` is
+   **Saved review queues**. This distinguishes the current waiting cases from
+   explicitly saved lists without presenting them as different review systems.
+5. The evaluator destination is **Evaluator**, containing the **Rubric** and
+   **Judge instructions** (or a typed question). It must not be named after
+   only one editor field.
+
+The help-layer preference and persistent first-use explanations remain a
+separate proposal. Existing inline explanations and expandable details stay.
+API error text matched by clients is not reworded in this copy-only batch;
+that requires stable error-code handling first.

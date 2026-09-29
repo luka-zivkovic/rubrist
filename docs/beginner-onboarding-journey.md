@@ -13,10 +13,10 @@ rename the evidence stored underneath it.
 ## Outcome
 
 > Show Rubrist what your AI did, choose one thing that matters, and get a
-> reusable Check you can improve over time.
+> reusable evaluator you can improve over time.
 
-The first-value moment is seeing the first understandable result from a Check
-over a real recorded run. Creating a Check without a run is allowed, but it is
+The first-value moment is seeing the first understandable result from an evaluator
+over a real recorded run. Creating an evaluator without a run is allowed, but it is
 setup completion rather than first value.
 
 Onboarding creates a usable, explicitly unvalidated starter evaluator. It does
@@ -31,54 +31,52 @@ approve a governed candidate, or decide whether a release should ship.
   traces, run evaluations, and inspect results.
 - **ASSUMPTION TO TEST:** an evidence-linked proposal plus one
   decision-changing question will usually get a beginner to a useful first
-  Check faster than a blank editor or a long setup interview.
+  Evaluator faster than a blank editor or a long setup interview.
 
 ## Beginner mental model
 
 The default journey teaches six concepts through use:
 
-1. **Run:** one recorded example of what an AI system did.
-2. **Check:** one reusable automated evaluation of one thing that matters.
-3. **Result:** what the Check concluded from the recorded evidence.
-4. **Correct this result:** a visible, ungoverned ruling when a person thinks
-   the Check is wrong.
-5. **Independent human review:** a person judges the run without seeing the
-   Check's result; this separate path may create governed human evidence.
-6. **Agreement with people:** how often a Check matches reviewed human
+1. **Case:** one recorded example of what an AI system did.
+2. **Evaluator:** one reusable automated evaluation of one thing that matters.
+3. **Assessment:** what the evaluator concluded from the recorded evidence.
+4. **Correct assessment:** a visible, ungoverned human label when a person thinks
+   the evaluator is wrong.
+5. **Blind human review:** a person judges the run without seeing the
+   Evaluator's result; this separate path may create governed human evidence.
+6. **Human agreement:** how often an evaluator matches reviewed human
    outcomes on an identified set of runs.
 
 The first session needs to answer only:
 
 - What is being checked?
 - What recorded information can Rubrist see?
-- Is this only the Check's result, or has a person judged the run separately?
+- Is this only the evaluator's result, or has a person judged the run separately?
 
 ## Product language
 
-| Beginner language | Technical meaning | Consequence to explain |
-| --- | --- | --- |
-| Run | case, trace, or ordered recorded trajectory | Rubrist reads the record; it does not replay the AI system or its tools. |
-| Check | one criterion and its evaluator | A Check should answer one independently judgeable quality question. |
-| Review guide | evaluator rubric | It defines pass, fail, and insufficient-evidence behavior. |
-| Result | evaluator assessment | This is the Check's output, not human truth or a release decision. |
-| Correct this result | evaluator-visible legacy human ruling | This is `ungoverned_legacy` triage and never becomes governed truth. |
-| Independent human review | evaluator-blind governed label | The reviewer judges the criterion from frozen case evidence without seeing the evaluator output. |
-| Protected example | regression/golden case | It catches changes on a known case; it does not estimate production quality. |
-| Agreement with people | evaluator-to-human comparison | The named people, dataset, coverage, and evaluator version still matter. |
-| Technical details | prompts, schemas, model bindings, versions, revisions, and digests | Available for inspection without blocking the default journey. |
+| Product term | Meaning and consequence |
+| --- | --- |
+| Case | One trace or dataset example being assessed; Rubrist reads its record rather than replaying the agent. |
+| Criterion | One independently judgeable quality dimension. |
+| Evaluator | The automated mechanism that assesses one criterion. |
+| Rubric | Written grading rules, including pass, fail and insufficient-evidence behavior. |
+| Judge instructions | Instructions around the rubric sent to the model. |
+| Assessment | The evaluator's output; not human truth or a release decision. |
+| Human label | A reviewer's recorded choice. Agreeing with or correcting a visible assessment remains ungoverned review. |
+| Blind human review | The reviewer sees frozen evidence and criterion instructions without the assessment. |
+| Golden set | Curated reference cases used to check evaluator changes, not estimate production quality. |
+| Reference disagreements | Cases where the evaluator differs from the reference label; this alone does not establish worsening against a baseline. |
+| Human agreement | Agreement with identified human labels, with version, dataset, coverage and provenance stated. |
 
-In Guided display, prefer **Check** before introducing **Evaluator**. Explain
-the relationship once in context:
-
-> Rubrist calls this reusable automated Check an evaluator.
-
-Do not lead first-run screens with `eval`, `criterion`, `rubric`, `judging
-skill`, `golden`, `model binding`, `output schema`, `calibration`, or revision
-identifiers. These terms remain exact on Technical surfaces and in evidence.
+Use the same terms throughout the app and agent setup. Explain a term where
+it first matters; put bulky technical details in expandable sections. No
+beginner/technical vocabulary switch is required. The additional help-layer
+preference remains proposed under ADR-0015.
 
 Visible result correction and independent human review are not two names for
 the same action. The first starts from an evaluator result and records an
-ungoverned ruling. The second hides evaluator output and follows the governed
+ungoverned human label. The second hides evaluator output and follows the governed
 review contract. A visible correction may support explicitly ungoverned legacy
 agreement diagnostics. Calibration instead compares a pinned evaluator result
 with separately collected governed human truth under the calibration contract.
@@ -96,16 +94,16 @@ visible.
    runs, or examples without requiring evaluation terminology.
 2. **Bring one run.** Paste an example, import traces, use sample data, or ask
    an external agent to connect the project. A person may continue without a
-   run and create an untested Check.
+   run and create an untested evaluator.
 3. **Choose what matters first.** Ask one short question grounded in the
    available run or project context.
-4. **Review the proposed Check.** Show its one quality question, the evidence
-   it reads, what it cannot know, and the editable Review guide.
-5. **Create or refine.** Offer **Create this Check** and **Refine it first**.
+4. **Review the proposed evaluator.** Show its one quality question, the evidence
+   it reads, what it cannot know, and the editable Rubric.
+5. **Create or refine.** Offer **Create this evaluator** and **Refine it first**.
    During refinement, keep **Create with current draft** available. Creation
    must append the exact criterion definition shown in the card and atomically
    bind the evaluator version to it.
-6. **See the first result.** When a run is available, execute the Check and
+6. **See the first result.** When a run is available, execute the evaluator and
    open that result instead of returning to a dashboard with no explanation.
 7. **Finish for now.** State what was created, what was run, and what has not
    been human-confirmed. Offer optional next steps.
@@ -120,7 +118,7 @@ available without competing visually with it.
    questions.
 3. Reflect what was found and name material uncertainty.
 4. Ask only the first decision-changing question, using concrete options.
-5. Show the proposed Check and offer **Create** or **Refine**.
+5. Show the proposed evaluator and offer **Create** or **Refine**.
 6. Ask the user to mint the short-lived Rubrist connection only after the
    non-secret setup draft is ready.
 7. Apply the draft through the mode-appropriate setup path and submit one real
@@ -134,10 +132,10 @@ available without competing visually with it.
 The preparation phase never needs a pairing token or provider secret. The
 connection remains project-scoped, single-use, and short-lived.
 
-The visible Check, immutable criterion definition and digest, evaluator
-version, and every executed Result must name the same quality question. A
+The visible evaluator, immutable criterion definition and digest, evaluator
+version, and every executed assessment must name the same quality question. A
 generic seeded criterion cannot remain underneath a more specific proposed
-Check. App and agent creation fail before mutation when that exact binding
+Evaluator. App and agent creation fail before mutation when that exact binding
 cannot be established.
 
 ## Question behavior
@@ -149,7 +147,7 @@ therefore follows these rules:
 - Inspect before asking.
 - Prefer one question at a time. At most two tightly related questions may
   appear in one message.
-- Ask only when the answer can change the target, Check, available evidence,
+- Ask only when the answer can change the target, Evaluator, available evidence,
   data permission, or required authority.
 - State discovered facts for correction instead of asking the user to repeat
   them.
@@ -172,7 +170,7 @@ it as agent-decided, and continue without another confirmation.
 Safe examples include:
 
 - choosing the first of several plausible quality questions;
-- naming the Check;
+- naming the evaluator;
 - choosing a starter template or result shape;
 - selecting among already authorized judge providers or models;
 - ordering setup work;
@@ -189,12 +187,12 @@ Do not offer silent delegation for:
 - changing shared hooks or configuration;
 - making a release decision.
 
-## Proposed Check
+## Proposed evaluator
 
 After the minimum clarification, show one persistent editable card:
 
 ```text
-What this Check decides
+What this evaluator decides
   One plain-language quality question.
 
 What it reads
@@ -203,7 +201,7 @@ What it reads
 What it cannot know
   Missing side effects, external state, or evidence outside the record.
 
-Review guide
+Rubric
   Pass, fail, and insufficient-evidence conditions.
 
 Status
@@ -222,24 +220,24 @@ admissible sealed calibration may replace it with a specifically scoped
 
 ## Completion states
 
-### Check created without a run
+### Evaluator created without a run
 
-> Starter Check created. Add a run to see its first result.
+> Starter evaluator created. Add a run to see its first result.
 
 This is a valid low-friction exit. Do not claim first value, testing, or human
 agreement.
 
-### Check created and run without a supplied label
+### Evaluator created and run without a supplied label
 
-> Starter Check created and run on one recorded example. Its result has not
+> Starter evaluator created and run on one recorded example. Its result has not
 > been compared with a human decision.
 
 Execution proves operability on that run only. It does not prove evaluator
 quality.
 
-### Check created and run with a supplied label
+### Evaluator created and run with a supplied label
 
-> Starter Check created and compared with the label supplied for this example.
+> Starter evaluator created and compared with the label supplied for this example.
 > That label is not governed human truth.
 
 If the run belongs to an exact governed truth revision, name that revision,
@@ -253,7 +251,7 @@ After the completion summary, a person may:
 
 - review or correct the result;
 - try another run;
-- refine the Check;
+- refine the evaluator;
 - start **Protect this behavior** or **Prevent this next time**. This enters
   the trace-to-test journey and retains its person-confirmed contrasting
   example and successful-validation requirements before protection;
@@ -262,7 +260,7 @@ After the completion summary, a person may:
 
 These are progressive milestones, not first-run requirements. In particular,
 the absence of mandatory contrasting examples applies only to creation of the
-unvalidated Check; it does not relax trace-to-test enablement.
+unvalidated evaluator; it does not relax trace-to-test enablement.
 
 ## Non-negotiable boundaries
 
@@ -277,7 +275,7 @@ Low friction may defer assurance, but it must not falsify state or authority:
   and permission boundary.
 - Human-only, shared, and irreversible actions require explicit authority.
 - Missing, ambiguous, or failed execution never becomes a favorable result.
-- One Check measures one criterion; suites do not collapse separate evidence
+- One evaluator measures one criterion; suites do not collapse separate evidence
   into a composite release decision.
 - Semantic clustering remains outside the journey.
 
@@ -295,7 +293,7 @@ definition shown to the user. It does not require:
 - cross-channel app/agent resume;
 - multiple criteria in one first-run flow;
 - persona classification;
-- model, prompt, schema, revision, or digest choices in Guided display.
+- mandatory model, judge-instruction, schema, revision, or digest choices during first setup.
 
 A durable shared app-agent setup session changes persistence, concurrency, and
 handoff semantics. It remains a later decision gate and must not be smuggled
@@ -307,8 +305,8 @@ into the MVP as incidental UI state.
 
 Before release, tests must cover:
 
-- app and external-agent creation bind the displayed Check, exact criterion
-  definition and digest, evaluator version, and Result;
+- app and external-agent creation bind the displayed evaluator, exact criterion
+  definition and digest, evaluator version, and assessment;
 - Agent Skill, supplied-example, and production-trace entrances route to the
   correct ongoing workflow;
 - ungoverned correction and evaluator-blind governed review never share copy,
@@ -316,7 +314,7 @@ Before release, tests must cover:
 - assurance copy derives from absent, supplied-label, governed-comparison, and
   calibrated evidence rather than legacy version status;
 - missing, ambiguous, provider-failed, and queue-failed execution cannot render
-  a favorable Result or a successful completion claim;
+  a favorable assessment or a successful completion claim;
 - authorization, selected-data scope, redaction, pairing-token expiry,
   single-use consumption, and non-disclosure remain enforced;
 - the app draft survives Back, refresh, and a return to the same entrance, and
@@ -334,12 +332,12 @@ at least two technically capable AI builders and at least two less-technical
 domain or product owners. The sample is a launch gate, not statistical proof.
 Release the first-run path only when:
 
-- at least four of five reach a Check proposal without moderator intervention;
+- at least four of five reach an evaluator proposal without moderator intervention;
 - at least four of five create one criterion that is supported by recorded
-  evidence and can explain the Run, Check, and Result in their own words;
+  evidence and can explain the case, evaluator, and assessment in their own words;
 - all five understand after completion that Rubrist did not replay the AI
   system, that the starter is not governed human truth or calibrated, and that
-  the Result cannot decide whether a release ships;
+  the assessment cannot decide whether a release ships;
 - no session sends or retains sensitive fields outside the person's visible
   selection; and
 - every participant can return to unfinished work in the same entrance.
@@ -348,8 +346,8 @@ If a threshold misses, revise and repeat the formative round rather than
 averaging the failure into a launch score. During the sessions, also observe
 whether participants can:
 
-- explain a Run, Check, and Result in their own words;
-- create one Check that uses evidence actually present in the run;
+- explain a case, evaluator, and assessment in their own words;
+- create one evaluator that uses evidence actually present in the run;
 - identify what Rubrist could and could not see;
 - understand that Rubrist did not replay the AI system or its tools;
 - recognize that the starter result is not human-verified;
@@ -357,5 +355,5 @@ whether participants can:
 - resume after leaving the flow.
 
 Speed and completion are secondary when a person finishes with a materially
-wrong Check or mental model. Public product patterns are design precedents,
+wrong evaluator or mental model. Public product patterns are design precedents,
 not evidence that the journey works for Rubrist's users.

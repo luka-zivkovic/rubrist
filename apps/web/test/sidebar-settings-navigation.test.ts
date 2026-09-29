@@ -62,7 +62,7 @@ describe("single workspace navigation", () => {
       expect(new Set(links).size).toBe(links.length);
       expect(doc.body.textContent).not.toMatch(/Workspace display|Guided|Technical|Summary|1 · Define/);
       expect(doc.body.textContent).toContain("Human truth · governed");
-      expect(doc.body.textContent).toContain("Review sessions · ungoverned");
+      expect(doc.body.textContent).toContain("Saved review queues · ungoverned");
       expect(doc.body.textContent).toContain("Ungoverned diagnostics");
     } finally {
       vi.unstubAllGlobals();

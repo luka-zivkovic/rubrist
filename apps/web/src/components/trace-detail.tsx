@@ -116,7 +116,7 @@ function StepLedger({
         <div>
           <CardTitle>Trajectory</CardTitle>
           <CardDescription>
-            {steps.length} supplied step{steps.length === 1 ? "" : "s"} — judged as one case, one verdict.
+            {steps.length} supplied step{steps.length === 1 ? "" : "s"} — judged as one case, one assessment.
           </CardDescription>
         </div>
         <div className="flex-1" />
@@ -223,10 +223,10 @@ function verdictActor(verdict: VerdictRecord): string {
 }
 
 function verdictSourceLabel(verdict: VerdictRecord): string {
-  if (verdict.source === "adjudicated") return "Owner ruling";
+  if (verdict.source === "adjudicated") return "Owner human label";
   if (verdict.source === "human") return "Human review";
   if (verdict.source === "llm_judge") return "Evaluator output";
-  return "Imported verdict";
+  return "Imported label";
 }
 
 function HumanRulingCard({
@@ -261,7 +261,7 @@ function HumanRulingCard({
     <Card data-testid="human-ruling-card" className={`border-2 ${REVIEW_RESULT_TONES[label].card}`}>
       <CardHeader className={REVIEW_RESULT_TONES[label].header}>
         <div>
-          <CardTitle>{ruling.source === "adjudicated" ? "Owner ruling" : "Recorded human ruling"}</CardTitle>
+          <CardTitle>{ruling.source === "adjudicated" ? "Owner human label" : "Recorded human label"}</CardTitle>
           <CardDescription className="text-inherit">
             Ungoverned legacy review evidence. This is not governed human truth.
           </CardDescription>
@@ -271,7 +271,7 @@ function HumanRulingCard({
       <CardContent className="flex flex-col gap-3">
         <div className="text-[13px] text-ink-2">
           {agrees === null
-            ? ruling.reviewContext ? "This ruling refers to another recorded evaluator result." : "No evaluator output was recorded before this ruling."
+            ? ruling.reviewContext ? "This human label refers to another recorded evaluator result." : "No evaluator output was recorded before this human label."
             : agrees
               ? `At review time, agreed with the evaluator's ${priorEvaluatorLabel} output.`
               : `At review time, overrode the evaluator's ${priorEvaluatorLabel} output.`}
@@ -288,7 +288,7 @@ function HumanRulingCard({
         </div>
         {ruling.source === "adjudicated" ? (
           <div className="text-[11px] text-ink-3">
-            This owner ruling takes precedence over ordinary human reviews in the legacy flow.
+            This owner human label takes precedence over ordinary human reviews in the legacy flow.
           </div>
         ) : null}
       </CardContent>
@@ -327,8 +327,8 @@ function DecisionHistory({
                     <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-ink-3">
                       {verdictSourceLabel(verdict)}
                     </span>
-                    {isEffective ? <Chip>effective ruling</Chip> : null}
-                    {humanButLowerPriority ? <Chip>does not override owner ruling</Chip> : null}
+                    {isEffective ? <Chip>effective human label</Chip> : null}
+                    {humanButLowerPriority ? <Chip>does not override owner human label</Chip> : null}
                   </div>
                   <div className="mt-1.5 text-[12px] leading-[1.5] text-ink-2">
                     {(payloadRationale(verdict.payload) ?? "This evaluator states no rationale.") || "No rationale recorded."}
@@ -488,7 +488,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
       );
       pendingSubmission.current = null;
       setVerdictHistory((current) => [verdict, ...current.filter((item) => item.id !== verdict.id)]);
-      setResultText(reviewQueueItemId ? "Review saved for this task. Earlier rulings remain in the case history." : "Verdict accepted. Recorded as a human verdict on the case.");
+      setResultText(reviewQueueItemId ? "Review saved for this task. Earlier human labels remain in the case history." : "Assessment accepted. Recorded as a human label on the case.");
       onChanged?.("accept");
     } catch (err) {
       // Roll the button back so it doesn't stay primary-styled with no retry
@@ -507,7 +507,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
     }
     const currentLabel = effectiveRulingLabel ?? exception.verdict;
     if (!reviewQueueItemId && overrideChoice === currentLabel) {
-      setSubmitError(`Pick a different verdict than the current ${effectiveRuling ? "human ruling" : "evaluator opinion"}.`);
+      setSubmitError(`Pick a different label than the current ${effectiveRuling ? "human label" : "assessment"}.`);
       return;
     }
     setSubmitting(true);
@@ -521,8 +521,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
       pendingSubmission.current = null;
       setVerdictHistory((current) => [verdict, ...current.filter((item) => item.id !== verdict.id)]);
       setResultText(effectiveRuling?.source === "adjudicated"
-        ? "Additional human review recorded. The owner ruling still takes precedence."
-        : `Human ruling changed to ${overrideChoice}. Recorded on the case.`);
+        ? "Additional human review recorded. The owner human label still takes precedence."
+        : `Human label changed to ${overrideChoice}. Recorded on the case.`);
       // Close the sub-form and clear the reason so the user can't accidentally
       // re-submit a duplicate verdict on the same case. The success banner
       // sits above and remains visible until the user navigates away.
@@ -538,7 +538,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
 
   const handlePromoteSubmit = async () => {
     if (promoteLabel === null) {
-      setSubmitError("Only pass/fail verdicts can be promoted to the golden set.");
+      setSubmitError("Only pass/fail labels can be promoted to the golden set.");
       return;
     }
     if (!promoteReason.trim()) {
@@ -555,7 +555,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         reason: promoteReason.trim()
       });
       setGoldenSetEntry(entry);
-      setResultText("Added to the golden set as a regression reference for future evaluator versions.");
+      setResultText("Added to the golden set as a golden case for future evaluator versions.");
       // Same anti-double-submit cleanup as override.
       setDecision(null);
       onChanged?.("promote");
@@ -608,7 +608,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
     <>
       <SectionHead
         headingAs={headingAs}
-        eyebrow={`Exception · ${exception.capabilityGap?.toLowerCase() ?? "uncategorized"}`}
+        eyebrow={`Case · ${exception.capabilityGap?.toLowerCase() ?? "uncategorized"}`}
         title={exception.title}
         sub={`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}
       />
@@ -626,9 +626,9 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
           <Card className={effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}>
             <CardHeader className={effectiveRuling ? undefined : REVIEW_RESULT_TONES[exception.verdict].header}>
               <div>
-                <CardTitle className="text-[16px] font-semibold">{reviewQueueItemId ? "Recorded evaluator opinion" : "Latest evaluator opinion"}</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{reviewQueueItemId ? "Recorded assessment" : "Latest assessment"}</CardTitle>
                 <CardDescription className={effectiveRuling ? undefined : "text-inherit"}>
-                  {reviewQueueItemId ? "Model output from the recorded result for this task." : "Model output from the latest judge run."} A recorded human ruling takes precedence in this view.
+                  {reviewQueueItemId ? "Model output from the recorded result for this task." : "Model output from the latest judge run."} A recorded human label takes precedence in this view.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -641,7 +641,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                     : `score ${judgeRun.score.toFixed(2)}`}
                 </span>
                 {effectiveRulingLabel ? (
-                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with ruling" : "overridden by ruling"}</Chip>
+                  <Chip>{effectiveRulingLabel === exception.verdict ? "agrees with human label" : "overridden by human label"}</Chip>
                 ) : null}
               </div>
 
@@ -722,7 +722,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
               tone="neutral"
               who={`Reviewer guide · ${exception.capabilityGap.toLowerCase()}`}
             >
-              The skill flagged this case as <b>{exception.verdict}</b>. Check the reviewer guide
+              The evaluator flagged this case as <b>{exception.verdict}</b>. Check the reviewer guide
               or your team's playbook before accepting or overriding.
             </MarginNote>
           ) : null}
@@ -732,13 +732,13 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
           <Card className="border-rule-strong">
             <CardHeader>
               <div>
-                <CardTitle className="text-[16px] font-semibold">{reviewTaskPending ? "Record your review" : effectiveRuling ? `Ruled ${effectiveRulingLabel}` : "Record your ruling"}</CardTitle>
+                <CardTitle className="text-[16px] font-semibold">{reviewTaskPending ? "Record your review" : effectiveRuling ? `Labeled ${effectiveRulingLabel}` : "Record your human label"}</CardTitle>
                 <CardDescription>
                   {reviewTaskPending
-                    ? "Earlier rulings are case history. Record your review of this result to complete this task."
+                    ? "Earlier human labels are case history. Record your review of this result to complete this task."
                     : effectiveRuling
-                    ? "The ruling is saved on this case. Record another review or add it as a separate regression reference."
-                    : `The evaluator said ${exception.verdict.toUpperCase()}. Agree to record the same ruling, or disagree to choose another.`}
+                    ? "The human label is saved on this case. Record another review or add it as a separate golden case."
+                    : `The evaluator said ${exception.verdict.toUpperCase()}. Agree to record the same human label, or disagree to choose another.`}
                 </CardDescription>
               </div>
               {goldenSetEntry ? <Chip>in golden set</Chip> : null}
@@ -753,8 +753,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   >
                     <ThumbsUp aria-hidden="true" />
                     <span>
-                      <span className="block text-[13px] font-medium">{submitting && decision === "accept" ? "Recording agreement…" : "Agree with evaluator"}</span>
-                      <span className="block text-[11px] text-ink-3">Record {exception.verdict.toUpperCase()} as my ruling</span>
+                      <span className="block text-[13px] font-medium">{submitting && decision === "accept" ? "Recording agreement…" : `Agree with assessment: ${exception.verdict === "pass" ? "Pass" : exception.verdict === "fail" ? "Fail" : "Ambiguous"}`}</span>
+                      <span className="block text-[11px] text-ink-3">Record this as my human label</span>
                     </span>
                   </Button>
                 ) : null}
@@ -765,8 +765,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                 >
                   <PencilLine aria-hidden="true" />
                   <span>
-                    <span className="block text-[13px] font-medium">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change ruling" : "Disagree with evaluator"}</span>
-                    <span className="block text-[11px] text-ink-3">Choose a different ruling and explain why</span>
+                    <span className="block text-[13px] font-medium">{effectiveRuling?.source === "adjudicated" ? "Add another review" : effectiveRuling ? "Change human label" : "Correct assessment"}</span>
+                    <span className="block text-[11px] text-ink-3">Choose a different human label and explain why</span>
                   </span>
                 </Button>
               </div>
@@ -774,8 +774,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
 
               {decision === "override" ? (
                 <div className="fadeUp flex flex-col gap-2">
-                  <Eyebrow>{effectiveRuling ? "Choose the new review verdict" : "Choose your ruling"}</Eyebrow>
-                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Human ruling">
+                  <Eyebrow>{effectiveRuling ? "Choose the new human label" : "Choose your human label"}</Eyebrow>
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Human label">
                     {OVERRIDE_OPTIONS.map((opt) => {
                       const isCurrent = !reviewQueueItemId && opt === (effectiveRulingLabel ?? exception.verdict);
                       const active = overrideChoice === opt;
@@ -786,7 +786,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                           role="radio"
                           aria-checked={active}
                           disabled={isCurrent}
-                          title={isCurrent ? "This is already the current ruling." : undefined}
+                          title={isCurrent ? "This is already the current human label." : undefined}
                           onClick={() => setOverrideChoice(opt)}
                           className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11.5px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                             active
@@ -801,14 +801,14 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   </div>
                   <textarea
                     className="min-h-[88px] w-full resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-sans text-[12.5px] text-ink focus-visible:border-ink"
-                    placeholder={reviewQueueItemId ? "Explain your ruling on this recorded result (required)" : effectiveRuling ? "Why are you recording a different review? (required)" : "Why is your ruling different from the evaluator? (required)"}
+                    placeholder={reviewQueueItemId ? "Explain your human label on this recorded result (required)" : effectiveRuling ? "Why are you recording a different review? (required)" : "Why is your human label different from the evaluator? (required)"}
                     value={overrideReason}
                     onChange={(e) => setOverrideReason(e.target.value)}
                   />
                   <div className="text-[11px] text-ink-3">
                     The rationale is stored with this append-only review record. Earlier decisions remain visible.
                     {effectiveRuling?.source === "adjudicated"
-                      ? " An ordinary review cannot replace the owner ruling."
+                      ? " An ordinary review cannot replace the owner human label."
                       : ""}
                   </div>
                   <div className="flex gap-2">
@@ -818,7 +818,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                       onClick={() => void handleOverrideSubmit()}
                       disabled={submitting || !overrideReason.trim()}
                     >
-                      Record {overrideChoice.toUpperCase()} ruling
+                      Record {overrideChoice.toUpperCase()} human label
                     </Button>
                     <Button
                       variant="ghost"
@@ -842,8 +842,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   }}
                   disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
                   title={goldenSetEntry
-                    ? "This case is already an active golden-set regression reference."
-                    : promoteEligible ? undefined : "Only pass/fail verdicts can be added."}
+                    ? "This case is already an active golden-set golden case."
+                    : promoteEligible ? undefined : "Only pass/fail labels can be added."}
                 >
                   <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}
                 </Button>
@@ -859,13 +859,13 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   />
                   <div className="flex gap-1.5">
                     <Chip variant={promoteLabel === "fail" ? "fail" : "pass"}>
-                      verdict · {promoteLabel}
+                      label · {promoteLabel}
                     </Chip>
-                    <Chip>{promotionSource === "human" ? "from human ruling" : "from evaluator opinion"}</Chip>
+                    <Chip>{promotionSource === "human" ? "from human label" : "from assessment"}</Chip>
                     {exception.capabilityGap ? (
                       <Chip>category · {exception.capabilityGap.toLowerCase()}</Chip>
                     ) : null}
-                    <Chip>regression reference</Chip>
+                    <Chip>golden case</Chip>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -874,7 +874,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                       onClick={() => void handlePromoteSubmit()}
                       disabled={submitting || !promoteReason.trim()}
                     >
-                      Add regression reference
+                      Add golden case
                     </Button>
                     <Button
                       variant="ghost"
@@ -900,8 +900,8 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   {goldenSetEntry
                     ? `Golden-set expectation: ${goldenSetEntry.agreedLabel}. ${goldenSetEntry.reason} Added by ${goldenSetEntry.promotedBy} on ${new Date(goldenSetEntry.promotedAt).toLocaleString()}.`
                     : effectiveRuling
-                      ? "The ruling is durable. Add a separate regression reference only if future versions should be checked against this case."
-                      : "Record a ruling before moving on. Golden-set promotion is a separate regression action."}
+                      ? "The human label is durable. Add a separate golden case only if future versions should be checked against this case."
+                      : "Record a human label before moving on. Golden-set promotion is a separate regression action."}
                 </div>
               ) : null}
               {shortcuts ? <KeyLegend hasRuling={Boolean(effectiveRuling)} inGoldenSet={Boolean(goldenSetEntry)} /> : null}

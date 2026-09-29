@@ -17,7 +17,7 @@ describe("rubrist-setup skill contract", () => {
     expect(setupSkill).toContain("Discover before asking");
     expect(setupSkill).toContain("one short question per message");
     expect(setupSkill).toContain("Finish setup (Recommended)");
-    expect(setupSkill).toContain("Refine the Check");
+    expect(setupSkill).toContain("Refine the evaluator");
     expect(setupSkill).toContain("Decide for me");
     expect(setupSkill).toContain("Starter · unvalidated");
     expect(setupSkill).toContain("What it cannot know");
@@ -25,7 +25,7 @@ describe("rubrist-setup skill contract", () => {
 
   it("keeps secrets and human authority outside agent setup", () => {
     expect(setupSkill).toContain("Do not read `.env`");
-    expect(setupSkill).toContain("Never invent a demonstration Run");
+    expect(setupSkill).toContain("Never invent a demonstration case");
     expect(setupSkill).toContain("Stop before human adjudication");
     expect(setupReference).toContain("It may not adjudicate");
     expect(setupReference).toContain("Do not advertise automatic capture");

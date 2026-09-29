@@ -103,19 +103,19 @@ describe("reliability hierarchy", () => {
       beforeLabel: null,
       afterLabel: "pass",
       change: "still_agree"
-    })).toBe("No prior judgment; this version matches the recorded ruling");
+    })).toBe("No prior judgment; this version matches the recorded human label");
     expect(convergenceCaseComparisonLabel({
       caseId: "newer-case",
       adjudicatedLabel: "fail",
       beforeLabel: null,
       afterLabel: "pass",
       change: "still_disagree"
-    })).toBe("No prior judgment; this version differs from the recorded ruling");
+    })).toBe("No prior judgment; this version differs from the recorded human label");
   });
 
   it("keeps secondary diagnostics collapsed and legacy evidence labels explicit", async () => {
     const source = await readFile(new URL("../src/screens/reliability.tsx", import.meta.url), "utf8");
-    expect(source).toContain("Current evaluator vs recorded rulings");
+    expect(source).toContain("Current evaluator vs recorded human labels");
     expect(source).toContain("Exact current-version comparison");
     expect(source).toContain("Reviewer agreement (κ)");
     expect(source).toContain("Other diagnostics");
@@ -133,8 +133,8 @@ describe("reliability hierarchy", () => {
       "utf8"
     );
     expect(source).toContain("c.beforeLabel === null");
-    expect(source).toContain('label: "matches ruling"');
-    expect(source).toContain('label: "differs from ruling"');
+    expect(source).toContain('label: "matches human label"');
+    expect(source).toContain('label: "differs from human label"');
   });
 
   it("does not label legacy adjudication artifacts as ground truth", async () => {

@@ -20,17 +20,17 @@ import { compileJudgePrompt, type Skill, describeExecutionBinding, describeReaso
 type Tab = "rubric" | "prompt" | "question" | "binding" | "schema";
 
 const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
-  { id: "rubric", label: "Review guide" },
+  { id: "rubric", label: "Rubric" },
   { id: "prompt", label: "Judge instructions" },
   { id: "binding", label: "Execution binding" },
-  { id: "schema", label: "Result format" }
+  { id: "schema", label: "Output contract" }
 ];
 
 // A typed-question version has a question in place of a review guide and instructions.
 const TYPED_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "question", label: "Typed question" },
   { id: "binding", label: "Execution binding" },
-  { id: "schema", label: "Result format" }
+  { id: "schema", label: "Output contract" }
 ];
 
 export function SkillScreen() {
@@ -112,7 +112,7 @@ export function SkillScreen() {
         eyebrow={`Evaluator definition · current default · v${v.version}`}
         title={skill.name}
         sub={starterUnvalidated
-          ? `${skill.description} This Starter Check can run, but it has not been validated against governed human judgment. Review what it checks before relying on its Results.`
+          ? `${skill.description} This Starter evaluator can run, but it has not been validated against governed human judgment. Review what it checks before relying on its assessments.`
           : `${skill.description} Review what this evaluator checks. ${editConsequence}`}
         right={
           <div className="flex flex-wrap items-center gap-2">
@@ -137,7 +137,7 @@ export function SkillScreen() {
 
       {starterUnvalidated ? (
         <MarginNote tone="neutral" who="Starter · unvalidated" className="mb-5 max-w-[82ch]">
-          Runnable is not the same as accurate. Results are model opinions until this Check is tested against admissible governed human judgment and receives scoped calibration evidence.
+          Runnable is not the same as accurate. Assessments are model opinions until this evaluator is tested against admissible governed human judgment and receives scoped calibration evidence.
         </MarginNote>
       ) : null}
 
@@ -155,7 +155,7 @@ export function SkillScreen() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="order-2 flex flex-col gap-1 border-b border-rule-soft pb-4 lg:order-1 lg:border-r lg:border-b-0 lg:pr-4 lg:pb-0">
-          <Eyebrow>Skill</Eyebrow>
+          <Eyebrow>Evaluator</Eyebrow>
           {(typedQuestion ? TYPED_TABS : TABS).map((t) => (
             <button
               key={t.id}
@@ -172,7 +172,7 @@ export function SkillScreen() {
           ))}
 
           <div className="mt-4">
-            <Eyebrow>Regression</Eyebrow>
+            <Eyebrow>Reference check</Eyebrow>
             <button
               type="button"
               onClick={() => navigate("/skill/versions")}
@@ -219,9 +219,9 @@ export function SkillScreen() {
 
       <div className="mt-6 max-w-[80ch] text-[13px] italic leading-[1.55] text-ink-3">
         Every save creates an immutable evaluator version. {goldenSetSize !== null && goldenSetSize > 0
-          ? "Its regression check compares that version with the current promoted known-failure references. Passing is not an overall quality or release decision."
+          ? "Its reference check compares that version with the current promoted known-failure references. Passing is not an overall quality or release decision."
           : goldenSetSize === 0
-            ? "No regression check runs until at least one Golden reference exists; a later pass is not an overall quality or release decision."
+            ? "No reference check runs until at least one Golden reference exists; a later pass is not an overall quality or release decision."
             : "Known-failure checks apply when the current Golden set is non-empty; passing is not an overall quality or release decision."}
       </div>
     </div>
@@ -231,7 +231,7 @@ export function SkillScreen() {
 function RubricView({ markdown }: { markdown: string }) {
   return (
     <div>
-      <Eyebrow>Review guide · stored as Markdown</Eyebrow>
+      <Eyebrow>Rubric · stored as Markdown</Eyebrow>
       <p className="mt-2 max-w-[80ch] text-[12.5px] leading-5 text-ink-2">
         Defines what a good result looks like and the evidence the evaluator should use. This is
         the main content reviewers should read and edit.
@@ -251,7 +251,7 @@ function PromptView({ prompt, rubricMarkdown }: { prompt: string; rubricMarkdown
     <div>
       <Eyebrow>Judge instructions · exact compiled text</Eyebrow>
       <p className="mt-2 max-w-[80ch] text-[12.5px] leading-5 text-ink-2">
-        These are the exact instructions sent to the judge after the review guide is inserted.
+        These are the exact instructions sent to the judge after the rubric is inserted.
         They control how the model applies the guide; they are shown as source text, not Markdown.
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -317,7 +317,7 @@ function BindingView({
           <div className="font-mono">{binding.outputTokenLimit ?? "not sent"}</div>
           <div className="text-ink-3">Verdict protocol</div>
           <div className="font-mono">{binding.verdictProtocol}</div>
-          <div className="text-ink-3">Result type</div>
+          <div className="text-ink-3">Assessment type</div>
           <div>
             <div className="font-mono">{verdictKind}</div>
             <div className="mt-0.5 text-[11.5px] leading-5 text-ink-3">
@@ -338,7 +338,7 @@ function SchemaView({ schema }: { schema: unknown }) {
   const hasSchema = schema != null && !(typeof schema === "object" && Object.keys(schema as object).length === 0);
   return (
     <div>
-      <Eyebrow>Result format · exact JSON schema</Eyebrow>
+      <Eyebrow>Output contract · exact JSON schema</Eyebrow>
       <p className="mt-2 max-w-[80ch] text-[12.5px] leading-5 text-ink-2">
         Defines the fields and allowed values the judge must return. Rubrist validates each result
         against this exact contract, so it remains formatted as source rather than Markdown.

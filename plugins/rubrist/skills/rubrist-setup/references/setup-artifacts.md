@@ -35,7 +35,7 @@ non-secret and small enough for a later agent to review:
 }
 ```
 
-Use only fields and artifacts actually found. Do not copy full production Runs
+Use only fields and artifacts actually found. Do not copy full production cases
 into this file. Allowed assumption origins are `user`, `artifact`, and
 `agent_decided`.
 
@@ -48,7 +48,7 @@ to `.rubrist/<slug>.setup.json`, which is consumed by the existing
 ```json
 {
   "owner": { "email": "owner@example.com", "name": "Owner" },
-  "project": { "name": "support-response Check", "apiKeyName": "support-response agent" },
+  "project": { "name": "support-response evaluator", "apiKeyName": "support-response agent" },
   "check": {
     "name": "Supported resolution",
     "question": "Did the response resolve the customer's request without making an unsupported promise?"
@@ -81,7 +81,7 @@ node <rubrist-audit-dir>/scripts/rubrist-submit.mjs setup .rubrist/<slug>.setup.
 ```
 
 Use the provider credential variable already authorized by the user. If a real
-Run has already been captured, add:
+Case has already been captured, add:
 
 ```bash
 --first-batch .rubrist/<slug>.jsonl
@@ -96,9 +96,9 @@ mints a project key and saves it without printing it. Verify through its
 Use factual language:
 
 ```text
-Created the Check “<quality question>”.
+Created the evaluator “<quality question>”.
 It reads <exact fields> and cannot verify <missing evidence>.
-<N real Runs were submitted and a first Result is available | No Run was submitted, so there is no Result yet.>
+<N real cases were submitted and a first assessment is available | No case was submitted, so there is no assessment yet.>
 Status: Starter · unvalidated.
 Saved the non-secret setup files at <paths>.
 Next: <capture real runs with rubrist-audit | submit examples | connect the trace source>.
@@ -113,6 +113,6 @@ ship unless separate evidence with exactly that scope exists.
   permission. The default is capture plus explicit submission.
 - Codex, Gemini, Cursor, and generic MCP clients use manual JSONL capture, CI,
   or a tracing integration. Do not advertise automatic capture for them.
-- An agent may propose a Check and submit Runs. It may not adjudicate, promote
+- An agent may propose an evaluator and submit cases. It may not adjudicate, promote
   Golden examples, create governed human truth, activate a governed evaluator,
   or make a release decision.

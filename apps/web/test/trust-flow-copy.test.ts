@@ -10,7 +10,7 @@ describe("trust-aligned frontend flows", () => {
     expect(sidebar).toContain('label: "Governed lifecycle"');
     expect(sidebar).toContain('label: "Ungoverned diagnostics"');
     expect(operationalGroup).not.toContain("Human truth");
-    expect(operationalGroup).toContain("Review sessions · ungoverned");
+    expect(operationalGroup).toContain("Saved review queues · ungoverned");
     expect(sidebar).not.toMatch(/Golden evidence|Earn trust|Judge real work/);
     expect(sidebar).toContain("h-dvh flex-col overflow-y-auto");
   });
@@ -33,7 +33,7 @@ describe("trust-aligned frontend flows", () => {
   it("explains legacy reviewer disagreements without implying blind collection", async () => {
     const exceptions = await source("../src/screens/exceptions.tsx");
 
-    expect(exceptions).toContain("These cases have different recorded verdicts from two or more reviewers");
+    expect(exceptions).toContain("These cases have different recorded human labels from two or more reviewers");
     expect(exceptions).toContain("Compare and resolve");
     expect(exceptions).not.toMatch(/blind review/i);
   });
@@ -61,11 +61,11 @@ describe("trust-aligned frontend flows", () => {
       source("../src/lib/trace-export.ts")
     ]);
 
-    expect(traces).toContain('label="Verdict rows"');
+    expect(traces).toContain('label="Recorded labels"');
     expect(traces).toContain("distinctCases");
     expect(traces).toContain("visibleCaseCount");
     expect(traceExport).toContain("skillVersionId: versionFilter");
-    expect(traceExport).toContain("Verdict-label, search, and random-sample filters are not applied");
+    expect(traceExport).toContain("Label, search, and random-sample filters are not applied");
   });
 
   it("uses one Golden set name and one workspace without impersonating a role", async () => {

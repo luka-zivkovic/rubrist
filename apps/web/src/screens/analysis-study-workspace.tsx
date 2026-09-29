@@ -197,7 +197,7 @@ export function AnalysisStudyWorkspace({ populations }: { populations: AnalysisP
       if (coordinator.current!.isItemCurrent(token)) {
         setEvents(page.items);
         setEventCursor(page.nextCursor);
-        setReviewAnnouncement(`Run ${item.item.position + 1} is ready for review`);
+        setReviewAnnouncement(`Case ${item.item.position + 1} is ready for review`);
       }
     } catch (cause) {
       if (coordinator.current!.isItemCurrent(token)) setError(message(cause));
@@ -439,7 +439,7 @@ export function AnalysisStudyWorkspace({ populations }: { populations: AnalysisP
                   {items.map((item) => (
                     <button key={item.item.id} type="button" onClick={() => void selectItem(item)}
                       className={`flex w-full items-center justify-between gap-4 px-[18px] py-3 text-left hover:bg-card-2 ${selectedItemId === item.item.id ? "bg-card-2" : ""}`}>
-                      <span className="font-mono text-[11px]">Run {item.item.position + 1}</span>
+                      <span className="font-mono text-[11px]">Case {item.item.position + 1}</span>
                       <span className="flex-1 text-[12px] text-ink-3">{reviewStateLabel(item.state)}</span>
                       <span className="font-mono text-[10px] text-ink-4">{item.activeFailureObservationEventIds.length} observation{item.activeFailureObservationEventIds.length === 1 ? "" : "s"}</span>
                     </button>

@@ -230,7 +230,7 @@ export function NoProjectLanding() {
         What are you evaluating?
       </div>
       <div className="mt-2.5 text-[13px] leading-[1.55] text-ink-3">
-        Start with recorded production Runs or a few examples. Rubrist will help you create one reusable Check.
+        Start with recorded production cases or a few examples. Rubrist will help you create one reusable evaluator.
       </div>
       <Card className="mt-5">
         <CardContent className="flex flex-col gap-3.5 py-4">

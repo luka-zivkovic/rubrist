@@ -109,7 +109,7 @@ export async function fetchDashboard(criterionId?: string): Promise<DashboardSum
 
 export async function fetchOnboardingEvidenceInventory(): Promise<OnboardingEvidenceInventory> {
   const response = await apiFetch(`${API_BASE}/api/onboarding/evidence-inventory`, { credentials: "include" });
-  if (!response.ok) throw await apiErrorFromResponse(response, "Run field inventory request failed");
+  if (!response.ok) throw await apiErrorFromResponse(response, "Case field inventory request failed");
   return OnboardingEvidenceInventorySchema.parse(await response.json());
 }
 
@@ -118,7 +118,7 @@ export async function fetchCurrentSkill(criterionId?: string): Promise<Skill> {
     ? `${API_BASE}/api/v1/criteria/${encodeURIComponent(criterionId)}/current-skill`
     : `${API_BASE}/api/skills/current`;
   const response = await apiFetch(path, { credentials: "include" });
-  if (!response.ok) throw await apiErrorFromResponse(response, "Skill request failed");
+  if (!response.ok) throw await apiErrorFromResponse(response, "Evaluator request failed");
   const body = await response.json() as unknown;
   if (criterionId && body && typeof body === "object" && "skill" in body) {
     return SkillSchema.parse((body as { skill: unknown }).skill);
@@ -134,7 +134,7 @@ export async function fetchLatestSkill(criterionId?: string): Promise<Skill> {
     ? queryPath(`${API_BASE}/api/v1/criteria/${encodeURIComponent(criterionId)}/current-skill`, { scope: "latest" })
     : `${API_BASE}/api/skills/current?scope=latest`;
   const response = await apiFetch(path, { credentials: "include" });
-  if (!response.ok) throw await apiErrorFromResponse(response, "Skill request failed");
+  if (!response.ok) throw await apiErrorFromResponse(response, "Evaluator request failed");
   const body = await response.json() as unknown;
   if (criterionId && body && typeof body === "object" && "skill" in body) {
     return SkillSchema.parse((body as { skill: unknown }).skill);
@@ -226,7 +226,7 @@ export async function fetchSkillVersionHistory(skillId: string, limit = 50): Pro
   regressionRuns: RegressionRunResult[];
 }> {
   const response = await apiFetch(`${API_BASE}/api/skills/${skillId}/versions?limit=${limit}`, { credentials: "include" });
-  if (!response.ok) throw await apiErrorFromResponse(response, "Skill versions request failed");
+  if (!response.ok) throw await apiErrorFromResponse(response, "Evaluator versions request failed");
   const body = (await response.json()) as { versions?: unknown; regressionRuns?: unknown };
   return {
     versions: SkillVersionSchema.array().parse(body.versions ?? []),
@@ -254,7 +254,7 @@ function isNoRecordedRun(body: unknown): boolean {
 export async function fetchSkillVersionRegression(skillId: string, versionId: string): Promise<RegressionRunResult | null> {
   const response = await apiFetch(`${API_BASE}/api/skills/${skillId}/versions/${versionId}/regression`, { credentials: "include" });
   if (!response.ok) {
-    const error = await apiErrorFromResponse(response, "Regression run request failed");
+    const error = await apiErrorFromResponse(response, "Reference check request failed");
     if (error.status === 404 && isNoRecordedRun(error.body)) return null;
     throw error;
   }
@@ -434,7 +434,7 @@ export async function createSkillVersion(skillId: string, input: CreateSkillVers
   if (response.status === 202 && payload?.version) {
     return { state: "queued", version: SkillVersionSchema.parse(payload.version) };
   }
-  throw apiError(response, payload, "Skill version request failed");
+  throw apiError(response, payload, "Evaluator version request failed");
 }
 
 export async function createOnboardingCheck(
@@ -449,7 +449,7 @@ export async function createOnboardingCheck(
     body: JSON.stringify(body)
   });
   const payload = await response.json().catch(() => null) as unknown;
-  if (!response.ok) throw apiError(response, payload, "First Check creation failed");
+  if (!response.ok) throw apiError(response, payload, "First evaluator creation failed");
   return CreateOnboardingCheckResponseSchema.parse(payload);
 }
 
@@ -461,7 +461,7 @@ export async function fetchSkillVersionCriterion(
     `${API_BASE}/api/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(skillVersionId)}/criterion`,
     { credentials: "include" }
   );
-  if (!response.ok) throw await apiErrorFromResponse(response, "Check quality question request failed");
+  if (!response.ok) throw await apiErrorFromResponse(response, "Evaluator quality question request failed");
   const payload = await response.json() as { criterionVersion?: unknown };
   return CriterionVersionSchema.parse(payload.criterionVersion);
 }

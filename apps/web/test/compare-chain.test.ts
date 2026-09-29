@@ -65,11 +65,11 @@ describe("run comparison chain", () => {
     await expect(loadChainStep(v, async () => run("skillv_3", 1, 0))).resolves.toMatchObject({ status: "recorded" });
     await expect(loadChainStep(v, async () => null)).resolves.toEqual({ version: v, status: "unrecorded" });
     await expect(loadChainStep(v, async () => {
-      throw new ApiError("Regression run request failed: 503", 503);
-    })).resolves.toEqual({ version: v, status: "failed", error: "Regression run request failed: 503", retryable: true });
+      throw new ApiError("Reference check request failed: 503", 503);
+    })).resolves.toEqual({ version: v, status: "failed", error: "Reference check request failed: 503", retryable: true });
     await expect(loadChainStep(v, async () => {
-      throw new ApiError("Skill version not found", 404);
-    })).resolves.toEqual({ version: v, status: "failed", error: "Skill version not found", retryable: false });
+      throw new ApiError("Evaluator version not found", 404);
+    })).resolves.toEqual({ version: v, status: "failed", error: "Evaluator version not found", retryable: false });
   });
 
   it("hands the regression state the run, null for none, and undefined for unreadable", () => {
@@ -106,7 +106,7 @@ describe("run comparison chain", () => {
 
     const failedCheck = chainTotals([recorded("skillv_3", 1, 0), checkFailed("skillv_2")], from);
     expect(failedCheck).toMatchObject({ recorded: 2, checkFailed: 1, notCompared: 0, regressed: null, improved: null });
-    expect(chainTotalsGap(failedCheck)).toBe("1 save's regression check failed");
+    expect(chainTotalsGap(failedCheck)).toBe("1 save's reference check failed");
 
     const empty = chainTotals([noBaseline("skillv_3"), noBaseline("skillv_2")], from);
     expect(empty).toMatchObject({ recorded: 2, checkFailed: 0, notCompared: 2, regressed: null, improved: null });
