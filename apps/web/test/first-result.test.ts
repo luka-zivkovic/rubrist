@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EvalRun, VerdictRecord } from "@rubrist/shared";
-import { backfillRunForVersion, verdictForTrackedItem } from "../src/lib/first-result.js";
+import { firstAssessmentRunForVersion, verdictForTrackedItem } from "../src/lib/first-result.js";
 
 function run(input: Partial<EvalRun> & Pick<EvalRun, "id" | "skillVersionId" | "trigger">): EvalRun {
   return {
@@ -26,15 +26,35 @@ function run(input: Partial<EvalRun> & Pick<EvalRun, "id" | "skillVersionId" | "
 describe("first assessment tracked run", () => {
   it("selects only the durable backfill for the exact evaluator version", () => {
     const expected = run({ id: "evr_backfill", skillVersionId: "skillv_new", trigger: "backfill" });
-    expect(backfillRunForVersion([
+    expect(firstAssessmentRunForVersion([
       run({ id: "evr_manual", skillVersionId: "skillv_new", trigger: "manual" }),
       run({ id: "evr_old", skillVersionId: "skillv_old", trigger: "backfill" }),
       expected
     ], "skillv_new")).toEqual(expected);
   });
 
+  it("tracks an imported-case run without starting a historical backfill", () => {
+    const imported = run({ id: "evr_import", skillVersionId: "skillv_new", trigger: "api_batch" });
+    expect(firstAssessmentRunForVersion([
+      run({ id: "evr_dataset", skillVersionId: "skillv_new", trigger: "api_batch", datasetId: "dataset" }),
+      imported
+    ], "skillv_new")).toEqual(imported);
+  });
+
+  it("keeps an existing assessment visible when a newer import fails or is pending", () => {
+    const recorded: VerdictRecord = { id: "assessment_a", projectId: "project_1", caseId: "case_a",
+      skillVersionId: "skillv_new", source: "llm_judge", actorUserId: null,
+      payload: { kind: "binary", pass: true, rationale: "Assessed A" }, externalRunId: null,
+      createdAt: "2026-08-28T00:00:00.000Z" };
+    for (const status of ["failed", "pending"] as const) {
+      const newer = run({ id: "run_b", skillVersionId: "skillv_new", trigger: "api_batch", status });
+      expect(firstAssessmentRunForVersion([newer], "skillv_new", [recorded])).toBeNull();
+      expect(firstAssessmentRunForVersion([newer], "skillv_new", [{ ...recorded, skillVersionId: "other" }])).toEqual(newer);
+    }
+  });
+
   it("does not substitute an unrelated run while gate work is still preparing", () => {
-    expect(backfillRunForVersion([
+    expect(firstAssessmentRunForVersion([
       run({ id: "evr_manual", skillVersionId: "skillv_new", trigger: "manual" })
     ], "skillv_new")).toBeNull();
   });

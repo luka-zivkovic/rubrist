@@ -38,7 +38,7 @@ Without `DATABASE_URL`, the API uses `DemoRepository`. It contains representativ
 1. A trace arrives through the manual endpoint, the judge API, LangSmith, Langfuse, or Ironside with an exact evaluator-version pin. Ironside supplies a settled remote trace-version identity and an opaque continuation cursor; Rubrist does not reproduce Ironside's settlement policy. Singleton projects may resolve the evaluator pin when the request is accepted; multi-criterion projects require it explicitly.
 2. The raw provider payload is retained for auditability.
 3. A normalized case is created with configured exclusions and sensitive-key redaction.
-4. A `judge.run` job is queued.
+4. Automatic imports schedule durable evaluation runs over the supplied cases, reusing saved coverage where applicable.
 5. The worker loads the exact skill version and its pinned provider binding.
 6. The structured verdict, provider metadata, latency, and token usage are appended.
 
@@ -46,6 +46,12 @@ Scheduled integration configuration retains its evaluator pin. Pollers copy it
 into the import job, and workers validate the pin's project ownership rather
 than selecting a current evaluator when the job eventually runs. This keeps a
 queue delay or later criterion edit from changing what the import measures.
+
+CURRENT automatic import evaluation is scoped to the supplied cases, even for
+the first import under a new evaluator. Existing-case evaluation remains an
+explicit choice. First-assessment lookup filters version and run purpose before
+limiting results; polling never creates a historical backfill when no saved run
+is visible. See [import evaluation scope](import-evaluation-scope.md).
 
 ### Criteria and evaluator suites
 

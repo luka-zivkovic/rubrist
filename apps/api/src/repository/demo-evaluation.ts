@@ -673,11 +673,13 @@ export class DemoEvaluationRepository implements
 
   async listEvalRuns(
     projectId: string,
-    opts?: { limit?: number | undefined; skillVersionId?: string | undefined }
+    opts?: { limit?: number | undefined; skillVersionId?: string | undefined; purpose?: "backfill" | "first_assessment" | undefined }
   ): Promise<EvalRun[]> {
     return this.store.evalRuns
       .filter((run) => run.projectId === projectId)
       .filter((run) => !opts?.skillVersionId || run.skillVersionId === opts.skillVersionId)
+      .filter((run) => !opts?.purpose || run.trigger === "backfill"
+        || (opts.purpose === "first_assessment" && run.trigger === "api_batch" && run.datasetId === null))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, opts?.limit ?? 50)
       .map((run) => ({ ...run }));

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchCaseDetail, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, fetchSkillVersionRegression, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
+import { ApiError, buildVerdictExportUrl, createApiKey, createIronsideIntegration, createProject, createReviewQueue, createSkillVersion, deleteLangSmithIntegration, ensureSkillVersionBackfill, fetchEvalRuns, fetchCaseDetail, fetchCaseVerdicts, fetchDatasetRevisionMetadata, fetchGoldenSet, fetchGoldenSetHealth, fetchJudgeHumanCalibration, fetchKappaSummary, fetchProjectVerdicts, fetchReviewQueueDetail, fetchReviewQueues, fetchSkillVersionCriterion, fetchSkillVersionHistory, fetchSkillVersionRegression, recordHumanVerdict, setupOwner, testLangSmithIntegration } from "../src/lib/api.js";
 
 const createdKey = {
   id: "apikey_first",
@@ -14,6 +14,13 @@ const createdKey = {
 };
 
 describe("web API helpers", () => {
+  it("filters first-assessment run lookup before limiting results", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ runs: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchEvalRuns(100, "skillv_current", "first_assessment")).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/eval-runs?limit=100&skillVersionId=skillv_current&purpose=first_assessment", expect.any(Object));
+  });
+
   it("sends the exact criterion selector for a historical case read", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: "No recorded result" }, 404));
     vi.stubGlobal("fetch", fetchMock);

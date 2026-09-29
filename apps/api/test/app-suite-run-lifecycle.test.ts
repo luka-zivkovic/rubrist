@@ -41,6 +41,26 @@ describe("Rubrist Hono API", () => {
     const versions = await repository.listSkillVersions("proj_langsmith_support", "skill_support_quality");
     expect(versions.find((v) => v.id === body.version.id)?.status).toBe("approved");
     expect(queue.jobs.filter((job) => job.name === "judge.run")).toHaveLength(0);
+    const historical = await repository.listCaseIdsForProject("proj_langsmith_support");
+    expect(historical.length).toBeGreaterThan(0);
+    const imported = await appWithQueue.request("/api/traces/manual", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skillVersionId: body.version.id, sourceTraceId: "new-scope-only",
+        input: { question: "New case" }, output: { answer: "New answer" }, metadata: {} })
+    });
+    expect(imported.status).toBe(201);
+    const { caseId } = await imported.json() as { caseId: string };
+    const runs = await repository.listEvalRuns("proj_langsmith_support", { skillVersionId: body.version.id });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ trigger: "api_batch", totalItems: 1 });
+    const detail = await repository.getEvalRunDetail("proj_langsmith_support", runs[0]!.id);
+    expect(detail!.items.map((item) => item.caseId)).toEqual([caseId]);
+    expect(detail!.items.some((item) => historical.includes(item.caseId))).toBe(false);
+    const continued = await appWithQueue.request(`/api/skills/skill_support_quality/versions/${body.version.id}/backfill`, { method: "POST" });
+    expect(continued.status).toBe(202);
+    await expect(continued.json()).resolves.toMatchObject({ run: { id: runs[0]!.id, totalItems: 1 } });
+    expect(await repository.listEvalRuns("proj_langsmith_support", { skillVersionId: body.version.id })).toHaveLength(1);
+
   });
 
   it("records timeScope='both' backfill as one durable eval run after the gate passes", async () => {
@@ -202,7 +222,7 @@ describe("Rubrist Hono API", () => {
       skillVersionId: "skillv_1_2_0"
     });
     expect(runs).toHaveLength(1);
-    expect(runs[0]).toMatchObject({ trigger: "backfill", totalItems: 1, status: "pending" });
+    expect(runs[0]).toMatchObject({ trigger: "api_batch", totalItems: 1, status: "pending" });
     expect(queue.jobs.filter((job) => job.name === "eval.run")).toHaveLength(1);
     expect(queue.jobs.filter((job) => job.name === "judge.run")).toHaveLength(0);
 
@@ -326,8 +346,8 @@ describe("Rubrist Hono API", () => {
     const evaluatedCaseIds = details.flatMap((detail) => detail?.items.map((item) => item.caseId) ?? []);
     expect(evaluatedCaseIds.sort()).toEqual([first.caseId, second.caseId].sort());
     expect(new Set(evaluatedCaseIds).size).toBe(2);
-    expect(runs.filter((run) => run.trigger === "backfill")).toHaveLength(1);
-    expect(queue.jobs.filter((job) => job.name === "eval.run")).toHaveLength(1);
+    expect(runs.filter((run) => run.trigger === "backfill")).toHaveLength(0);
+    expect(queue.jobs.filter((job) => job.name === "eval.run")).toHaveLength(2);
     expect(queue.jobs.filter((job) => job.name === "judge.run")).toHaveLength(0);
   });
 

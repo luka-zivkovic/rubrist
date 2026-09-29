@@ -23,7 +23,7 @@ import {
   type RubristRepository
 } from "../repository.js";
 import type { AppVariables, RequestServices } from "../request-services/index.js";
-import { runExistingCaseBackfill } from "../workers/gate.js";
+import { dispatchEvalRunOnce, runExistingCaseBackfill } from "../workers/gate.js";
 import { assertImportJudgingAllowed } from "../workers/import-judging.js";
 
 const TRACE_TEST_DATASET_NAME = "Regression tests";
@@ -296,10 +296,8 @@ export function registerEvaluationAdministrationRoutes(
     }
   });
 
-  // First-Result continuation: idempotently materialize a durable backfill
-  // run for one saved Check. This covers the equally valid order where the
-  // user created the Check before bringing a Run; imported judge jobs alone
-  // do not expose enough lifecycle state for beginner onboarding.
+  // First-assessment continuation resumes saved import/backfill scope before
+  // creating an explicitly requested historical backfill.
   app.post("/api/skills/:skillId/versions/:versionId/backfill", async (c) => {
     const denied = await requireOwner(c, "start the first Result evaluation");
     if (denied) return denied;
@@ -331,17 +329,16 @@ export function registerEvaluationAdministrationRoutes(
         error: error instanceof Error ? error.message : "This Check is not available for evaluation."
       }, 409);
     }
-    const existingBackfill = (await repository.listEvalRuns(projectId, {
-      limit: 100,
+    const existingRun = (await repository.listEvalRuns(projectId, {
+      limit: 1,
+      purpose: "first_assessment",
       skillVersionId: version.id
-    })).find((run) => run.trigger === "backfill");
-    if (existingBackfill) {
-      const resumed = await runExistingCaseBackfill(repository, projectId, version.id, options.queue);
-      const detail = resumed
-        ? await repository.getEvalRunDetail(projectId, resumed.run.id)
-        : null;
-      if (!detail) throw new Error(`Backfill run vanished after creation: ${existingBackfill.id}`);
-      if (resumed?.dispatchState === "busy") {
+    })).find((run) => run.trigger === "backfill" || (run.trigger === "api_batch" && run.datasetId === null));
+    if (existingRun) {
+      const dispatchState = await dispatchEvalRunOnce(repository, existingRun, options.queue);
+      const detail = await repository.getEvalRunDetail(projectId, existingRun.id);
+      if (!detail) throw new Error(`Evaluation run vanished after creation: ${existingRun.id}`);
+      if (dispatchState === "busy") {
         c.header("Retry-After", "300");
         return c.json({
           error: "The Result run is saved but not durably queued yet. Retry this request.",
@@ -373,12 +370,15 @@ export function registerEvaluationAdministrationRoutes(
   });
 
   app.get("/api/eval-runs", async (c) => {
-    const parsed = z.object({ limit: z.coerce.number().int().positive().max(100).default(50) })
-      .safeParse({ limit: c.req.query("limit") ?? undefined });
+    const parsed = z.object({
+      limit: z.coerce.number().int().positive().max(100).default(50),
+      skillVersionId: z.string().min(1).optional(),
+      purpose: z.enum(["backfill", "first_assessment"]).optional()
+    }).safeParse({ limit: c.req.query("limit") ?? undefined, skillVersionId: c.req.query("skillVersionId"), purpose: c.req.query("purpose") });
     if (!parsed.success) {
       return c.json({ error: "Invalid eval-run query", details: z.treeifyError(parsed.error) }, 400);
     }
-    return c.json({ runs: await repository.listEvalRuns(c.get("projectId"), { limit: parsed.data.limit }) });
+    return c.json({ runs: await repository.listEvalRuns(c.get("projectId"), parsed.data) });
   });
 
   app.get("/api/eval-runs/:evalRunId", async (c) => {

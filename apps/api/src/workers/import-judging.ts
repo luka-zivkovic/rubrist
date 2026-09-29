@@ -4,7 +4,7 @@ import {
   NoCurrentSkillError,
   type RubristRepository
 } from "../repository.js";
-import { dispatchEvalRunOnce, runExistingCaseBackfill } from "./gate.js";
+import { dispatchEvalRunOnce } from "./gate.js";
 
 export interface ImportedCaseJudgingResult {
   scheduledCaseCount: number;
@@ -43,10 +43,9 @@ export async function assertImportJudgingAllowed(
   }
 }
 
-// Before the first customer-evidence Result, every importer converges on the
-// unique backfill run. Later cases use one durable, unique run per
-// (project, Check version, case), so concurrent imports and worker retries
-// cannot enqueue a second provider call.
+// Automatic imports evaluate only the supplied cases. Reuse coverage from an
+// already saved backfill, but never create or expand historical work here.
+// Every remaining case uses a durable unique run for this evaluator version.
 export async function scheduleImportedCaseJudging(
   repository: RubristRepository,
   queue: Queue | undefined,
@@ -63,15 +62,9 @@ export async function scheduleImportedCaseJudging(
     };
   }
 
-  const [existingResult] = await repository.listVerdicts({
-    projectId: input.projectId,
-    source: "llm_judge",
-    skillVersionId: input.skillVersionId,
-    evidenceScope: "customer",
-    limit: 1
-  });
   const existingBackfill = (await repository.listEvalRuns(input.projectId, {
-    limit: 100,
+    limit: 1,
+    purpose: "backfill",
     skillVersionId: input.skillVersionId
   })).find((run) => run.trigger === "backfill");
 
@@ -80,19 +73,14 @@ export async function scheduleImportedCaseJudging(
   let backfillRunId: string | null = null;
   let dispatchPending = false;
   const evalRunIds: string[] = [];
-  if (existingBackfill || !existingResult) {
-    const backfill = await runExistingCaseBackfill(
-      repository,
-      input.projectId,
-      input.skillVersionId,
-      queue
-    );
-    if (backfill) {
-      backfillRunId = backfill.run.id;
-      evalRunIds.push(backfill.run.id);
-      dispatchPending = backfill.dispatchState === "busy";
-      const detail = await repository.getEvalRunDetail(input.projectId, backfill.run.id);
-      const covered = new Set(detail?.items.map((item) => item.caseId) ?? []);
+  if (existingBackfill) {
+    const detail = await repository.getEvalRunDetail(input.projectId, existingBackfill.id);
+    const covered = new Set(detail?.items.map((item) => item.caseId) ?? []);
+    // Only resume a saved backfill when this import actually overlaps it.
+    if (caseIds.some((caseId) => covered.has(caseId))) {
+      backfillRunId = existingBackfill.id;
+      evalRunIds.push(existingBackfill.id);
+      dispatchPending = await dispatchEvalRunOnce(repository, existingBackfill, queue) === "busy";
       if (detail?.status === "pending" || detail?.status === "running") {
         scheduledCaseCount += caseIds.filter((caseId) => covered.has(caseId)).length;
       }
