@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { additionalFields, conversationEvidence, evidenceObject, evidenceText, messageRole } from "../lib/trace-evidence.js";
 
-import { isRecordedTrajectory, messageGroups, type messageEvidence } from "../lib/message-evidence.js";
+import { formattedRecordedJson, losslessJson, isRecordedTrajectory, messageGroups, type messageEvidence } from "../lib/message-evidence.js";
 
 import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
 
@@ -58,7 +58,11 @@ function ToolCalls({ value }: { value: unknown }) {
 function ToolResult({ value, imported }: { value: unknown; imported: boolean }) {
   let record = evidenceObject(value);
   if (imported && typeof value === "string") {
-    try { record = evidenceObject(JSON.parse(value)); } catch { /* Plain responses stay text. */ }
+    record = evidenceObject(losslessJson(value));
+    if (!record) {
+      const formatted = formattedRecordedJson(value);
+      return formatted === null ? <Content value={value} /> : <RawValue value={formatted} />;
+    }
   }
   if (!record || Object.keys(record).length === 0) return <Content value={value} />;
   return <dl className="text-[12px] leading-5">{Object.entries(record).map(([key, item]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 border-b border-rule-soft py-1.5 last:border-0">

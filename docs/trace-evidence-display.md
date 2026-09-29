@@ -34,8 +34,11 @@ keep their existing rendering and exposure boundaries.
   the exact assessmentScope must also match; source prefixes must agree with
   array index and role. Ordered pure text blocks reconstruct the imported text,
   and validated imported tool-call arrays get a readable function/arguments
-  display. Imported tool-result JSON objects show their recorded fields as a
-  list; malformed or unknown source content stays literal.
+  display only when JSON round-trips losslessly (ignoring whitespace outside
+  strings). Imported tool-result objects use a field list under the same guard;
+  otherwise valid JSON gets whitespace-only formatting of its original tokens.
+  Duplicate keys, unsafe numbers and numeric spelling are never normalized away.
+  Malformed or unknown source content stays literal.
 - Only that explicit whole-trajectory import displays “Whole conversation” and
   places its separate source answer in an expandable source-output section.
   No final assistant response is inferred from the last message.

@@ -1,5 +1,36 @@
 import { evidenceObject } from "./trace-evidence.js";
 
+// Preserve quoted whitespace, numeric precision and duplicate keys. If JSON's
+// object model cannot round-trip the source exactly, keep its textual evidence.
+function jsonTokens(text: string) { return text.match(/"(?:\\[\s\S]|[^"\\])*"|[^\s"]/g) ?? []; }
+export function losslessJson(text: string): unknown {
+  try {
+    const value: unknown = JSON.parse(text);
+    return jsonTokens(text).join("") === jsonTokens(JSON.stringify(value)).join("") ? value : undefined;
+  } catch { return undefined; }
+}
+
+export function formattedRecordedJson(text: string): string | null {
+  try { JSON.parse(text); } catch { return null; }
+  const tokens = jsonTokens(text);
+  let depth = 0, output = "";
+  const newline = () => { output += "\n" + "  ".repeat(depth); };
+  for (const [index, token] of tokens.entries()) {
+    if (depth > 32 || output.length > Math.max(32768, text.length * 4)) return text;
+    if (token === "{" || token === "[") {
+      output += token; depth++;
+      if (tokens[index + 1] !== "}" && tokens[index + 1] !== "]") newline();
+    } else if (token === "}" || token === "]") {
+      depth--;
+      if (tokens[index - 1] !== "{" && tokens[index - 1] !== "[") newline();
+      output += token;
+    } else if (token === ",") { output += token; newline(); }
+    else if (token === ":") output += ": ";
+    else output += token;
+  }
+  return output;
+}
+
 // Explicit historical import encodings, never a heuristic for arbitrary JSON text.
 const ENCODINGS = new Set([
   "whole-trajectory-v2-lossless-text-blocks",
@@ -39,7 +70,7 @@ export function messageEvidence(value: unknown, index: number, imported: boolean
     const split = (content as string).lastIndexOf(marker);
     if (record?.role === "assistant" && calls === undefined && split >= 0) {
       try {
-        const parsed: unknown = JSON.parse((content as string).slice(split + marker.length));
+        const parsed = losslessJson((content as string).slice(split + marker.length));
         if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(call => {
           const item = evidenceObject(call), fn = evidenceObject(item?.function);
           return item?.type === "function" && typeof item.id === "string"

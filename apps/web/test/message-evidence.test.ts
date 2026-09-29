@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { isRecordedTrajectory, messageEvidence, messageGroups, sourceMessageIndices, WHOLE_TRAJECTORY_SCOPE } from "../src/lib/message-evidence.js";
+import { formattedRecordedJson, losslessJson, isRecordedTrajectory, messageEvidence, messageGroups, sourceMessageIndices, WHOLE_TRAJECTORY_SCOPE } from "../src/lib/message-evidence.js";
 const metadata = { evidenceProjection: "whole-trajectory-v2-lossless-text-blocks" };
 const call = (id = "a") => ({ id, type: "function", function: { name: "lookup", arguments: '{"id":"L1001"}' } });
 const imported = (role: string, index: number, content: string, suffix = "") => ({ role, content: `[source message ${index}; role=${role}${suffix}]\n${content}` });
 
 describe("recorded message display adapter", () => {
+  it("does not round IDs, collapse duplicate fields or overflow numbers in imported evidence", () => {
+    for (const text of ['{"order_id":9007199254740993}', '{"status":"error","status":"ok"}', '{"value":1e400}', '{"value":25.0}']) {
+      expect(losslessJson(text)).toBeUndefined();
+      const formatted = formattedRecordedJson(text)!;
+      expect(formatted.replace(/\s/g, "")).toBe(text);
+    }
+    expect(losslessJson('{ "phone_number": "555-123-2001", "active":true }')).toEqual({ phone_number: "555-123-2001", active: true });
+    expect(formattedRecordedJson('{"escaped":" a\\n b ","empty":{},"array":[1,2]}')).toBe('{\n  "escaped": " a\\n b ",\n  "empty": {},\n  "array": [\n    1,\n    2\n  ]\n}');
+    const tail = '[{"id":"a","type":"function","function":{"name":"lookup","arguments":"{}"},"large":9007199254740993}]';
+    const view = messageEvidence(imported("assistant", 0, `\nRecorded tool calls:\n${tail}`), 0, true);
+    expect(view.calls).toBeUndefined();
+    expect(view.content).toContain(tail);
+  });
   it("requires both declared encoding and exact scope, and explicit matching indices for links", () => {
     const input = { assessmentScope: WHOLE_TRAJECTORY_SCOPE, messages: [imported("user", 0, "Hello"), imported("assistant", 2, "Wrong index"), { role: "tool", content: "unannotated" }] };
     expect(isRecordedTrajectory(input, metadata)).toBe(true);
