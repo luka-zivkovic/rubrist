@@ -368,7 +368,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
     // Referenced instructions may be collapsed; tool responses are always visible.
     const instructions = target?.querySelector<HTMLDetailsElement>(":scope > details");
     if (instructions) instructions.open = true;
-    target?.scrollIntoView({ block: "center", behavior: "instant" });
+    target?.scrollIntoView({ block: "start", behavior: "instant" });
     target?.focus({ preventScroll: true });
   }
 
