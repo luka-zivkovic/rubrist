@@ -34,3 +34,18 @@ probability-of-error, release, or human-truth claim follows from this selection.
 **ASSUMPTION to test in the pilot:** ten cases with two passing spot checks
 reduce review effort while still exposing confidently wrong evaluators. The
 ratio is a starting heuristic, not a statistically validated optimum.
+
+## Delivery verification
+
+**CURRENT, 2026-09-29:** [PR 185](https://github.com/luka-zivkovic/rubrist/pull/185)
+merged with automated and isolated PostgreSQL checks passing. A local browser
+flow covered saving a suggested queue and reviewing its pinned results. Hosted
+verification checked read-only suggestions and reasons for pilot and benchmark
+cases, with completed reviews excluded. Existing reviews and saved tasks were
+preserved. That hosted verification did not create a new queue; subsequent
+pilot work is separate evidence.
+
+The [repeated-use check](repeated-use-verification.md) additionally exercises
+saved pins and review history across import batches and evaluator changes in a
+disposable database. Neither check validates the 20% passing-result reserve or
+establishes human review accuracy.

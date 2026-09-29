@@ -1,6 +1,6 @@
 # Roadmap: open work
 
-Status: **open-work register**, last reviewed 2026-09-27.
+Status: **open-work register**, last reviewed 2026-09-29.
 
 This file lists work that is known and not done. It is not product
 authority: `PRODUCT.md` and accepted ADRs define intent, and
@@ -15,7 +15,7 @@ is labelled:
 - **CURRENT gap**: a known limit of what is built, with no decision yet on
   whether to change it.
 
-## 1. Carry the capability check into the resolution record (implemented; verification in progress)
+## 1. Carry the capability check into the resolution record (implemented; live carry check remains)
 
 **Source.** ADR-0014 section 4: "When the author saves, the check's outcomes
 become the binding's resolution record."
@@ -48,10 +48,14 @@ make fresh calls.
 
 **Authorization.** The founder approved the provider/setup completion route
 on 2026-09-29. Migration `0004_capability_check_carry.sql` adds the short-lived
-store without changing baseline bytes or existing hosted reviews. Delivery
-verification is pending. First-project setup now offers the shared model
-picker and checks settings before creation; its delivery verification is also
-in progress.
+store without changing baseline bytes or existing hosted reviews.
+
+**Verification (CURRENT, 2026-09-29).** [PR 183](https://github.com/luka-zivkovic/rubrist/pull/183)
+passed automated checks and was deployed with the migration in
+[PR 185](https://github.com/luka-zivkovic/rubrist/pull/185); the deployment checks
+confirmed existing evidence was preserved. A hosted provider check followed by
+saving and reusing that check was not exercised. That live carry check remains
+open. First-project picker verification is recorded in item 5.
 
 ## 2. Close the loop: finding → change → verdict (PROPOSED)
 
@@ -180,11 +184,14 @@ hosts, for example refusing private networks in hosted deployments.
   OpenRouter's model list). ADR-0014's call counts cover probes only. The
   read isn't recorded as a probe: a resolution keeps only its snapshot
   digest, and a re-check keeps nothing of it.
-- **First-project picker delivery verification is pending.** The shared model
-  picker now checks the selected provider/model, fills only accepted defaults,
-  and blocks creation for pending checks or rejected settings. Detailed controls
-  stay collapsed unless they need attention. Navigation and reload protect
-  unsaved choices; those model choices are not persisted across discarded drafts.
+- **First-project picker: hosted provider setup remains unverified.** The shared
+  picker checks the selected provider/model, fills only accepted defaults, and
+  blocks creation for pending checks or rejected settings. Detailed controls stay
+  collapsed unless they need attention. Navigation and reload protect unsaved
+  choices; those model choices are not persisted across discarded drafts.
+  [PR 184](https://github.com/luka-zivkovic/rubrist/pull/184) passed automated
+  checks, independent review and a local browser flow with a mock provider. It
+  shipped with PR 185. A hosted setup using a paid provider remains unchecked.
 - **The ignored-temperature table rests on documentation.** Its DeepSeek
   entries cite DeepSeek's documentation as read on 2026-09-27. Re-check them,
   and look for new cases, with `tools/temperature-study.mjs`.
@@ -193,8 +200,10 @@ hosts, for example refusing private networks in hosted deployments.
 
 These are open but have their own records:
 
-- Operational review prioritization is implemented in the saved-queue flow
-  (delivery verification pending): [selection contract](review-prioritization.md).
+- Operational review prioritization is shipped in the saved-queue flow:
+  [selection contract and verification](review-prioritization.md). Automated
+  checks, a local save/review flow and hosted read-only previews passed. Whether
+  the heuristic improves review effort and detection remains a pilot question.
   This is a bounded work list using existing results, not governed sampling.
 - #102, uncertainty selection for governed review, still needs a decision on
   ADR-0008 selection provenance (see
@@ -205,3 +214,9 @@ These are open but have their own records:
   and scalar calibration;
 - the comparative benchmarks' owners, sampling frames, budgets, and stopping
   rules (decision gate 5).
+
+## Completed reliability checks
+
+**CURRENT:** [Repeated-use verification](repeated-use-verification.md) covers
+imports, retries, evaluator changes and preserved review history using synthetic
+data. Pilot accuracy and usability evidence remain separate.
