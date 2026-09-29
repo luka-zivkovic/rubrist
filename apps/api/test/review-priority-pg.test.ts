@@ -17,14 +17,13 @@ runPgSmoke("suggested review batches", () => {
       const repo = new PgRepository(pool);
       const rows: Array<{ caseId: string; runId: string }> = [];
       for (let i = 0; i < 6; i++) {
-        const { caseId } = await repo.importTrace("proj_test", "manual", { sourceTraceId: `priority-${i}`, input: `Q${i}`, output: `A${i}`, metadata: {} }, { ingestionPurpose: "analysis_eligible_manual" });
+        const { caseId } = await repo.importTrace("proj_test", i === 3 ? "release_evidence" : "manual", { sourceTraceId: `priority-${i}`, input: `Q${i}`, output: `A${i}`, metadata: {} }, { ingestionPurpose: i === 3 ? "release_evidence" : "analysis_eligible_manual" });
         const run = await repo.recordJudgeRun({ projectId: "proj_test", caseId, skillVersionId: "skillv_test", verdict: { label: i % 3 === 0 ? "fail" : i % 3 === 1 ? "ambiguous" : "pass", score: 0.5, confidence: 0.9, reason: "Recorded" } });
         rows.push({ caseId, runId: run.id });
       }
-      const [target, pending, reviewed, scaffold, otherVersion, untouched] = rows as [typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number]];
+      const [target, pending, reviewed, , otherVersion, untouched] = rows as [typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number], typeof rows[number]];
       await repo.createReviewQueue({ projectId: "proj_test", skillVersionId: "skillv_test", name: "Pending", caseIds: [pending.caseId] });
       await repo.recordVerdict({ projectId: "proj_test", skillVersionId: "skillv_test", caseId: reviewed.caseId, source: "human", payload: { kind: "binary", pass: true, rationale: "Reviewed" } });
-      await pool.query(`update cases set case_type='release_evidence' where id=$1`, [scaffold.caseId]);
       // A review of another evaluator does not suppress this evaluator's result.
       await repo.recordVerdict({ projectId: "proj_test", skillVersionId: "skillv_other", caseId: otherVersion.caseId, source: "human", payload: { kind: "binary", pass: true, rationale: "Other version" } });
       const suggestion = await repo.suggestReviewQueue("proj_test", "skillv_test", 10);
