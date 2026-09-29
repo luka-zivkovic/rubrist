@@ -23,7 +23,7 @@ export function buildTraceExportPresentation(input: {
     ...(criterionId ? { criterionId } : {})
   });
   const title = [
-    "Exports verdict rows for the selected criterion",
+    "Exports recorded labels for the selected criterion",
     sourceFilter !== "all" ? `source ${VERDICT_SOURCE_LABEL[sourceFilter]}` : "every source",
     versionFilter !== "all" ? `version ${versionFilter}` : "every evaluator version"
   ].join(" · ") + ". Label, search, and random-sample filters are not applied.";

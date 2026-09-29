@@ -100,7 +100,7 @@ export function Sidebar({
   const session = useSession();
   const userName = session.data?.user?.name ?? "Operator";
   const initial = (userName[0] ?? "C").toUpperCase();
-  const role = session.data?.user?.email ?? "Skill owner";
+  const role = session.data?.user?.email ?? "Evaluator owner";
 
   return (
     <aside

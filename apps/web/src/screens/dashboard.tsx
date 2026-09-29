@@ -305,7 +305,7 @@ export function DashboardScreen() {
             unit="%"
             delta={syncBackPct === 100 ? "clean" : "partial"}
             deltaKind={syncBackPct === 100 ? "up" : "signal"}
-            foot="Verdicts written back to trace platform"
+            foot="Assessments written back to trace platform"
             to="/integrations"
             src="open integrations →"
           />

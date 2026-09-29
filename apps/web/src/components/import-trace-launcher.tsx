@@ -34,7 +34,7 @@ export function ImportTraceLauncher() {
         variant="default"
         size="sm"
         onClick={() => setOpen(true)}
-        title="Paste a trace and run the skill on it"
+        title="Import a trace as a case and run the evaluator"
       >
         <Plus /> Import trace
       </Button>
