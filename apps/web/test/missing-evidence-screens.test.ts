@@ -586,7 +586,7 @@ describe("run comparison", () => {
     await render("/skill/compare?from=skillv_1&to=skillv_4", "/skill/compare", () => createElement(CompareVersionsScreen));
 
     expect(text()).toContain("3 saves between them · 2 with a recorded run · 1 couldn't be loaded");
-    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's run couldn't be loaded");
+    expect(kpi("Reference disagreements across versions")).toContain("Reference disagreements across versions: — | 1 save's run couldn't be loaded");
     expect(kpi("Improvements")).toContain("Improvements: — |");
     expect(text()).toContain("Reference check failed");
     expect(text()).toContain("Couldn't load this save's run");
@@ -600,7 +600,7 @@ describe("run comparison", () => {
     await act(async () => buttons("Retry")[0]!.click());
     await settle();
 
-    expect(kpi("Regressions across versions")).toContain("Regressions across versions: — | 1 save's reference check failed");
+    expect(kpi("Reference disagreements across versions")).toContain("Reference disagreements across versions: — | 1 save's reference check failed");
     expect(text()).not.toContain("Couldn't load this save's run");
     expect(buttons("Retry")).toHaveLength(0);
   });
@@ -616,7 +616,7 @@ describe("run comparison", () => {
 
     await render("/skill/compare?from=skillv_1&to=skillv_3", "/skill/compare", () => createElement(CompareVersionsScreen));
 
-    expect(kpi("Regressions across versions")).toContain("Regressions across versions: 1 | changes against recorded labels");
+    expect(kpi("Reference disagreements across versions")).toContain("Reference disagreements across versions: 1 | changes against recorded labels");
     expect(kpi("Improvements")).toContain("Improvements: 2 | flips toward the label");
     // Equal agreement is unchanged, not improved.
     expect(kpi("Known-failure agreement")).toContain("100 → 100% | unchanged");
@@ -634,7 +634,7 @@ describe("run comparison", () => {
     await render("/skill/compare?from=skillv_1&to=skillv_3", "/skill/compare", () => createElement(CompareVersionsScreen));
 
     // v1.0.2's improvements had no verdicts on v1.0.1 to be counted against.
-    expect(kpi("Regressions across versions")).toContain("Regressions across versions: 0 | changes against recorded labels");
+    expect(kpi("Reference disagreements across versions")).toContain("Reference disagreements across versions: 0 | changes against recorded labels");
     expect(kpi("Improvements")).toContain("Improvements: — | v1.0.1 has no measured run to count improvements from");
   });
 

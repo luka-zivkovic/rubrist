@@ -87,7 +87,7 @@ describe("trust-aligned flow behavior", () => {
     }).toEqual(expectedQuery);
     expect(presentation.title).toContain(titleScope);
     expect(presentation.title).toContain(
-      "Verdict-label, search, and random-sample filters are not applied."
+      "Label, search, and random-sample filters are not applied."
     );
   });
 });
