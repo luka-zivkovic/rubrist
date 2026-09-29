@@ -169,6 +169,21 @@ describe("recorded conversation evidence", () => {
     expect(generic.querySelector('[data-message-index="0"] > div > p')!.textContent).toContain("Recorded tool calls:");
   });
 
+  it("preserves ambiguous JSON values in the visible tool result instead of hiding a lossy projection behind source details", () => {
+    const metadata = { evidenceProjection: "whole-trajectory-v2-lossless-text-blocks" };
+    const view = (body: string) => render({ assessmentScope: "Entire recorded trajectory; output repeats the source final answer.", messages: [
+      { role: "tool", content: `[source message 0; role=tool]\n${body}` }
+    ] }, "answer", metadata).container.querySelector('[data-message-index="0"] > div')!;
+    for (const body of ['{"order_id":9007199254740993}', '{"status":"error","status":"ok"}', '{"value":1e400}']) {
+      const result = view(body);
+      expect(result.querySelector(":scope > pre")!.textContent!.replace(/\s/g, "")).toBe(body);
+      expect(result.querySelector("dl")).toBeNull();
+    }
+    const normal = view('{"phone_number":"555-123-2001","status":"Active"}');
+    expect([...normal.querySelectorAll("dt")].map(el => el.textContent)).toEqual(["phone_number", "status"]);
+    expect([...normal.querySelectorAll("dd")].map(el => el.textContent)).toEqual(["555-123-2001", "Active"]);
+  });
+
   it("distinguishes missing, null and empty evidence", () => {
     expect(evidenceText(undefined)).toBe("Not recorded");
     expect(evidenceText(null)).toBe("null");
