@@ -158,7 +158,22 @@ export const ReviewQueueDetailSchema = z.object({
 });
 export type ReviewQueueDetail = z.infer<typeof ReviewQueueDetailSchema>;
 
+export const ReviewQueueSuggestionSchema = z.object({
+  method: z.literal("review-priority/v1"),
+  skillVersionId: z.string().min(1),
+  criterionVersionId: z.string().min(1),
+  seed: z.string().min(1),
+  consideredCount: z.number().int().nonnegative().max(1000),
+  capped: z.boolean(),
+  items: z.array(z.object({
+    caseId: z.string().min(1), judgeRunId: z.string().min(1),
+    reason: z.enum(["flagged", "ambiguous", "spot_check"])
+  })).max(50)
+});
+export type ReviewQueueSuggestion = z.infer<typeof ReviewQueueSuggestionSchema>;
+
 export const CreateReviewQueueInputSchema = z.object({
+  judgeRunIds: z.record(z.string().min(1), z.string().min(1)).optional(),
   skillVersionId: z.string().min(1).optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
@@ -167,6 +182,10 @@ export const CreateReviewQueueInputSchema = z.object({
   // case backlog into one queue. Operators that need more can create multiple
   // queues or add items in subsequent calls (follow-up PR).
   caseIds: z.array(z.string().min(1)).min(1).max(500)
+}).refine((input) => !input.judgeRunIds || (Boolean(input.skillVersionId)
+  && Object.keys(input.judgeRunIds).length === new Set(input.caseIds).size
+  && input.caseIds.every((id) => Object.hasOwn(input.judgeRunIds!, id))), {
+  message: "Explicit recorded results must cover exactly the selected cases and name an evaluator version"
 });
 export type CreateReviewQueueInput = z.infer<typeof CreateReviewQueueInputSchema>;
 

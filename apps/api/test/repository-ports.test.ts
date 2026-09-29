@@ -52,6 +52,7 @@ const EXPECTED_PORT_METHODS = {
     "getSelfConsistencyReport", "listAuditEntries"
   ],
   ReviewQueueRepositoryPort: [
+    "suggestReviewQueue",
     "createReviewQueue", "listReviewQueues", "getReviewQueueDetail", "getNextPendingQueueItem",
     "closeReviewQueue", "reopenReviewQueue", "addReviewQueueItems"
   ],

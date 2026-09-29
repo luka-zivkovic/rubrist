@@ -1031,6 +1031,10 @@ export class PgRepository implements RubristRepository {
     return this.caseEvidenceRepository.getSelfConsistencyReport(projectId, versionId);
   }
 
+  async suggestReviewQueue(projectId: string, skillVersionId: string, limit: number): Promise<import("@rubrist/shared").ReviewQueueSuggestion> {
+    return this.reviewQueueRepository.suggestReviewQueue(projectId, skillVersionId, limit);
+  }
+
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
     return this.reviewQueueRepository.createReviewQueue(input);
   }

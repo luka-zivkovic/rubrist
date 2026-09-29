@@ -16,6 +16,8 @@ import {
   RecordManualTraceTestValidationInputSchema,
   type RetireGoldenSetEntryInput,
   RetireGoldenSetEntryInputSchema,
+  type ReviewQueueSuggestion,
+  ReviewQueueSuggestionSchema,
   type ReviewQueue,
   type ReviewQueueDetail,
   ReviewQueueDetailSchema,
@@ -274,7 +276,14 @@ export async function fetchReviewQueueDetail(queueId: string): Promise<ReviewQue
   return ReviewQueueDetailSchema.parse(await response.json());
 }
 
+export async function fetchReviewQueueSuggestion(skillVersionId: string): Promise<ReviewQueueSuggestion> {
+  const response = await apiFetch(queryPath(`${API_BASE}/api/review-queues/suggestions`, { skillVersionId, limit: "10" }), { credentials: "include" });
+  if (!response.ok) throw await apiErrorFromResponse(response, "Review suggestions request failed");
+  return ReviewQueueSuggestionSchema.parse(await response.json());
+}
+
 export async function createReviewQueue(input: {
+  judgeRunIds?: Record<string, string>;
   skillVersionId?: string;
   name: string;
   description?: string;

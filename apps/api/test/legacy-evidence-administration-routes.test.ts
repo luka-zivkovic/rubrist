@@ -26,6 +26,7 @@ describe("legacy evidence administration routes", () => {
       "GET /api/projects/judge-human-disagreements",
       "GET /api/projects/verdicts",
       "GET /api/projects/verdicts/export",
+      "GET /api/review-queues/suggestions",
       "POST /api/review-queues",
       "GET /api/review-queues",
       "GET /api/review-queues/:queueId",

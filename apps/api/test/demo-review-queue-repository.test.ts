@@ -11,6 +11,7 @@ import { DemoReviewQueueRepository } from "../src/repository/demo-review-queues.
 import { DemoRepositoryStore } from "../src/repository/demo-store.js";
 
 const EXPECTED_PUBLIC_METHODS = [
+  "suggestReviewQueue",
   "createReviewQueue",
   "listReviewQueues",
   "getReviewQueueDetail",
@@ -216,6 +217,7 @@ describe("Demo review-queue repository slice", () => {
       .filter(ts.isMethodDeclaration)
       .map((method) => [method.name.getText(repositorySource), method]));
     const expectedDelegateBodies: Record<(typeof EXPECTED_PUBLIC_METHODS)[number], string> = {
+      suggestReviewQueue: "{ return this.reviewQueueRepository.suggestReviewQueue(projectId, skillVersionId, limit); }",
       createReviewQueue: "{ return this.reviewQueueRepository.createReviewQueue(input); }",
       listReviewQueues: "{ return this.reviewQueueRepository.listReviewQueues(projectId, opts); }",
       getReviewQueueDetail: "{ return this.reviewQueueRepository.getReviewQueueDetail(projectId, queueId); }",

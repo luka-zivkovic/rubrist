@@ -23,9 +23,10 @@ export function useReviewEvaluator(skill: Skill | null) {
     selected: scopedVersions.find((version) => version.id === versionId) };
 }
 
-export function ReviewEvaluatorPicker({ selection, disabled }: {
+export function ReviewEvaluatorPicker({ selection, disabled, previewPinned = false }: {
   selection: ReturnType<typeof useReviewEvaluator>;
   disabled?: boolean;
+  previewPinned?: boolean;
 }) {
   const id = useId();
   return <div className="flex flex-col gap-1.5">
@@ -33,7 +34,7 @@ export function ReviewEvaluatorPicker({ selection, disabled }: {
     <select id={id} value={selection.versionId} disabled={disabled} onChange={(e) => selection.setVersionId(e.target.value)} className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 text-sm">
       {selection.versions.map((version) => <option key={version.id} value={version.id}>v{version.version} · {version.id}</option>)}
     </select>
-    <p className="text-xs text-ink-3">Saves the latest existing result from this version for each case. Later runs cannot replace it. Every case must already have a result.</p>
+    <p className="text-xs text-ink-3">{previewPinned ? "Saves the exact results shown in this suggestion." : "Saves the latest existing result from this version for each case."} Later runs cannot replace saved results. Every case must already have a result.</p>
     {selection.error ? <p role="alert" className="text-xs text-signal">Could not load version history: {selection.error}</p> : null}
   </div>;
 }

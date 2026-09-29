@@ -1,3 +1,4 @@
+import { suggestReviewBatch, REVIEW_CANDIDATE_LIMIT } from "../lib/review-priority.js";
 import { randomUUID } from "node:crypto";
 import type {
   ReviewQueue,
@@ -27,7 +28,39 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
     private readonly getCurrentSkill: (projectId: string) => Promise<Skill>
   ) {}
 
+  async suggestReviewQueue(projectId: string, skillVersionId: string, limit: number) {
+    const criterionVersionId = await this.resolveReviewCriterionVersion(projectId, undefined, skillVersionId);
+    const result = await this.pool.query(
+      `with latest as (
+         select distinct on (run.case_id) run.id, run.case_id, run.verdict, run.created_at
+         from judge_runs run join cases c on c.id = run.case_id and c.project_id = run.project_id
+         where run.project_id = $1 and run.skill_version_id = $2
+           and c.case_type not in ('gate_candidate', 'release_evidence')
+         order by run.case_id, run.created_at desc, run.id desc
+       )
+       select latest.* from latest
+       where not exists (
+         select 1 from verdicts v where v.project_id = $1 and v.case_id = latest.case_id
+           and v.skill_version_id = $2 and v.source in ('human', 'adjudicated')
+           and (v.reviewed_judge_run_id = latest.id or
+             (v.reviewed_judge_run_id is null and v.created_at >= latest.created_at))
+       ) and not exists (
+         select 1 from review_queue_items item join review_queues queue on queue.id = item.queue_id
+         where queue.project_id = $1 and queue.status = 'open' and item.status = 'pending'
+           and item.judge_run_id = latest.id
+       )
+       order by latest.created_at desc, latest.id desc limit $3`,
+      [projectId, skillVersionId, REVIEW_CANDIDATE_LIMIT + 1]
+    );
+    return suggestReviewBatch(result.rows.map(row => ({ caseId: String(row.case_id), judgeRunId: String(row.id),
+      verdict: String(row.verdict), createdAt: new Date(row.created_at).toISOString() })), skillVersionId, criterionVersionId, limit);
+  }
+
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
+    if (input.judgeRunIds && (!input.skillVersionId || Object.keys(input.judgeRunIds).length !== new Set(input.caseIds).size
+      || input.caseIds.some(id => !Object.hasOwn(input.judgeRunIds!, id) || !input.judgeRunIds![id]))) {
+      throw new DatasetRevisionConflictError("Explicit recorded results must match every selected case and evaluator");
+    }
     const criterionVersionId = await this.resolveReviewCriterionVersion(
       input.projectId,
       input.criterionVersionId,
@@ -48,7 +81,7 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
     }
 
     const pins = new Map(await Promise.all(distinctCaseIds.map(async (caseId) =>
-      [caseId, await this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId)] as const
+      [caseId, await this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId, input.judgeRunIds?.[caseId])] as const
     )));
     const queueId = `revq_${randomUUID()}`;
     const client = await this.pool.connect();
@@ -266,16 +299,16 @@ export class PgReviewQueueRepository implements ReviewQueueRepositoryPort {
     return detail ? detail.queue : null;
   }
 
-  private async resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string) {
+  private async resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string, judgeRunId?: string) {
     // Omission retains the older criterion-only API contract, explicitly unpinned.
     if (!skillVersionId) return { skillVersionId: null, judgeRunId: null };
     const result = await this.pool.query(
       `select run.id from judge_runs run
        join skill_versions version on version.id = run.skill_version_id and version.project_id = run.project_id
        where run.project_id = $1 and run.case_id = $2 and run.skill_version_id = $3
-         and version.criterion_version_id = $4
+         and version.criterion_version_id = $4 and ($5::text is null or run.id = $5)
        order by run.created_at desc, run.id desc limit 1`,
-      [projectId, caseId, skillVersionId, criterionVersionId]
+      [projectId, caseId, skillVersionId, criterionVersionId, judgeRunId ?? null]
     );
     if (!result.rows[0]) throw new DatasetRevisionConflictError(`No recorded result for case ${caseId} and selected evaluator version`);
     return { skillVersionId, judgeRunId: String(result.rows[0].id) };

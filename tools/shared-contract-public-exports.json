@@ -896,6 +896,8 @@
     "ReviewQueueSchema",
     "ReviewQueueStatus",
     "ReviewQueueStatusSchema",
+    "ReviewQueueSuggestion",
+    "ReviewQueueSuggestionSchema",
     "ReviewerLabel",
     "ReviewerLabelSchema",
     "ReviseTraceTestInput",

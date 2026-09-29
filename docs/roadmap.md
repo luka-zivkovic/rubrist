@@ -193,7 +193,10 @@ hosts, for example refusing private networks in hosted deployments.
 
 These are open but have their own records:
 
-- #102, uncertainty selection for governed review, which needs a decision on
+- Operational review prioritization is implemented in the saved-queue flow
+  (delivery verification pending): [selection contract](review-prioritization.md).
+  This is a bounded work list using existing results, not governed sampling.
+- #102, uncertainty selection for governed review, still needs a decision on
   ADR-0008 selection provenance (see
   [implementation batches](implementation-batches.md));
 - ADR-0013's follow-ups: drift and model-change notifications, Ironside

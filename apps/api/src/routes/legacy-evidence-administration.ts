@@ -562,6 +562,19 @@ export function registerLegacyEvidenceAdministrationRoutes(
     return c.body(body);
   });
 
+  app.get("/api/review-queues/suggestions", async (c) => {
+    markUngovernedLegacy(c);
+    const parsed = z.object({ skillVersionId: z.string().min(1), limit: z.coerce.number().int().min(1).max(50).default(10) })
+      .safeParse({ skillVersionId: c.req.query("skillVersionId"), limit: c.req.query("limit") });
+    if (!parsed.success) return c.json({ error: "Choose an evaluator version and a review budget from 1 to 50" }, 400);
+    try {
+      return c.json(await repository.suggestReviewQueue(c.get("projectId"), parsed.data.skillVersionId, parsed.data.limit));
+    } catch (error) {
+      if (error instanceof DatasetRevisionConflictError) return c.json({ error: error.message }, 400);
+      throw error;
+    }
+  });
+
   app.post("/api/review-queues", async (c) => {
     markUngovernedLegacy(c);
     // Owner-only: creating a queue is a curation act — owners pick which cases
@@ -588,6 +601,7 @@ export function registerLegacyEvidenceAdministrationRoutes(
           ? { criterionVersionId: parsed.data.criterionVersionId }
           : {}),
         caseIds: parsed.data.caseIds,
+        judgeRunIds: parsed.data.judgeRunIds,
         ...(c.get("user")?.id ? { createdByUserId: c.get("user")!.id } : {})
       });
       return c.json({ queue }, 201);

@@ -521,6 +521,10 @@ exports[`repository ports > partition the complete facade into exact, disjoint m
   "ReviewQueueRepositoryPort": [
     {
       "kind": "MethodSignature",
+      "signature": "suggestReviewQueue(projectId: string, skillVersionId: string, limit: number): Promise<import("@rubrist/shared").ReviewQueueSuggestion>;",
+    },
+    {
+      "kind": "MethodSignature",
       "signature": "createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue>;",
     },
     {
