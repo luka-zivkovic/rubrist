@@ -100,6 +100,8 @@ vi.mock("../src/screens/skill-edit/regression.js", () => ({
 let lastEditor: any;
 let lastFirstSetup: any;
 const { SkillEditScreen } = await import("../src/screens/skill-edit.js");
+const { confirmProjectSwitch } = await import("../src/lib/project-switch.js");
+const transport = await import("../src/lib/api/transport.js");
 
 function version(id: string, number: string, overrides: Partial<SkillVersion> = {}): SkillVersion {
   return {
@@ -191,6 +193,26 @@ const change = async (field: string, value: unknown) => {
 };
 
 describe("editor protects author choices and work", () => {
+  it("keeps the project request scope when cancelling a first-project draft switch", async () => {
+    transport.selectProject("project_1");
+    api.fetchOnboardingEvidenceInventory.mockResolvedValue(null);
+    Object.assign(dashboard.dashboard.project, { name: "Test", mode: "bench" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor("/skill/edit?first=1&starter=task-outcome-quality");
+    await act(async () => lastFirstSetup.onDecide());
+    await act(async () => lastFirstSetup.judgePicker.props.onModel("chosen-model", "chosen-version"));
+    if (confirmProjectSwitch()) transport.selectProject("project_2");
+    expect(transport.selectedProjectId()).toBe("project_1");
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    await transport.apiFetch("/api/project/settings");
+    expect(new Headers(fetch.mock.calls[0]![1]?.headers).get("x-rubrist-project")).toBe("project_1");
+    expect(lastFirstSetup.modelId).toBe("chosen-model");
+    confirm.mockReturnValue(true);
+    expect(confirmProjectSwitch()).toBe(true);
+    const reload = new window.Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(false);
+  });
   it("protects first-project model choices when leaving or reloading", async () => {
     api.fetchOnboardingEvidenceInventory.mockResolvedValue(null);
     Object.assign(dashboard.dashboard.project, { name: "Test", mode: "bench" });
