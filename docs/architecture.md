@@ -170,10 +170,9 @@ behind the table; it makes live calls and is not run in CI. A failed binding
 that stated a temperature carries a suggestion from the record's temperature
 outcomes with the saved reasoning: leave temperature unset where 0 and 0.5
 were both rejected, choose another value where one was accepted, and nothing
-about temperature where it is unknown. That suggestion is not yet reachable
-(CURRENT): the check's outcomes don't yet become the record, and resolution
-sends nothing after a rejected confirming probe, so a failed record holds
-only that probe.
+about temperature where it is unknown. Compatible authoring probes are now
+carried into the record, so a rejected confirmation can retain the evidence
+needed for that suggestion.
 
 Resolution also runs after save: the gate worker confirms a newly saved
 version's binding before its regression gate, with the confirming probe and,
@@ -197,9 +196,15 @@ probes, so at most 3 calls. Its report classifies temperature only from
 requests it sent itself; the picker reads its probes together with the
 check's. Each owner may start 10 checks or
 classifications a minute per project, and a project runs at most 2 at once.
-The check records nothing: ADR-0014 carries its outcomes into the resolution
-record (TARGET), but the record is built from resolution's own probes after
-save (CURRENT). A check against a custom endpoint reaches the URL the owner
+CURRENT: checks are retained server-side for one hour. Project, endpoint,
+model/version, routing, output limit, credential source, and actual credential
+digest must match before reuse. A new full check supersedes older checks;
+subsequent classifications extend it. Resolution selects bounded probes for
+the saved protocol and settings, retaining conservative reasoning support and
+the exact temperature classification. Unselected authoring probes remain only
+in the expiring store; the resolution is not a total authoring-cost ledger.
+It always sends a fresh confirmation, and governed re-checks never use this
+cache. A check against a custom endpoint reaches the URL the owner
 names, as the saved binding's calls would; restricting which hosts a custom
 endpoint may name is not yet enforced (CURRENT).
 

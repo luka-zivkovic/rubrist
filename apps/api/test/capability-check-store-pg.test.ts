@@ -1,4 +1,7 @@
 import { expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { Pool } from "pg";
 import { runMigrations } from "@rubrist/db";
 import { PgCapabilityCheckStore, capabilityCheckContext, CAPABILITY_CHECK_CARRY_MS } from "../src/lib/capability-check-store.js";
 import { runCapabilityCheck } from "../src/lib/evaluator-resolution.js";
@@ -7,6 +10,28 @@ import { openPostgresTestDatabase } from "./helpers/postgres.js";
 import { runPgSmoke, seedSkill } from "./pg-smoke-support.js";
 
 runPgSmoke("capability check persistence", () => {
+  it("upgrades the previous migration history without rewriting existing evaluator rows", async () => {
+    const { pool, cleanup, databaseUrl } = await openPostgresTestDatabase("capability_upgrade");
+    const schema = `carry_${randomUUID().replaceAll("-", "")}`;
+    let previous: Pool | undefined;
+    try {
+      await pool.query(`create schema "${schema}"`);
+      const url = new URL(databaseUrl); url.searchParams.set("options", `-c search_path=${schema}`);
+      previous = new Pool({ connectionString: url.toString() });
+      await previous.query(`create table rubrist_migrations(id text primary key,checksum text not null,applied_at timestamptz not null default now())`);
+      for (const id of ["0001_baseline", "0002_review_queue_evidence_pins", "0003_evaluator_authorship"]) {
+        const sql = await readFile(new URL(`../../../packages/db/migrations/${id}.sql`, import.meta.url), "utf8");
+        await previous.query(sql);
+        await previous.query(`insert into rubrist_migrations(id,checksum) values($1,$2)`, [id, createHash("sha256").update(sql).digest("hex")]);
+      }
+      await previous.query(`insert into organizations(id,name) values('org_test','Test'); insert into projects(id,organization_id,name,trace_provider) values('proj_test','org_test','Test','manual')`);
+      await seedSkill(previous);
+      const before = (await previous.query(`select to_jsonb(v) row from skill_versions v order by id`)).rows;
+      await runMigrations(previous); await runMigrations(previous);
+      expect((await previous.query(`select to_jsonb(v) row from skill_versions v order by id`)).rows).toEqual(before);
+      expect((await previous.query(`select count(*) from evaluator_capability_checks`)).rows[0].count).toBe("0");
+    } finally { await previous?.end(); await cleanup(); }
+  });
   it("survives another store instance, expires, isolates projects/keys and preserves existing evidence on repeat migrations", async () => {
     const { pool, cleanup } = await openPostgresTestDatabase("capability_carry");
     try {
