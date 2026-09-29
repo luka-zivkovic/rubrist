@@ -42,7 +42,13 @@ function combined(entries: StoredCapabilityCheck[], binding: ExecutionBinding): 
     probe.verdictProtocol === binding.verdictProtocol && probe.sent.topP === binding.sampling.topP && sameReasoning(probe.sent.reasoning)) ?? [];
   const reasoning = new Map<string, typeof all[number]>();
   for (const probe of all) if (probe.purpose === "reasoning") reasoning.set(canonicalJson(probe.sent), probe);
-  const reasoningProbes = [...reasoning.values()].sort((a, b) => Number(sameReasoning(b.sent.reasoning)) - Number(sameReasoning(a.sent.reasoning))).slice(0, 2);
+  const strength = (probe: typeof all[number]) => probe.outcome === "accepted" ? 3 :
+    probe.outcome === "error" ? 0 : probe.rejection === "unattributed" ||
+      (probe.rejection === "value" && probe.rejectedParameter === "reasoning") ? 2 : 1;
+  // Keep the selected baseline and the strongest other answer. Discarding a
+  // later accepted mode could otherwise turn "adjustable" into "unsupported".
+  const reasoningProbes = [...reasoning.values()].sort((a, b) =>
+    Number(sameReasoning(b.sent.reasoning)) - Number(sameReasoning(a.sent.reasoning)) || strength(b) - strength(a)).slice(0, 2);
   const protocol = [...all].reverse().find((probe) => probe.purpose === "protocol");
   return { ...current.at(-1)!.check, probes: [...(protocol ? [protocol] : []), ...reasoningProbes, ...temperatures] };
 }

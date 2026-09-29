@@ -38,7 +38,7 @@ import {
   type ProbeExecutor
 } from "../src/lib/evaluator-resolution.js";
 import { SEEDED_BINDING, resolvedRecordFor, temperatureRejectingRecordFor } from "./fixtures/execution-binding.js";
-import { MemoryCapabilityCheckStore, CAPABILITY_CHECK_CARRY_MS } from "../src/lib/capability-check-store.js";
+import { MemoryCapabilityCheckStore, CAPABILITY_CHECK_CARRY_MS, capabilityCheckContext } from "../src/lib/capability-check-store.js";
 
 // Resolution and re-check as the governed gates use them (ADR-0014 section 4).
 
@@ -150,6 +150,34 @@ describe("carrying authoring checks into resolution", () => {
     expect(record.status).toBe("resolved");
     expect(record.probes.filter((p) => p.stage === "capability_check" && p.purpose === "temperature")).toHaveLength(2);
     expect(sent).toHaveLength(1);
+  });
+
+  it("keeps a later accepted reasoning mode instead of concluding the parameter is unsupported", async () => {
+    const { services: s } = services(() => accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    const report = await checkBindingCapabilities(s, "project", input);
+    const base = { provider: OPUS.provider, endpoint: OPUS.endpoint, modelId: OPUS.modelId,
+      modelVersion: OPUS.modelVersion, outputTokenLimit: OPUS.outputTokenLimit, routing: OPUS.routing };
+    const original = { base, credentialSource: "project" as const, protocol: OPUS.verdictProtocol,
+      probes: report.probes, temperatureSupport: report.temperatureSupport,
+      reasoningSupport: report.reasoningSupport, probedReasoning: report.probedReasoning };
+    const contextDigest = capabilityCheckContext(original, "sk-project");
+    const template = report.probes.find((p) => p.purpose === "reasoning")!;
+    const modes = ["low", "medium", "high"] as const;
+    for (const [index, effort] of modes.entries()) {
+      const reasoning = { family: "anthropic" as const, thinking: { type: "adaptive" as const }, effort };
+      const probe = { ...template, sent: { ...template.sent, reasoning },
+        outcome: index === 2 ? "accepted" as const : "rejected" as const,
+        rejection: index === 2 ? null : "parameter" as const,
+        rejectedParameter: index === 2 ? null : "reasoning" as const,
+        failureKind: index === 2 ? null : "provider_rejected_request" as const,
+        providerMessage: index === 2 ? null : "Reasoning parameter unsupported" };
+      await s.checks.put({ projectId: "project", contextDigest, checkedAt: s.now!(), classification: index > 0,
+        check: { ...original, probes: [probe], probedReasoning: reasoning } });
+    }
+    const record = await resolveSavedBinding(s, governed({ ...OPUS, reasoning: null }));
+    expect(record.reasoningSupport).toBe("accepted");
+    expect(record.probes.filter((p) => p.stage === "capability_check" && p.purpose === "reasoning")).toHaveLength(2);
   });
 
   it("does not borrow temperature or reasoning support from another verdict protocol", async () => {
