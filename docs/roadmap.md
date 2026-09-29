@@ -15,18 +15,17 @@ is labelled:
 - **CURRENT gap**: a known limit of what is built, with no decision yet on
   whether to change it.
 
-## 1. Carry the capability check into the resolution record (TARGET)
+## 1. Carry the capability check into the resolution record (implemented; verification in progress)
 
 **Source.** ADR-0014 section 4: "When the author saves, the check's outcomes
 become the binding's resolution record."
 
-**Now (CURRENT).** The check records nothing. Resolution after save builds
-the record from its own probes (`resolveBinding` in
-`apps/api/src/lib/binding-resolution.ts` passes `check: null`).
-So resolution repeats probes the check already sent, and the temperature
-suggestion ADR-0014 section 4 gives a failed binding ("leave temperature
-unset" or "choose another value") can't be reached, because a failed record
-holds only its confirming probe.
+**Now (CURRENT).** Authoring checks are retained server-side for one hour.
+Resolution carries compatible probes into its record and still sends the
+exact saved request for confirmation. Matching includes project, provider,
+endpoint, model/version, output limit, routing, credential source and a digest
+of the actual credential. Rotation invalidates reuse. Governed re-checks still
+make fresh calls.
 
 **Design.**
 - Keep each check's probes server-side, per project, with the probed model
@@ -41,14 +40,17 @@ holds only its confirming probe.
   it.
 - When a project keeps a new check, prune its checks older than the carry
   window.
-- A local draft exists, not yet pushed and written before decision 12: a
-  `CapabilityCheckStore` on `BindingResolutionServices` and an
-  `evaluator_capability_checks` table. It must be updated for decision 12's
-  probe schema.
+- The current store supports decision 12 classifications. A new full check
+  supersedes older checks; subsequent classifications extend it. Resolution
+  selects bounded probes for the saved protocol and temperature's exact
+  reasoning/topP, preserving the existing evidence contract limits. Raw check
+  history is ephemeral; the resolution is not a total authoring-cost ledger.
 
-**Waiting on.** Approval to finish the draft, which changes the API's
-service wiring in `apps/api/src/app.ts` and `apps/api/src/index.ts` and adds
-a table to `packages/db/migrations/0001_baseline.sql`.
+**Authorization.** The founder approved the provider/setup completion route
+on 2026-09-29. Migration `0004_capability_check_carry.sql` adds the short-lived
+store without changing baseline bytes or existing hosted reviews. Delivery
+verification is pending; this item does not imply the first-project picker
+gap below is closed.
 
 ## 2. Close the loop: finding → change → verdict (PROPOSED)
 
