@@ -27,6 +27,7 @@ import { parseLangfusePollImportLimit, parseLangfusePollIntervalMs, registerLang
 import { registerLangSmithImportWorker } from "./workers/langsmith-import.js";
 import { parsePollImportLimit, parsePollIntervalMs, registerLangSmithPoller } from "./workers/langsmith-poller.js";
 import { bindingResolutionServices, recheckGovernedBinding } from "./lib/binding-resolution.js";
+import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const pool = createPgPool();
@@ -75,7 +76,9 @@ if (queue) {
     // saved binding before its regression gate.
     resolveSaved: savedVersionResolver(
       evaluatorLifecycleRepository,
-      bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider))
+      bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider), {
+        ...(pool ? { checks: new PgCapabilityCheckStore(pool) } : {})
+      })
     )
   } : {});
   await registerLangSmithImportWorker(queue, repository);

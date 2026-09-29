@@ -21,6 +21,10 @@ reviewed authorship fix uses `0003_evaluator_authorship.sql`: old provenance
 values remain unchanged, and a new declaration flag distinguishes explicit
 authorship from older defaults. Neither migration rewrites stored reviews.
 
+The 2026-09-29 provider/setup completion continues this preservation rule.
+`0004_capability_check_carry.sql` adds an ephemeral provider-probe store; it
+does not alter existing evidence tables or reset the hosted database.
+
 This is a narrow preservation exception, not a declaration of external
 production launch or global exit from the policy. This installation must use
 forward changes compatible with its recorded migration history; no baseline

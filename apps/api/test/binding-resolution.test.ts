@@ -38,6 +38,7 @@ import {
   type ProbeExecutor
 } from "../src/lib/evaluator-resolution.js";
 import { SEEDED_BINDING, resolvedRecordFor, temperatureRejectingRecordFor } from "./fixtures/execution-binding.js";
+import { MemoryCapabilityCheckStore, CAPABILITY_CHECK_CARRY_MS } from "../src/lib/capability-check-store.js";
 
 // Resolution and re-check as the governed gates use them (ADR-0014 section 4).
 
@@ -78,6 +79,96 @@ function services(respond: (body: Record<string, unknown>) => Response) {
 afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.TYPESAFE_API_KEY;
+});
+
+describe("carrying authoring checks into resolution", () => {
+  const input = { provider: "anthropic" as const, endpoint: { kind: "managed" as const }, routing: OPUS.routing, modelId: OPUS.modelId, modelVersion: OPUS.modelVersion, outputTokenLimit: OPUS.outputTokenLimit };
+  it("retains check probes and still confirms the exact saved binding", async () => {
+    const { services: s, sent } = services((body) => "temperature" in body ? rejected("unsupported temperature") : accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    const report = await checkBindingCapabilities(s, "project", input);
+    sent.length = 0;
+    const record = await resolveSavedBinding(s, governed({ ...OPUS, reasoning: report.probedReasoning }));
+    expect(record.probes.filter((p) => p.stage === "capability_check")).toEqual(report.probes);
+    expect(record.probes.filter((p) => p.stage === "resolution").map((p) => p.purpose)).toEqual(["confirm"]);
+    expect(record.temperatureSupport).toBe("not_adjustable");
+    expect(sent).toHaveLength(1);
+  });
+
+  it.each(["project", "credential", "expiry", "model", "token limit", "future"])("does not reuse mismatched %s checks", async (mismatch) => {
+    const { services: s } = services(() => accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    await checkBindingCapabilities(s, "project", input);
+    const target = governed(OPUS);
+    if (mismatch === "project") target.projectId = "different-project";
+    if (mismatch === "credential") s.credential = async () => ({ apiKey: "rotated-key", source: "project" });
+    if (mismatch === "expiry") s.now = () => new Date(Date.parse("2026-09-26T00:00:00Z") + CAPABILITY_CHECK_CARRY_MS);
+    if (mismatch === "future") s.now = () => new Date("2026-09-25T23:59:59Z");
+    if (mismatch === "model") target.executionBinding = { ...OPUS, modelVersion: "other-version" };
+    if (mismatch === "token limit") target.executionBinding = { ...OPUS, outputTokenLimit: 9999 };
+    const record = await resolveSavedBinding(s, target);
+    expect(record.probes.some((p) => p.stage === "capability_check")).toBe(false);
+  });
+
+  it("extends a full check with temperature classification for changed reasoning", async () => {
+    const { services: s, sent } = services((body) => "temperature" in body ? rejected("unsupported temperature") : accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    const full = await checkBindingCapabilities(s, "project", input);
+    const classified = await checkBindingCapabilities(s, "project", { ...input,
+      classifyTemperature: { reasoning: null, verdictProtocol: OPUS.verdictProtocol, baselineAccepted: false } });
+    sent.length = 0;
+    const record = await resolveSavedBinding(s, governed({ ...OPUS, reasoning: null }));
+    expect(record.probes.filter((p) => p.stage === "capability_check" && p.purpose === "temperature")).toEqual(classified.probes.filter((p) => p.purpose === "temperature"));
+    expect(record.probes.filter((p) => p.stage === "capability_check").length).toBeLessThanOrEqual(7);
+    expect(sent).toHaveLength(1);
+    // A new full check resets its older classifications.
+    const replacement = await checkBindingCapabilities(s, "project", input);
+    const next = await resolveSavedBinding(s, governed({ ...OPUS, reasoning: replacement.probedReasoning }));
+    expect(next.probes.filter((p) => p.stage === "capability_check")).toEqual(replacement.probes);
+  });
+
+  it("does not let a successful check override a rejected saved request or cache a governed recheck", async () => {
+    let reject = false;
+    const { services: s, sent } = services(() => reject ? rejected("invalid saved request") : accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    await checkBindingCapabilities(s, "project", input);
+    reject = true;
+    expect((await resolveSavedBinding(s, governed(OPUS))).status).toBe("failed");
+    sent.length = 0;
+    await recheckGovernedBinding(s, rechecked(OPUS));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("keeps repeated classifications within the immutable resolution probe limits", async () => {
+    const { services: s, sent } = services((body) => "temperature" in body ? rejected("unsupported temperature") : accepted());
+    s.checks = new MemoryCapabilityCheckStore();
+    await checkBindingCapabilities(s, "project", input);
+    for (let i = 0; i < 5; i++) await checkBindingCapabilities(s, "project", { ...input,
+      classifyTemperature: { reasoning: null, verdictProtocol: OPUS.verdictProtocol, baselineAccepted: false } });
+    sent.length = 0;
+    const record = await resolveSavedBinding(s, governed({ ...OPUS, reasoning: null }));
+    expect(record.status).toBe("resolved");
+    expect(record.probes.filter((p) => p.stage === "capability_check" && p.purpose === "temperature")).toHaveLength(2);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("does not borrow temperature or reasoning support from another verdict protocol", async () => {
+    const check = await runCapabilityCheck({ base: {
+      provider: OPUS.provider, endpoint: OPUS.endpoint, modelId: OPUS.modelId,
+      modelVersion: OPUS.modelVersion, outputTokenLimit: OPUS.outputTokenLimit, routing: OPUS.routing
+    }, credentialSource: "project", published: null, documentedDefault: null, temperatureIgnored: false,
+    execute: async (binding) => {
+      if (binding.sampling.temperature !== null) throw new EvaluatorCallError("provider_rejected_request", "temperature rejected", { physicalCall: true });
+      return { usage: null };
+    } });
+    let calls = 0;
+    const record = await resolveExecutionBinding({ binding: { ...OPUS, reasoning: null, verdictProtocol: "anthropic.forced-tool/v1" },
+      trigger: "save", check, published: null, documentedDefault: null, credentialSource: "project",
+      ignoredTemperature: null, now: new Date(), execute: async () => { calls++; return { usage: null }; } });
+    expect(record.probes.some((p) => p.stage === "capability_check")).toBe(false);
+    expect(record.temperatureSupport).toBe("adjustable");
+    expect(calls).toBe(2);
+  });
 });
 
 describe("the credential a gate probes with", () => {

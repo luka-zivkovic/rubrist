@@ -33,6 +33,7 @@ import {
 import { endpointUrlFor, executionBindingFromInput } from "./execution-binding.js";
 import { ignoredTemperatureEntries, ignoredTemperatureEntryFor } from "./ignored-temperature.js";
 import { judgeProviderEnvironmentKey } from "./judge-provider.js";
+import { capabilityCheckContext, type CapabilityCheckStore } from "./capability-check-store.js";
 
 // Resolution and re-check as the governed gates and runs use them (ADR-0014
 // section 4): the probes run with the project's credential against the
@@ -49,6 +50,7 @@ export interface BindingResolutionServices {
   fetch?: ExecutionFetch;
   capabilityFetch?: CapabilityFetch;
   now?: () => Date;
+  checks?: CapabilityCheckStore;
 }
 
 /**
@@ -131,17 +133,22 @@ export async function resolveSavedBinding(services: BindingResolutionServices, g
 
 async function resolveBinding(services: BindingResolutionServices, governed: GovernedBinding, trigger: "save" | "gate"): Promise<ResolutionRecord> {
   const context = await probeContext(services, governed);
+  const { provider, endpoint, modelId, modelVersion, outputTokenLimit, routing } = governed.executionBinding;
+  const checkContext = { base: { provider, endpoint, modelId, modelVersion, outputTokenLimit, routing }, credentialSource: context.credential.source };
+  const now = services.now?.() ?? new Date();
+  const check = await services.checks?.get(governed.projectId,
+    capabilityCheckContext(checkContext, context.credential.apiKey), now, governed.executionBinding) ?? null;
   return resolveExecutionBinding({
     binding: governed.executionBinding,
     trigger,
-    check: null,
+    check,
     published: context.published,
     documentedDefault: context.documentedDefault,
     credentialSource: context.credential.source,
     // Matched now, and kept in the record: the gates and re-check read this entry, never a newer table.
     ignoredTemperature: ignoredTemperatureEntryFor(governed.executionBinding, governed.executionBinding.reasoning),
     execute: context.execute,
-    now: services.now?.() ?? new Date()
+    now
   });
 }
 
@@ -343,7 +350,7 @@ export const CAPABILITY_CHECK_BUDGET_MS = 60_000;
  * the managed endpoint uses the platform's base-URL override), so a check can
  * never send a key anywhere a saved binding couldn't. At most 7 probes in
  * sequence over the fixed probe input, within CAPABILITY_CHECK_BUDGET_MS; it
- * records nothing. With `classifyTemperature` it classifies temperature for
+ * retains probes briefly for matching resolution. With `classifyTemperature` it classifies temperature for
  * the author's reasoning instead, at most 3 probes (decision 12). The report
  * says with which reasoning the ignored-temperature table lists the model,
  * since only the server can match the endpoint. An input no binding could
@@ -421,6 +428,9 @@ export async function checkBindingCapabilities(
         temperatureIgnored: ignoredTemperatureEntryFor(saved, classify.reasoning) !== null
       });
   const last = check.probes.at(-1);
+  const checkedAt = new Date(clock());
+  await services.checks?.put({ projectId, contextDigest: capabilityCheckContext(check, credential.apiKey),
+    checkedAt, classification: classify !== undefined, check });
   return CapabilityCheckReportSchema.parse({
     credentialSource: credential.source,
     protocol: check.protocol,
@@ -443,6 +453,6 @@ export async function checkBindingCapabilities(
       thinkingTypes: published.thinkingTypes === null ? null : [...published.thinkingTypes],
       effortLevels: published.effortLevels === null ? null : [...published.effortLevels]
     },
-    checkedAt: new Date(clock()).toISOString()
+    checkedAt: checkedAt.toISOString()
   });
 }

@@ -108,6 +108,7 @@ import { registerTraceLinkRoutes } from "./routes/trace-links.js";
 import { registerV1AgentAdministrationRoutes } from "./routes/v1-agent-administration.js";
 import { registerV1EvaluationAdministrationRoutes } from "./routes/v1-evaluation-administration.js";
 import { bindingResolutionServices, type BindingResolutionServices } from "./lib/binding-resolution.js";
+import { MemoryCapabilityCheckStore, PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
 export {
   agentSetupPairingClaimExpiresAt,
@@ -639,7 +640,9 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // keys cannot remotely fetch either surface. No route is mounted for sealed
   // items or the private calibration ledger.
   const bindingResolution = options.bindingResolution ??
-    bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider));
+    bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider), {
+      checks: options.pool ? new PgCapabilityCheckStore(options.pool) : new MemoryCapabilityCheckStore()
+    });
   app.route("/api/binary-calibration-runs", createBinaryCalibrationControlRouter({
     repository: binaryCalibrationRepository,
     databaseMode: Boolean(options.auth && options.pool),

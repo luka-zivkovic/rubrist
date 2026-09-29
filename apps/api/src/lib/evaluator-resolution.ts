@@ -401,7 +401,7 @@ export async function resolveExecutionBinding(input: {
 }): Promise<ResolutionRecord> {
   const { binding, execute, published } = input;
   const checkProbes = input.check !== null && checkDescribes(input.check, binding, input.credentialSource)
-    ? input.check.probes.filter((probe) => probe.stage === "capability_check")
+    ? input.check.probes.filter((probe) => probe.stage === "capability_check" && probe.verdictProtocol === binding.verdictProtocol)
     : [];
   const probes: CapabilityProbe[] = [...checkProbes];
   const send = async (purpose: CapabilityProbe["purpose"], probed: ExecutionBinding): Promise<CapabilityProbe | null> => {
