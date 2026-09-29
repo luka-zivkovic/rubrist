@@ -60,7 +60,7 @@ vi.mock("@/lib/judge-provider-selection", async () => import("../src/lib/judge-p
 vi.mock("@/lib/journey", async () => import("../src/lib/journey.js"));
 vi.mock("@/lib/onboarding-check", async () => import("../src/lib/onboarding-check.js"));
 vi.mock("@/lib/starter-skills", async () => import("../src/lib/starter-skills.js"));
-vi.mock("@/components/first-run-check-setup", () => ({ FirstRunCheckSetup: () => createElement("section") }));
+vi.mock("@/components/first-run-check-setup", () => ({ FirstRunCheckSetup: (props: any) => { lastFirstSetup = props; return createElement("section"); } }));
 vi.mock("@/components/skill-edit-flow", () => ({ SkillEditFlow: () => createElement("section") }));
 vi.mock("../src/screens/skill-edit/editor.js", () => ({
   SkillVersionEditor: (props: any) => {
@@ -78,9 +78,12 @@ vi.mock("../src/screens/skill-edit/editor.js", () => ({
 // depend on them.
 const picker = vi.hoisted(() => ({
   load: () => undefined,
+  modelPicked: vi.fn(),
+  checkPending: false,
+  temperaturePending: false,
   savedFields: (temperature: string) => ({ temperature }),
   guidance: { temperature: { shown: false } },
-  blockingProblems: []
+  blockingProblems: [] as string[]
 }));
 vi.mock("../src/screens/skill-edit/binding-settings.js", () => ({
   useBindingPicker: (_model: unknown, _base: unknown, options: { setTemperature: (value: string) => void }) => ({
@@ -95,7 +98,10 @@ vi.mock("../src/screens/skill-edit/regression.js", () => ({
 }));
 
 let lastEditor: any;
+let lastFirstSetup: any;
 const { SkillEditScreen } = await import("../src/screens/skill-edit.js");
+const { confirmProjectSwitch } = await import("../src/lib/project-switch.js");
+const transport = await import("../src/lib/api/transport.js");
 
 function version(id: string, number: string, overrides: Partial<SkillVersion> = {}): SkillVersion {
   return {
@@ -150,6 +156,11 @@ beforeEach(() => {
   for (const mock of Object.values(api)) mock.mockReset();
   dashboard.dashboard.viewerRole = "owner";
   lastEditor = null;
+  lastFirstSetup = null;
+  picker.checkPending = false;
+  picker.temperaturePending = false;
+  picker.blockingProblems = [];
+  picker.modelPicked.mockClear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -163,12 +174,12 @@ afterAll(() => vi.unstubAllGlobals());
 async function settle() {
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
-async function renderEditor() {
+async function renderEditor(path = "/skill/edit") {
   router = createMemoryRouter([
     { path: "/skill/edit", element: createElement(SkillEditScreen) },
     { path: "/skill/versions", element: createElement("p", null, "Version history") },
     { path: "/skill", element: createElement("p", null, "Saved evaluator") }
-  ], { initialEntries: ["/skill/edit"] });
+  ], { initialEntries: [path] });
   await act(async () => root.render(createElement(RouterProvider, { router })));
   await settle();
 }
@@ -182,6 +193,64 @@ const change = async (field: string, value: unknown) => {
 };
 
 describe("editor protects author choices and work", () => {
+  it("keeps the project request scope when cancelling a first-project draft switch", async () => {
+    transport.selectProject("project_1");
+    api.fetchOnboardingEvidenceInventory.mockResolvedValue(null);
+    Object.assign(dashboard.dashboard.project, { name: "Test", mode: "bench" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor("/skill/edit?first=1&starter=task-outcome-quality");
+    await act(async () => lastFirstSetup.onDecide());
+    await act(async () => lastFirstSetup.judgePicker.props.onModel("chosen-model", "chosen-version"));
+    if (confirmProjectSwitch()) transport.selectProject("project_2");
+    expect(transport.selectedProjectId()).toBe("project_1");
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    await transport.apiFetch("/api/project/settings");
+    expect(new Headers(fetch.mock.calls[0]![1]?.headers).get("x-rubrist-project")).toBe("project_1");
+    expect(lastFirstSetup.modelId).toBe("chosen-model");
+    confirm.mockReturnValue(true);
+    expect(confirmProjectSwitch()).toBe(true);
+    const reload = new window.Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(false);
+  });
+  it("protects first-project model choices when leaving or reloading", async () => {
+    api.fetchOnboardingEvidenceInventory.mockResolvedValue(null);
+    Object.assign(dashboard.dashboard.project, { name: "Test", mode: "bench" });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await renderEditor("/skill/edit?first=1&starter=task-outcome-quality");
+    await act(async () => lastFirstSetup.onDecide());
+    await act(async () => lastFirstSetup.judgePicker.props.onModel("chosen-model", "chosen-version"));
+    await act(async () => router.navigate("/skill/versions"));
+    expect(router.state.location.pathname).toBe("/skill/edit");
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(lastFirstSetup.modelId).toBe("chosen-model");
+    const reload = new window.Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(true);
+    confirm.mockReturnValue(true);
+    await act(async () => router.navigate("/skill/versions"));
+    expect(router.state.location.pathname).toBe("/skill/versions");
+  });
+  it("checks first-project models and blocks creation while settings are pending or rejected", async () => {
+    api.fetchOnboardingEvidenceInventory.mockResolvedValue(null);
+    // First-run setup uses project name/mode for its suggestion.
+    Object.assign(dashboard.dashboard.project, { name: "Test", mode: "bench" });
+    await renderEditor("/skill/edit?first=1&starter=task-outcome-quality");
+    expect(lastFirstSetup.judgePicker).toBeTruthy();
+    await act(async () => lastFirstSetup.onDecide());
+    expect(picker.modelPicked).toHaveBeenCalled();
+    expect(lastFirstSetup.canCreate).toBe(true);
+    picker.checkPending = true;
+    await act(async () => lastFirstSetup.onQuestionChange("Is this correct?"));
+    expect(lastFirstSetup.canCreate).toBe(false);
+    picker.checkPending = false;
+    picker.blockingProblems = ["Rejected setting"];
+    await act(async () => lastFirstSetup.onQuestionChange("Is this supported?"));
+    expect(lastFirstSetup.canCreate).toBe(false);
+    picker.blockingProblems = [];
+    await act(async () => lastFirstSetup.onQuestionChange("Is this grounded?"));
+    expect(lastFirstSetup.canCreate).toBe(true);
+  });
   it("keeps failed-save authorship, protects it as unsaved work, and clears it when resetting", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderEditor();

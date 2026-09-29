@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useBlocker } from "react-router-dom";
+import { PROJECT_SWITCH_EVENT } from "../lib/project-switch.js";
 
 /** Compare raw draft fields, including invalid input, with the form as opened. */
 export function useEditorUnsavedChanges(snapshot: string, enabled: boolean) {
@@ -24,8 +25,16 @@ export function useEditorUnsavedChanges(snapshot: string, enabled: boolean) {
       event.preventDefault();
       event.returnValue = "";
     };
+    const switchProject = (event: Event) => {
+      if (!confirmDiscard()) event.preventDefault();
+      else opened.current = current.current;
+    };
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    window.addEventListener(PROJECT_SWITCH_EVENT, switchProject);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      window.removeEventListener(PROJECT_SWITCH_EVENT, switchProject);
+    };
   }, []);
 
   return {

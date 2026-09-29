@@ -9,8 +9,10 @@ import { Chip, Eyebrow, MarginNote, SectionHead } from "./rubrist/index.js";
 import { evidenceLimitDescription, evidenceReadDescription, type OnboardingCheckDraft } from "../lib/onboarding-check.js";
 import type { StarterSkill } from "../lib/starter-skills.js";
 import { cn } from "../lib/utils.js";
+import type { ReactNode } from "react";
 
 interface FirstRunCheckSetupProps {
+  judgePicker?: ReactNode;
   rubricProvenance?: RubricProvenance;
   onAuthorshipChange?: (value: RubricProvenance) => void;
   projectName: string;
@@ -43,6 +45,7 @@ interface FirstRunCheckSetupProps {
 }
 
 export function FirstRunCheckSetup({
+  judgePicker,
   rubricProvenance = "unspecified",
   onAuthorshipChange,
   projectName,
@@ -209,7 +212,8 @@ export function FirstRunCheckSetup({
             )}
           </div>
 
-          {provider === "custom" ? (
+          {judgePicker}
+          {provider === "custom" && !judgePicker ? (
             <div className="rounded-sm border border-rule-soft bg-card-2 p-3">
               <Eyebrow>Custom judge connection</Eyebrow>
               <p className="mt-1 text-[11.5px] leading-5 text-ink-3">
