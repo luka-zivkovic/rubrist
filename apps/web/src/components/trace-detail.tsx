@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ThumbsUp, PencilLine, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import {
   type VerdictRecord
 } from "@rubrist/shared";
 
+import { AssessmentReasoning } from "./assessment-reasoning.js";
+import { sourceMessageIndices } from "../lib/message-evidence.js";
 import { ConversationEvidence } from "./conversation-evidence.js";
 import { CaseEvidence } from "./case-evidence.js";
 import { TypedQuestionView } from "./typed-question-view.js";
@@ -356,6 +358,19 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
   const typedEvaluation = recordedTypedEvaluation(detail);
   const structuredEvidence = evidenceClaim(trace.input, trace.output);
   const versionName = recordedVersionName(detail);
+  const evidencePrefix = useId();
+  const [inspectedMessage, setInspectedMessage] = useState<{ caseId: string; judgeRunId: string; index: number } | null>(null);
+  useEffect(() => { setInspectedMessage(null); }, [exception.id, judgeRun.id]);
+  const sourceIndices = structuredEvidence ? [] : sourceMessageIndices(trace.input, trace.metadata);
+  function inspectMessage(index: number) {
+    setInspectedMessage({ caseId: exception.id, judgeRunId: judgeRun.id, index });
+    const target = document.getElementById(`${evidencePrefix}-${index}`);
+    // Referenced instructions may be collapsed; tool responses are always visible.
+    const instructions = target?.querySelector<HTMLDetailsElement>(":scope > details");
+    if (instructions) instructions.open = true;
+    target?.scrollIntoView({ block: "center", behavior: "instant" });
+    target?.focus({ preventScroll: true });
+  }
 
   const [decision, setDecision] = useState<Decision>(null);
   const [overrideChoice, setOverrideChoice] = useState<VerdictLabel>("fail");
@@ -603,7 +618,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         headingAs={headingAs}
         eyebrow={`Case · ${exception.capabilityGap?.toLowerCase() ?? "uncategorized"}`}
         title={exception.title}
-        sub={`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}
+        sub={<span className="[overflow-wrap:anywhere]">{`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}</span>}
       />
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[1.25fr_1fr] xl:grid-rows-[auto_1fr]">
@@ -656,8 +671,9 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                 <div className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
                   {judgeRun.reasoning === null
                     ? <span className="text-ink-3">{typedEvaluation ? "This evaluator returns a probability and does not provide an explanation." : "This evaluator states no rationale."}</span>
-                    : judgeRun.reasoning || <span className="text-ink-3">No rationale recorded.</span>}
+                    : judgeRun.reasoning ? <AssessmentReasoning text={judgeRun.reasoning} sourceIndices={sourceIndices} targetPrefix={evidencePrefix} onInspect={inspectMessage} /> : <span className="text-ink-3">No rationale recorded.</span>}
                 </div>
+                {sourceIndices.length > 0 ? <p className="mt-3 text-[11.5px] text-ink-3">Linked message numbers open the recorded evidence. Check whether it supports the evaluator’s reasoning.</p> : null}
               </div>
 
               {exception.capabilityGap ? <div>
@@ -672,8 +688,11 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
           {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} steps={trace.steps} /> : (
             <ConversationEvidence
-              key={exception.id}
+              key={`${exception.id}-${judgeRun.id}`}
               input={trace.input}
+              metadata={trace.metadata}
+              targetPrefix={evidencePrefix}
+              selectedIndex={inspectedMessage?.caseId === exception.id && inspectedMessage.judgeRunId === judgeRun.id ? inspectedMessage.index : null}
               output={trace.output}
               steps={trace.steps}
               trajectory={trace.steps && trace.steps.length > 0 ? (

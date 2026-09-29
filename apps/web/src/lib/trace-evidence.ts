@@ -1,4 +1,4 @@
-// Display-only projections. Never parse stringified JSON, infer missing roles,
+// Generic display projections. Never parse arbitrary stringified JSON, infer missing roles,
 // sort source records, or pick an assessment target from the last message.
 export function evidenceObject(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)

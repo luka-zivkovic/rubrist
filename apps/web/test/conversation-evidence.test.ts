@@ -20,8 +20,8 @@ const { createRoot } = await import("react-dom/client");
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(async () => { if (root) await act(async () => root!.unmount()); root = undefined; document.body.innerHTML = ""; });
 afterAll(() => { dom.window.close(); vi.unstubAllGlobals(); });
-function render(input: unknown, output: unknown = "Current response") {
-  const html = renderToStaticMarkup(createElement(ConversationEvidence, { input, output }));
+function render(input: unknown, output: unknown = "Current response", metadata?: unknown) {
+  const html = renderToStaticMarkup(createElement(ConversationEvidence, { input, output, metadata }));
   const container = document.createElement("div"); container.innerHTML = html;
   return { html, container };
 }
@@ -74,7 +74,7 @@ describe("recorded conversation evidence", () => {
     const frozen = JSON.stringify(input);
     const { container, html } = render(input);
     const context = container.querySelector('[aria-label="Conversation context"]')!;
-    expect([...context.querySelectorAll("h4")].map(el => el.textContent)).toEqual(["Assistant", "User", "Unrecognized message", "Unrecognized message", "Assistant"]);
+    expect([...context.querySelectorAll("h4")].map(el => el.textContent)).toEqual(["Entry 1 · Assistant", "Entry 2 · User", "Entry 3 · Unrecognized message", "Entry 4 · Unrecognized message", "Entry 5 · Tool · lookup · response", "Entry 6 · Assistant"]);
     expect(html).toContain("input.messages[4]");
     expect(html).toContain("Additional recorded fields · context_warning");
     expect(html).toContain("tool_call_id");
@@ -82,8 +82,9 @@ describe("recorded conversation evidence", () => {
     expect(raw(container).input).toEqual(input);
     expect(JSON.stringify(input)).toBe(frozen);
     expect(container.querySelector('[aria-label="Recorded output"]')!.textContent).not.toContain("earlier reply");
-    const tool = [...context.querySelectorAll("summary")].find(el => el.textContent === "Tool · lookup")!;
-    expect(tool.parentElement!.hasAttribute("open")).toBe(false);
+    const tool = context.querySelector('[data-message-index="4"]')!;
+    expect(tool.querySelector(":scope > div > p")!.textContent).toBe("tool result");
+    expect(tool.closest("details")).toBeNull();
   });
 
   it("retains multimodal blocks without loading images, executing HTML or discarding fields", () => {
@@ -123,21 +124,49 @@ describe("recorded conversation evidence", () => {
     expect(raw(container)).toEqual({ input, output: "Selected response" });
   });
 
-  it("shows every earlier message on request and resets expansion when the case changes", async () => {
-    const input = { messages: Array.from({ length: 200 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `message ${index}` })) };
+  it("shows long histories in order without hiding the early evidence, and resets disclosures per case", async () => {
+    const input = { messages: [{ role: "system", content: "Instructions" }, ...Array.from({ length: 200 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: `message ${index}` }))] };
     const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     await act(async () => root!.render(createElement(ConversationEvidence, { key: "case1", input, output: "assessed output" })));
     const context = () => container.querySelector('[aria-label="Conversation context"]')!;
-    expect(context().querySelectorAll("h4")).toHaveLength(6);
-    const toggle = context().querySelector("button")!;
-    expect(toggle.textContent).toBe("Show 194 earlier entries");
-    await act(async () => toggle.click());
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(context().querySelectorAll("h4")).toHaveLength(200);
-    expect([...context().querySelectorAll("section > div > p")].map(el => el.textContent)).toEqual(input.messages.map(el => el.content));
+    expect([...context().querySelectorAll("section > div > p")].map(el => el.textContent)).toEqual(input.messages.slice(1).map(el => el.content));
+    const policy = context().querySelector("details")!;
+    expect(policy.open).toBe(false);
+    policy.open = true;
     await act(async () => root!.render(createElement(ConversationEvidence, { key: "case2", input, output: "second output" })));
-    expect(context().querySelectorAll("h4")).toHaveLength(6);
-    expect(raw(container).input.messages).toHaveLength(200);
+    expect(context().querySelector("details")!.open).toBe(false);
+    expect(raw(container).input.messages).toHaveLength(201);
+  });
+
+  it("makes the explicitly imported whole-trajectory scope and tool errors visible, retaining source output", () => {
+    const metadata = { evidenceProjection: "whole-trajectory-v2-lossless-text-blocks" };
+    const input = { assessmentScope: "Entire recorded trajectory; output repeats the source final answer.", availableTools: [{ type: "function", function: { name: "lookup", parameters: {} } }], messages: [
+      { role: "assistant", content: '[source message 0; role=assistant]\n\nRecorded tool calls:\n[{"id":"a","type":"function","function":{"name":"check_status_bar","arguments":"{}"}}]' },
+      { role: "tool", content: "[source message 1; role=tool; tool=check_status_bar; call_id=a]\nError: Tool 'check_status_bar' not found." }
+    ] };
+    const before = JSON.stringify(input);
+    const { container } = render(input, "Hi! How can I help you today?", metadata);
+    expect(container.textContent).toContain("Whole conversation · 2 recorded messages");
+    const call = container.querySelector('[data-message-index="0"]')!;
+    expect(call.querySelector("h4")!.textContent).toBe("Message 0 · Assistant");
+    expect(call.querySelector("p.font-mono")!.textContent).toBe("check_status_bar");
+    const result = container.querySelector('[data-message-index="1"]')!;
+    expect(result.parentElement).toBe(call.parentElement);
+    expect(result.querySelector(":scope > div > p")!.textContent).toBe("Error: Tool 'check_status_bar' not found.");
+    expect(result.closest("details")).toBeNull();
+    const output = container.querySelector('[aria-label="Recorded output"]')!;
+    expect(output.tagName).toBe("DETAILS");
+    expect(output.hasAttribute("open")).toBe(false);
+    expect(output.textContent).toContain("Hi! How can I help you today?");
+    expect(container.textContent).toContain("Available tools · 1 recorded definitions");
+    expect(raw(container)).toEqual({ input, output: "Hi! How can I help you today?" });
+    expect(JSON.stringify(input)).toBe(before);
+    // The same words in arbitrary source content do not activate the adapter.
+    const generic = render(input).container;
+    expect(generic.textContent).not.toContain("Whole conversation");
+    expect(generic.querySelector('[aria-label="Recorded output"]')!.tagName).toBe("SECTION");
+    expect(generic.querySelector('[data-message-index="0"] > div > p')!.textContent).toContain("Recorded tool calls:");
   });
 
   it("distinguishes missing, null and empty evidence", () => {
