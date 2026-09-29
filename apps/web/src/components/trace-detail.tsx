@@ -28,6 +28,7 @@ import {
   type VerdictRecord
 } from "@rubrist/shared";
 
+import { ConversationEvidence } from "./conversation-evidence.js";
 import { CaseEvidence } from "./case-evidence.js";
 import { TypedQuestionView } from "./typed-question-view.js";
 import { evidenceClaim, recordedTypedEvaluation, recordedVersionName } from "../lib/recorded-evaluation.js";
@@ -170,20 +171,20 @@ function StepLedger({
                 <div className="fadeUp flex flex-col gap-2 border-t border-rule-soft px-3 py-2.5">
                   <div>
                     <div className="mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-3">Input</div>
-                    <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
+                    <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
                       {formatPayload(step.input)}
                     </pre>
                   </div>
                   <div>
                     <div className="mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-3">Output</div>
-                    <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
+                    <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
                       {formatPayload(step.output)}
                     </pre>
                   </div>
                   {step.metadata && Object.keys(step.metadata).length > 0 ? (
                     <div>
                       <div className="mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-3">Metadata</div>
-                      <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
+                      <pre className="max-h-[160px] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink">
                         {formatPayload(step.metadata)}
                       </pre>
                     </div>
@@ -397,14 +398,6 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
     setVerdictHistory(detail.verdictHistory);
     setGoldenSetEntry(detail.goldenSetEntry);
   }, [detail.verdictHistory, detail.goldenSetEntry]);
-
-  const transcript = useMemo(
-    () => [
-      { role: "user" as const, label: "Input", body: formatPayload(trace.input) },
-      { role: "assistant" as const, label: "Output", body: formatPayload(trace.output) }
-    ],
-    [trace.input, trace.output]
-  );
 
   // The label a promotion freezes. A recorded human verdict (override or
   // adjudication) outranks the judge's label — promoting must never enshrine
@@ -678,43 +671,21 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         </div>
         <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
           {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} /> : (
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Conversation</CardTitle>
-                  <CardDescription>Trace input and the agent's response.</CardDescription>
-                </div>
-                <div className="flex-1" />
-                <div className="font-mono text-[11px] text-ink-3">{transcript.length} turns</div>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {transcript.map((turn) => (
-                  <div key={turn.role}>
-                    <div
-                      className={`mb-1 font-mono text-[10.5px] uppercase tracking-[0.1em] ${
-                        turn.role === "user" ? "text-ink-3" : "text-ink-2"
-                      }`}
-                    >
-                      {turn.label}
-                    </div>
-                    <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[12px] leading-[1.6] text-ink">
-                      {turn.body}
-                    </pre>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <ConversationEvidence
+              key={exception.id}
+              input={trace.input}
+              output={trace.output}
+              steps={trace.steps}
+              trajectory={trace.steps && trace.steps.length > 0 ? (
+                <StepLedger key={exception.id} steps={trace.steps}
+                  failingStep={failingStepFromRawResponse(rawResponse)} expectations={detail.datasetExpectations} />
+              ) : undefined}
+            />
           )}
 
-          {trace.steps && trace.steps.length > 0 ? (
-            <StepLedger
-              // Keyed per case: the review player navigates case-to-case
-              // without unmounting, and step open-state must not leak across.
-              key={exception.id}
-              steps={trace.steps}
-              failingStep={failingStepFromRawResponse(rawResponse)}
-              expectations={detail.datasetExpectations}
-            />
+          {structuredEvidence && trace.steps && trace.steps.length > 0 ? (
+            <StepLedger key={exception.id} steps={trace.steps}
+              failingStep={failingStepFromRawResponse(rawResponse)} expectations={detail.datasetExpectations} />
           ) : null}
 
           {exception.capabilityGap ? (
