@@ -305,7 +305,7 @@ export function RunDeltaCard({
           <Table>
             <thead>
               <tr>
-                <th>Run</th>
+                <th>Case</th>
                 <th>Expected</th>
                 <th>A said</th>
                 <th>B said</th>
@@ -399,7 +399,7 @@ export function EvalRunDetailCard({
           <Table>
           <thead>
             <tr>
-              <th>Run</th>
+              <th>Case</th>
               <th>Expected</th>
               <th>Judge said</th>
               <th>Agreement</th>

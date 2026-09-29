@@ -1,6 +1,6 @@
-# Assessments file and config formats
+# Cases file and config formats
 
-## Assessments file: `.rubrist/<skillName>.jsonl`
+## Cases file: `.rubrist/<skillName>.jsonl`
 
 One JSON object per line. Malformed lines fail submission loudly (exit 2 with
 the line number) — silently dropping examples would be false confidence.

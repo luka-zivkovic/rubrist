@@ -362,7 +362,7 @@ export function DatasetsScreen() {
       <div className="fadeUp max-[760px]:fixed max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:overflow-y-auto max-[760px]:overflow-x-hidden max-[760px]:bg-paper max-[760px]:px-4 max-[760px]:py-4">
         <SectionHead
           eyebrow="Regression test"
-          title="Case report"
+          title="Evaluation run report"
           sub="The current evaluator's result, linked to the exact saved test and validation evidence."
           right={<Button variant="ghost" size="sm" onClick={closeRun}><ArrowLeft /> Back to datasets</Button>}
         />

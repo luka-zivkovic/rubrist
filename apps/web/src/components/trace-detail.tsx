@@ -842,7 +842,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
                   }}
                   disabled={submitting || !promoteEligible || Boolean(goldenSetEntry)}
                   title={goldenSetEntry
-                    ? "This case is already an active golden-set golden case."
+                    ? "This case is already an active golden case."
                     : promoteEligible ? undefined : "Only pass/fail labels can be added."}
                 >
                   <Sparkles /> {goldenSetEntry ? "In golden set" : "Add to golden set"}

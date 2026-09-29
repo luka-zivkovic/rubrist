@@ -148,7 +148,7 @@ export function journeyStatus(input: {
 }
 
 export function JourneyProgress({ stage, correction, completed }: { stage: Stage; correction: boolean; completed: boolean }) {
-  const labels = correction ? ["Source", "Describe", "Recorded"] : ["Source", "Describe", "Draft", "Evaluator", "Ready"];
+  const labels = correction ? ["Source", "Describe", "Recorded"] : ["Source", "Describe", "Draft", "Check", "Ready"];
   const current = stage === "source" ? 0
     : stage === "desired" ? 1
       : stage === "draft" ? 2

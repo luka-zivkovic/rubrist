@@ -35,7 +35,7 @@ export function DashboardBenchWelcome({ dashboard, canPairAgent }: DashboardBenc
             <CardContent className="py-4">
               <Eyebrow>What an assessment means</Eyebrow>
               <div className="mt-2 font-serif text-[14.5px] leading-[1.6] tracking-[-0.005em] text-ink-2">
-                A assessment is the evaluator's opinion about one recorded run. It is not a human decision,
+                An assessment is the evaluator's output for one case. It is not a human decision,
                 proof of accuracy, or permission to ship. You can review it and improve the evaluator later.
               </div>
             </CardContent>

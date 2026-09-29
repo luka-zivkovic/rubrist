@@ -111,7 +111,7 @@ export function RegressionRunning({
                 <CardTitle>{criterionVersion?.name ?? skill.name}</CardTitle>
                 <Chip>Starter · unvalidated</Chip>
               </div>
-              <CardDescription>The exact quality question bound to evaluate v{version.version}</CardDescription>
+              <CardDescription>The exact quality question bound to evaluator v{version.version}</CardDescription>
             </div>
             {statusIcon}
           </CardHeader>
@@ -273,7 +273,7 @@ export function RegressionResult({
                 <CardTitle>{criterionVersion?.name ?? skill.name}</CardTitle>
                 <Chip>Starter · unvalidated</Chip>
               </div>
-              <CardDescription>The quality question bound to evaluate v{result.version.version}</CardDescription>
+              <CardDescription>The quality question bound to evaluator v{result.version.version}</CardDescription>
             </div>
           </CardHeader>
           <CardContent>

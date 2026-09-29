@@ -60,7 +60,7 @@ export function ProviderKeysCard({ canEdit, reportState }: SettingsFormProps) {
   }
 
   return <Card><CardHeader><div><CardTitle>Judge provider keys</CardTitle>
-    <CardDescription>Credentials Rubrist uses to call your chosen LLM provider or TypeSafe. These apply to this project; model choices belong to evaluate versions.</CardDescription>
+    <CardDescription>Credentials Rubrist uses to call your chosen LLM provider or TypeSafe. These apply to this project; model choices belong to evaluator versions.</CardDescription>
   </div></CardHeader><CardContent className="space-y-4">
     <p className="max-w-[80ch] text-[12px] text-ink-3">Saved keys are encrypted and cannot be viewed again. An invalid project key fails the call. Removing it allows a configured platform key to be used; it does not switch providers.</p>
     {loading ? <p role="status" className="text-[12px]">Loading provider keys…</p> : loadError ? <div><p role="alert" className="text-[12px] text-signal">{loadError}</p><Button type="button" onClick={() => setAttempt((n) => n + 1)}>Retry provider keys</Button></div> :
