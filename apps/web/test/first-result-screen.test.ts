@@ -64,3 +64,16 @@ it("shows the recorded assessment when a newer imported case failed", async () =
   expect(harness.ensure).not.toHaveBeenCalled();
   expect(harness.detail).not.toHaveBeenCalled();
 });
+
+
+it.each(["running", "failed"])("keeps polling unfinished work after the tracked run becomes %s", async (status) => {
+  const pending = { id: "pending_a", skillVersionId: "version", trigger: "api_batch", datasetId: null, status: "pending" };
+  const failed = { ...pending, id: "failed_b", status: "failed" };
+  harness.runs.mockResolvedValueOnce([failed, pending]).mockResolvedValue([{ ...pending, id: "pending_c" }]);
+  harness.ensure.mockResolvedValue({ run: { ...pending, status, items: [], totalItems: 1, completedItems: 0, failedItems: status === "failed" ? 1 : 0 }, dispatchPending: false, retryAfterMs: 0 });
+  await act(async () => root.render(createElement(FirstResultScreen)));
+  harness.verdicts.mockResolvedValue([{ id: "eventual_result", caseId: "case_pending", skillVersionId: "version", source: "llm_judge", payload: { kind: "binary", pass: true, rationale: "Outstanding work completed" } }]);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(document.body.textContent).toContain("Outstanding work completed");
+  expect(document.body.textContent).toContain("Your first assessment is ready");
+});

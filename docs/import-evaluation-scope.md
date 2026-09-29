@@ -17,7 +17,9 @@ CURRENT repair contract:
 No historical runs, assessments, or human reviews are rewritten. No migration is
 needed. The existing API `backfillRunId` field remains null for per-case runs.
 The first-assessment list is filtered by evaluator version and run purpose before applying its
-limit, so unrelated runs cannot hide saved work.
+limit, so unrelated runs cannot hide saved work. Unfinished work is selected
+before terminal runs; an existing recorded assessment completes onboarding
+even if another imported case later fails.
 
 Verification covers new-version imports with historical cases present, empty
 imports, duplicate/concurrent imports, saved backfills, first-assessment

@@ -738,7 +738,8 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
          and ($2::text is null or skill_version_id = $2)
          and ($4::text is null or trigger = 'backfill'
            or ($4 = 'first_assessment' and trigger = 'api_batch' and dataset_id is null))
-       order by created_at desc, id desc
+       order by case when $4 = 'first_assessment' and status in ('pending','running') then 0 else 1 end,
+                created_at desc, id desc
        limit $3`,
       [projectId, opts?.skillVersionId ?? null, opts?.limit ?? 50, opts?.purpose ?? null]
     );

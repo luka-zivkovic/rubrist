@@ -191,7 +191,17 @@ export function FirstResultScreen() {
       } else {
         setResult(null);
       }
-      return detail.status === "pending" || detail.status === "running";
+      if (detail.status === "pending" || detail.status === "running") return true;
+      if (completedItem) return false;
+      // A listed active run can finish between reads. Check remaining work,
+      // then recorded assessments, before stopping the onboarding poll.
+      const remaining = await fetchEvalRuns(1, versionId, "first_assessment");
+      if (!current()) return false;
+      if (remaining.some((candidate) => candidate.status === "pending" || candidate.status === "running")) return true;
+      const completed = await fetchProjectVerdicts({
+        source: "llm_judge", skillVersionId: versionId, evidenceScope: "customer", limit: 1
+      });
+      return current() && completed.length > 0;
     } catch (cause) {
       if (current()) {
         setError(cause instanceof Error ? cause.message : String(cause));

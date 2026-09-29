@@ -40,6 +40,7 @@ runPgSmoke("automatic import evaluation scope", () => {
       const covered = await scheduleImportedCaseJudging(repo, queue, { projectId, skillVersionId, caseIds: [historical.caseId] });
       expect(covered.evalRunIds).toEqual([backfill.id]);
       expect(covered.backfillRunId).toBe(backfill.id);
+      await repo.createEvalRun({ projectId, skillVersionId, trigger: "api_batch", items: [] });
       const listed = await repo.listEvalRuns(projectId, { skillVersionId, purpose: "first_assessment", limit: 1 });
       expect(listed.map(run => run.id)).toEqual([backfill.id]);
       const resumed = await runExistingCaseBackfill(repo, projectId, skillVersionId, queue);

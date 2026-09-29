@@ -53,6 +53,12 @@ describe("first assessment tracked run", () => {
     }
   });
 
+  it("keeps watching an unfinished import when a newer case has already failed", () => {
+    const failed = run({ id: "failed_b", skillVersionId: "skillv_new", trigger: "api_batch", status: "failed" });
+    const pending = run({ id: "pending_a", skillVersionId: "skillv_new", trigger: "api_batch" });
+    expect(firstAssessmentRunForVersion([failed, pending], "skillv_new")).toEqual(pending);
+  });
+
   it("does not substitute an unrelated run while gate work is still preparing", () => {
     expect(firstAssessmentRunForVersion([
       run({ id: "evr_manual", skillVersionId: "skillv_new", trigger: "manual" })

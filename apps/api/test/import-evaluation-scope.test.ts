@@ -31,6 +31,19 @@ describe("automatic import evaluation scope", () => {
     expect(queue.jobs).toHaveLength(1);
   });
 
+  it("continues unfinished work before newer terminal imports", async () => {
+    const repo = new DemoRepository();
+    const projectId = "proj_langsmith_support", skillVersionId = "skillv_1_2_0";
+    const [caseId] = await repo.listCaseIdsForProject(projectId, 1);
+    const pending = await repo.createImportedCaseEvalRun({ projectId, skillVersionId, caseId: caseId! });
+    await repo.createEvalRun({ projectId, skillVersionId, trigger: "api_batch", items: [] });
+    const app = createApp(repo, { queue: new CapturingQueue() });
+    const response = await app.request(`/api/skills/skill_support_quality/versions/${skillVersionId}/backfill`, { method: "POST" });
+    await expect(response.json()).resolves.toMatchObject({ run: { id: pending.run.id, status: "pending" } });
+    const listed = await repo.listEvalRuns(projectId, { skillVersionId, purpose: "first_assessment", limit: 1 });
+    expect(listed[0]!.id).toBe(pending.run.id);
+  });
+
   it("resumes an undispatched import without creating a historical backfill", async () => {
     const queue = new CapturingQueue();
     const repository = new DemoRepository();
