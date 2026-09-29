@@ -490,6 +490,7 @@
     "ReviewQueueItemStatusSchema",
     "ReviewQueueSchema",
     "ReviewQueueStatusSchema",
+    "ReviewQueueSuggestionSchema",
     "ReviewerLabelSchema",
     "ReviseTraceTestInputSchema",
     "RubricProvenanceSchema",

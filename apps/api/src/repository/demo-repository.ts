@@ -859,6 +859,10 @@ export class DemoRepository implements RubristRepository {
     return this.caseEvidenceRepository.listAuditEntries();
   }
 
+  async suggestReviewQueue(projectId: string, skillVersionId: string, limit: number): Promise<import("@rubrist/shared").ReviewQueueSuggestion> {
+    return this.reviewQueueRepository.suggestReviewQueue(projectId, skillVersionId, limit);
+  }
+
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
     return this.reviewQueueRepository.createReviewQueue(input);
   }

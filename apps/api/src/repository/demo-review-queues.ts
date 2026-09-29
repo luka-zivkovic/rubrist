@@ -1,3 +1,4 @@
+import { suggestReviewBatch } from "../lib/review-priority.js";
 import { randomUUID } from "node:crypto";
 import type {
   ReviewQueue,
@@ -25,7 +26,29 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
     private readonly dependencies: DemoReviewQueueRepositoryDependencies
   ) {}
 
+  async suggestReviewQueue(projectId: string, skillVersionId: string, limit: number) {
+    const criterionVersionId = await this.resolveReviewCriterionVersion(projectId, undefined, skillVersionId);
+    const latest = new Map<string, (typeof this.store.judgeRuns)[number]>();
+    for (const run of [...this.store.judgeRuns].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))) {
+      const source = this.store.traceSources.get(run.caseId)?.source;
+      if (run.projectId !== projectId || run.skillVersionId !== skillVersionId || source === "gate_candidate" || source === "release_evidence") continue;
+      if (!latest.has(run.caseId)) latest.set(run.caseId, run);
+    }
+    const eligible = [...latest.values()].filter(run =>
+      !this.store.verdicts.some(v => v.projectId === projectId && v.caseId === run.caseId && v.skillVersionId === skillVersionId
+        && (v.source === "human" || v.source === "adjudicated")
+        && (v.reviewContext?.judgeRunId === run.id || (!v.reviewContext && v.createdAt >= run.createdAt)))
+      && !this.store.reviewQueueItems.some(item => item.judgeRunId === run.id && item.status === "pending"
+        && this.store.reviewQueues.some(queue => queue.id === item.queueId && queue.projectId === projectId && queue.status === "open"))
+    );
+    return suggestReviewBatch(eligible.map(run => ({ caseId: run.caseId, judgeRunId: run.id, verdict: run.verdict, createdAt: run.createdAt })), skillVersionId, criterionVersionId, limit);
+  }
+
   async createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue> {
+    if (input.judgeRunIds && (!input.skillVersionId || Object.keys(input.judgeRunIds).length !== new Set(input.caseIds).size
+      || input.caseIds.some(id => !Object.hasOwn(input.judgeRunIds!, id) || !input.judgeRunIds![id]))) {
+      throw new DatasetRevisionConflictError("Explicit recorded results must match every selected case and evaluator");
+    }
     const criterionVersionId = await this.resolveReviewCriterionVersion(
       input.projectId,
       input.criterionVersionId,
@@ -39,7 +62,7 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
       }
     }
     const pins = new Map(input.caseIds.map((caseId) =>
-      [caseId, this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId)]
+      [caseId, this.resolveEvidencePin(input.projectId, caseId, criterionVersionId, input.skillVersionId, input.judgeRunIds?.[caseId])]
     ));
     const id = `revq_${randomUUID()}`;
     const createdAt = new Date().toISOString();
@@ -202,10 +225,10 @@ export class DemoReviewQueueRepository implements ReviewQueueRepositoryPort {
     return added;
   }
 
-  private resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string) {
+  private resolveEvidencePin(projectId: string, caseId: string, criterionVersionId: string, skillVersionId?: string, judgeRunId?: string) {
     if (!skillVersionId) return { skillVersionId: null, judgeRunId: null };
     const run = [...this.store.judgeRuns].filter((run) => run.projectId === projectId && run.caseId === caseId
-      && run.skillVersionId === skillVersionId && this.store.skillVersionCriteria.get(skillVersionId) === criterionVersionId)
+      && run.skillVersionId === skillVersionId && (!judgeRunId || run.id === judgeRunId) && this.store.skillVersionCriteria.get(skillVersionId) === criterionVersionId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
     if (!run) throw new DatasetRevisionConflictError(`No recorded result for case ${caseId} and selected evaluator version`);
     return { skillVersionId, judgeRunId: run.id };

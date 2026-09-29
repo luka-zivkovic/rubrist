@@ -398,6 +398,7 @@ export interface AddQueueItemsInputDb {
 }
 
 export interface CreateReviewQueueInputDb {
+  judgeRunIds?: Record<string, string> | undefined;
   skillVersionId?: string | undefined;
   projectId: string;
   name: string;

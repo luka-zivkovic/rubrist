@@ -11,6 +11,7 @@ import { PgRepository } from "../src/repository.pg.js";
 import { PgReviewQueueRepository } from "../src/repository.pg/review-queue-repository.js";
 
 const EXPECTED_METHODS = [
+  "suggestReviewQueue",
   "createReviewQueue",
   "listReviewQueues",
   "getReviewQueueDetail",
@@ -242,6 +243,7 @@ describe("PostgreSQL review-queue repository slice", () => {
     ]]);
 
     const expectedDelegates = new Map<string, string>([
+      ["suggestReviewQueue", "{ return this.reviewQueueRepository.suggestReviewQueue(projectId, skillVersionId, limit); }"],
       ["createReviewQueue", "{ return this.reviewQueueRepository.createReviewQueue(input); }"],
       ["listReviewQueues", "{ return this.reviewQueueRepository.listReviewQueues(projectId, opts); }"],
       ["getReviewQueueDetail", "{ return this.reviewQueueRepository.getReviewQueueDetail(projectId, queueId); }"],

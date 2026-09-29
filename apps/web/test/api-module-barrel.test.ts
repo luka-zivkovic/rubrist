@@ -78,6 +78,7 @@ const EXPECTED_PUBLIC_EXPORTS = [
   "fetchProjectVerdicts",
   "fetchProjects",
   "fetchReviewQueueDetail",
+  "fetchReviewQueueSuggestion",
   "fetchReviewQueues",
   "fetchRunComparisonDetail",
   "fetchRunComparisons",

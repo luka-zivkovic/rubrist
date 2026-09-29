@@ -93,8 +93,16 @@ class `ungoverned_legacy`; they never become governed evidence. Agreement
 diagnostics over this ledger keep undefined kappa explicit when expected
 agreement is one.
 
+CURRENT: saved queues can suggest ten cases from the newest 1,000 eligible
+results for one exact evaluator version. The suggestion skips reviewed and
+already-pending results, mixes flagged/ambiguous opinions, and reserves passing
+spot checks. It shows selection reasons and any candidate cap, adds no provider
+calls, and carries no representative or governed-selection claim. See
+[the operational selection contract](review-prioritization.md).
+
 CURRENT: saved review tasks created with `skillVersionId` pin both the evaluator
-and its latest existing recorded judge-run ID at creation. Queue reads retain
+and a recorded judge-run ID: the latest at creation for manual lists, or the
+explicit previewed result for suggested lists. Queue reads retain
 that exact run across later evaluations. The UI requires an evaluator selection;
 criterion-only API callers remain explicitly unpinned for compatibility, as do
 preexisting tasks. Missing selected results fail without calling a provider.

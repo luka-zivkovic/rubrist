@@ -386,6 +386,7 @@ export interface CaseEvidenceRepositoryPort {
 }
 
 export interface ReviewQueueRepositoryPort {
+  suggestReviewQueue(projectId: string, skillVersionId: string, limit: number): Promise<import("@rubrist/shared").ReviewQueueSuggestion>;
   // Annotation queues (PR #47). Owner-curated cohorts for explicit reviewer
   // attention.
   createReviewQueue(input: CreateReviewQueueInputDb): Promise<ReviewQueue>;

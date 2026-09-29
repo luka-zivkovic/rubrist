@@ -1,18 +1,18 @@
 import { ReviewEvaluatorPicker, useReviewEvaluator } from "@/components/review-evaluator-picker";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Plus, RefreshCcw } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RowLink } from "@/components/row-action";
 import { Eyebrow, SectionHead } from "@/components/rubrist";
-import { createReviewQueue, fetchReviewQueues } from "@/lib/api";
+import { createReviewQueue, fetchReviewQueues, fetchReviewQueueSuggestion } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
 import { journeyStage } from "@/lib/journey";
 import { dashboardCriterionVersionId } from "@/lib/criterion-scope";
 import { cn } from "@/lib/utils";
 import { useDialogFocus } from "@/hooks/use-dialog-focus";
-import type { ReviewQueue, Skill } from "@rubrist/shared";
+import type { ReviewQueue, ReviewQueueSuggestion, Skill } from "@rubrist/shared";
 
 export function ReviewQueuesScreen() {
   const navigate = useNavigate();
@@ -274,6 +274,30 @@ function NewQueueModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [ids, setIds] = useState("");
+  const [suggestion, setSuggestion] = useState<ReviewQueueSuggestion | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const requestGeneration = useRef(0);
+  useEffect(() => {
+    requestGeneration.current += 1;
+    setSuggestion(null); setIds(""); setSuggesting(false);
+    return () => { requestGeneration.current += 1; };
+  }, [evaluator.selected?.id]);
+  const suggest = async () => {
+    if (!evaluator.selected) return;
+    const generation = ++requestGeneration.current;
+    const selectedId = evaluator.selected.id;
+    setSuggesting(true); setError(null);
+    try {
+      const result = await fetchReviewQueueSuggestion(selectedId);
+      if (generation !== requestGeneration.current) return;
+      setSuggestion(result); setIds(result.items.map(item => item.caseId).join("\n"));
+      setName(current => current || "Suggested review");
+    } catch (err) {
+      if (generation === requestGeneration.current) setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (generation === requestGeneration.current) setSuggesting(false);
+    }
+  };
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useDialogFocus<HTMLDivElement>({ onClose: onCancel, closeOnEscape: !submitting });
@@ -282,7 +306,7 @@ function NewQueueModal({
     .split(/[\s,]+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const canSubmit = name.trim().length > 0 && parsedIds.length > 0 && Boolean(evaluator.selected) && !submitting;
+  const canSubmit = name.trim().length > 0 && parsedIds.length > 0 && Boolean(evaluator.selected) && !submitting && !suggesting;
 
   const submit = async () => {
     setError(null);
@@ -296,7 +320,8 @@ function NewQueueModal({
         name: name.trim(),
         ...(selectedCriterion ? { criterionVersionId: selectedCriterion } : {}),
         ...(trimmedDesc ? { description: trimmedDesc } : {}),
-        caseIds: parsedIds
+        caseIds: parsedIds,
+        ...(suggestion ? { judgeRunIds: Object.fromEntries(suggestion.items.map(item => [item.caseId, item.judgeRunId])) } : {})
       });
       onCreated(queue);
     } catch (err) {
@@ -318,17 +343,33 @@ function NewQueueModal({
         if (!submitting && e.target === e.currentTarget) onCancel();
       }}
     >
-      <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-full overflow-y-auto shadow-elev sm:w-[600px]" onClick={(e) => e.stopPropagation()}>
+      <Card className="flex max-h-[calc(100dvh-2rem)] w-full max-w-full flex-col overflow-hidden shadow-elev sm:w-[600px]" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <div>
             <CardTitle id="new-queue-title">New queue</CardTitle>
             <CardDescription>
-              Give the queue a name and add the case IDs that reviewers should work through.
+              Suggest a small review batch, or add your own cases.
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <ReviewEvaluatorPicker selection={evaluator} disabled={submitting} />
+        <CardContent className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+          <ReviewEvaluatorPicker selection={evaluator} disabled={submitting} previewPinned={Boolean(suggestion)} />
+          <div className="rounded-sm border border-rule-soft bg-card-2 p-3">
+            <Button variant="outline" size="sm" onClick={() => void suggest()} disabled={!evaluator.selected || submitting || suggesting}>
+              {suggesting ? "Finding cases…" : "Suggest 10 cases"}
+            </Button>
+            <p className="mt-2 text-[12px] text-ink-2">Mix flagged and ambiguous results with passing spot checks. Skips results already reviewed or pending in an open queue. No extra model calls.</p>
+            {suggestion ? <div className="mt-3">
+              <p role="status" className="text-[12px] text-ink-2">{suggestion.items.length ? `${suggestion.items.length} cases suggested from ${suggestion.consideredCount} eligible results${suggestion.capped ? " (newest 1,000 only)" : ""}.` : "No eligible results for this evaluator version. Import and assess more cases, or finish an existing queue."} This is a review work list, not a representative sample.</p>
+              <ul className="mt-2 max-h-60 overflow-y-auto divide-y divide-rule-soft" aria-label="Suggested cases">
+                {suggestion.items.map(item => <li key={item.caseId} className="flex items-center justify-between gap-3 py-1.5 text-[12px]">
+                  <span className="truncate font-mono" title={item.caseId}>{item.caseId}</span>
+                  <span className={cn("shrink-0 rounded-sm border px-1.5 py-0.5 text-[11px]", item.reason === "flagged" ? "border-red-500/20 bg-red-500/5 text-red-700 dark:text-red-300" : item.reason === "ambiguous" ? "border-amber-500/20 bg-amber-500/5 text-amber-800 dark:text-amber-300" : "border-emerald-500/20 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300")}>{item.reason === "flagged" ? "Evaluator flagged" : item.reason === "ambiguous" ? "Ambiguous result" : "Passing spot check"}</span>
+                </li>)}
+              </ul>
+              <p className="mt-2 text-[12px] text-ink-3">Saving preserves these exact recorded results. Editing the case IDs switches to manual selection.</p>
+            </div> : null}
+          </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="new-queue-name" className="eyebrow">Name</label>
             <input
@@ -336,6 +377,7 @@ function NewQueueModal({
               autoFocus
               data-dialog-initial-focus
               value={name}
+              disabled={submitting}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Refund eligibility · June calibration"
               className="h-9 rounded-sm border border-rule-soft bg-card-2 px-2 font-sans text-[13px] text-ink focus-visible:border-ink"
@@ -349,6 +391,7 @@ function NewQueueModal({
             <textarea
               id="new-queue-description"
               value={description}
+              disabled={submitting}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder="What this queue is for. Shows on the row."
@@ -356,12 +399,15 @@ function NewQueueModal({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <details open={!suggestion}>
+            <summary className="cursor-pointer text-[12px] text-ink-2">Choose case IDs manually</summary>
+            <div className="mt-2 flex flex-col gap-1.5">
             <label htmlFor="new-queue-case-ids" className="eyebrow">Case IDs</label>
             <textarea
               id="new-queue-case-ids"
               value={ids}
-              onChange={(e) => setIds(e.target.value)}
+              disabled={submitting || suggesting}
+              onChange={(e) => { setIds(e.target.value); setSuggestion(null); }}
               rows={5}
               placeholder={`Paste IDs — newline or comma separated\nex_8a31\nex_8a32, ex_8a30`}
               className="resize-y rounded-sm border border-rule-soft bg-card-2 px-2 py-1.5 font-mono text-[12px] text-ink focus-visible:border-ink"
@@ -373,9 +419,12 @@ function NewQueueModal({
             </div>
           </div>
 
+            </details>
+
           {error ? <div role="alert" className="text-[12px] text-signal">{error}</div> : null}
 
-          <div className="flex items-center gap-2">
+        </CardContent>
+        <CardFooter className="shrink-0">
             <Button variant="ghost" onClick={onCancel} disabled={submitting}>
               Cancel
             </Button>
@@ -383,8 +432,7 @@ function NewQueueModal({
             <Button variant="primary" onClick={() => void submit()} disabled={!canSubmit}>
               Create queue
             </Button>
-          </div>
-        </CardContent>
+        </CardFooter>
       </Card>
     </div>
   );
