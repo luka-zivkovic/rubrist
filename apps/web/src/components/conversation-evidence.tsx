@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { additionalFields, conversationEvidence, evidenceObject, evidenceText, messageRole } from "../lib/trace-evidence.js";
+
+import { formattedRecordedJson, losslessJson, isRecordedTrajectory, messageGroups, type messageEvidence } from "../lib/message-evidence.js";
 
 import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
 
@@ -40,22 +42,78 @@ function ExtraFields({ record, known, path }: { record: Record<string, unknown>;
   </details> : null;
 }
 
-function Message({ value, path }: { value: unknown; path: string }) {
-  const record = evidenceObject(value);
+function ToolCalls({ value }: { value: unknown }) {
+  if (!Array.isArray(value) || value.length === 0) return <RawValue value={value} />;
+  return <div className="space-y-3">{value.map((call, index) => {
+    const record = evidenceObject(call), fn = evidenceObject(record?.function);
+    return fn && typeof fn.name === "string" ? <div key={index}>
+      <p className="font-mono text-[13px] font-semibold [overflow-wrap:anywhere]">{fn.name}</p>
+      <div className="mt-1"><RawValue value={fn.arguments} /></div>
+      <ExtraFields record={record!} known={["function", "id", "type"]} path={`tool_calls[${index}]`} />
+      <ExtraFields record={fn} known={["name", "arguments"]} path={`tool_calls[${index}].function`} />
+    </div> : <RawValue key={index} value={call} />;
+  })}</div>;
+}
+
+function ToolResult({ value, imported }: { value: unknown; imported: boolean }) {
+  let record = evidenceObject(value);
+  if (imported && typeof value === "string") {
+    record = evidenceObject(losslessJson(value));
+    if (!record) {
+      const formatted = formattedRecordedJson(value);
+      return formatted === null ? <Content value={value} /> : <RawValue value={formatted} />;
+    }
+  }
+  if (!record || Object.keys(record).length === 0) return <Content value={value} />;
+  return <dl className="text-[12px] leading-5">{Object.entries(record).map(([key, item]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 border-b border-rule-soft py-1.5 last:border-0">
+    <dt className="font-mono text-ink-3 [overflow-wrap:anywhere]">{key}</dt>
+    <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidenceText(item)}</dd>
+  </div>)}</dl>;
+}
+
+function Message({ entry, targetPrefix, selectedIndex }: {
+  entry: ReturnType<typeof messageEvidence> & { value: unknown; index: number };
+  targetPrefix: string; selectedIndex?: number | null;
+}) {
+  const { record, content, calls, name, sourceIndex, index, value } = entry;
+  const path = `input.messages[${index}]`;
   const role = messageRole(record?.role);
-  const known = role !== "Unrecognized message" && record !== null && Object.hasOwn(record, "content");
+  const known = role !== "Unrecognized message" && record !== null && (Object.hasOwn(record, "content") || calls !== undefined);
+  const tool = role === "Tool" || role === "Function";
+  const selected = selectedIndex === index;
+  const recordedError = tool && typeof content === "string" && content.startsWith("Error:");
+  const heading = `${sourceIndex !== null ? `Message ${sourceIndex}` : `Entry ${index + 1}`} · ${role}${name ? ` · ${name}` : ""}`;
   const body = <>
-    {known ? <Content value={record.content} /> : <RawValue value={value} />}
-    {known ? <ExtraFields record={record} known={["role", "content"]} path={path} /> : null}
+    {calls !== undefined ? <div><p className="mb-2 text-[11px] font-medium text-ink-3">Recorded tool calls</p><ToolCalls value={calls} /></div> : null}
+    {known ? (calls !== undefined && (content === "" || content === null || content === undefined) ? null : tool ? <ToolResult value={content} imported={sourceIndex !== null} /> : <Content value={content} />) : <RawValue value={value} />}
+    {known ? <ExtraFields record={record} known={["role", "content", "tool_calls", "name", "tool_call_id"]} path={path} /> : null}
     <Source path={path} value={value} />
   </>;
-  return role === "Tool" || role === "Function" ? <details className="rounded-sm border border-rule-soft p-3">
-    <summary className="cursor-pointer text-[12px] font-medium">{role}{typeof record?.name === "string" ? ` · ${record.name}` : ""}</summary>
-    <div className="mt-3 space-y-2">{body}</div>
-  </details> : <section className={`min-w-0 border-l-2 pl-3 ${role === "Assistant" ? "border-rule-strong" : "border-rule-soft"}`}>
-    <h4 className="mb-2 text-[12px] font-semibold">{role}</h4>
-    <div className="space-y-2">{body}</div>
+  return <section id={`${targetPrefix}-${index}`} tabIndex={-1} data-message-index={index}
+    className={`min-w-0 scroll-mt-24 rounded-sm border-l-2 p-3 focus-visible:outline-2 focus-visible:outline-offset-2 ${selected ? "border-amber-600 bg-amber-50 dark:border-amber-400 dark:bg-amber-950/30" : recordedError ? "border-red-300 bg-red-50/60 dark:border-red-800 dark:bg-red-950/20" : tool ? "border-rule-strong bg-card-2" : "border-rule-soft"}`}>
+    {selected ? <p className="mb-2 text-[11px] font-medium text-amber-900 dark:text-amber-200">Referenced by the evaluator · check its interpretation</p> : null}
+    {role === "System" || role === "Developer" ? <details>
+      <summary className="cursor-pointer text-[12px] font-semibold">{heading} · instructions</summary>
+      <div className="mt-3 space-y-2">{body}</div>
+    </details> : <>
+      <h4 className="mb-2 text-[12px] font-semibold [overflow-wrap:anywhere]">{heading}{tool ? " · response" : ""}</h4>
+      <div className="space-y-2">{body}</div>
+    </>}
   </section>;
+}
+
+function AvailableTools({ value }: { value: unknown }) {
+  return <details className="rounded-sm border border-rule-soft p-3">
+    <summary className="cursor-pointer text-[12px] font-medium">Available tools{Array.isArray(value) ? ` · ${value.length} recorded definitions` : " · recorded data"}</summary>
+    <div className="mt-3 space-y-2">{Array.isArray(value) ? value.map((tool, index) => {
+      const record = evidenceObject(tool), fn = evidenceObject(record?.function);
+      const name = fn?.name ?? record?.name;
+      return <details key={index} className="border-t border-rule-soft pt-2">
+        <summary className="cursor-pointer font-mono text-[12px] [overflow-wrap:anywhere]">{typeof name === "string" ? name : `Definition ${index + 1}`}</summary>
+        <RawValue value={tool} />
+      </details>;
+    }) : <RawValue value={value} />}</div>
+  </details>;
 }
 
 function PreviewTurn({ value, index }: { value: unknown; index: number }) {
@@ -82,19 +140,18 @@ function PreviewTurn({ value, index }: { value: unknown; index: number }) {
   </section>;
 }
 
-export function ConversationEvidence({ input, output, steps, trajectory }: {
-  input: unknown; output: unknown; steps?: unknown; trajectory?: ReactNode;
+export function ConversationEvidence({ input, output, steps, trajectory, metadata, targetPrefix = "conversation-message", selectedIndex }: {
+  input: unknown; output: unknown; steps?: unknown; trajectory?: ReactNode; metadata?: unknown; targetPrefix?: string; selectedIndex?: number | null;
 }) {
   const projection = conversationEvidence(input);
-  const [earlierOpen, setEarlierOpen] = useState(false);
-  const earlierCount = projection?.kind === "messages" ? Math.max(0, projection.messages.length - 6) : 0;
+  const wholeTrajectory = projection?.kind === "messages" && isRecordedTrajectory(input, metadata);
   const preview = projection?.kind === "preview";
   return <Card className="min-w-0">
     <CardHeader><div className="min-w-0">
       <CardTitle>{projection ? "Conversation" : "Case evidence"}</CardTitle>
-      <CardDescription>{projection ? "Recorded context, followed by this case’s output. Expand source details to inspect the original fields." : "Recorded input and output. No conversation structure is assumed."}</CardDescription>
+      <CardDescription>{projection ? "Read messages and tool responses in recorded order. Source details retain the original fields." : "Recorded input and output. No conversation structure is assumed."}</CardDescription>
     </div></CardHeader>
-    <CardContent className="min-w-0 space-y-5">
+    <CardContent className={`min-w-0 space-y-5 ${projection?.kind === "messages" ? "xl:max-h-[70vh] xl:overflow-y-auto" : ""}`}>
       <EvidenceTruncationWarning input={input} output={output} steps={steps} />
       {preview ? <aside className="rounded-sm border border-amber-300 bg-amber-50 p-3 text-[12px] leading-5 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
         <p className="font-semibold">Preview-only evidence</p>
@@ -102,13 +159,14 @@ export function ConversationEvidence({ input, output, steps, trajectory }: {
         {typeof projection.record.evidenceLimitations === "string" ? <details className="mt-2"><summary className="cursor-pointer">Recorded source limitations</summary><p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{projection.record.evidenceLimitations}</p></details> : null}
       </aside> : null}
       {projection?.kind === "messages" ? <section className="space-y-4" aria-label="Conversation context">
-        <h3 className="text-[13px] font-semibold">Conversation context · {projection.messages.length} recorded entries</h3>
-        {earlierCount > 0 ? <div>
-          <button type="button" aria-expanded={earlierOpen} onClick={() => setEarlierOpen(!earlierOpen)} className="cursor-pointer rounded-sm border border-rule-soft px-3 py-2 text-[12px] hover:bg-card-2">{earlierOpen ? "Hide" : "Show"} {earlierCount} earlier entries</button>
-          {earlierOpen ? <div className="mt-4 space-y-4">{projection.messages.slice(0, earlierCount).map((message, index) => <Message key={index} value={message} path={`input.messages[${index}]`} />)}</div> : null}
-        </div> : null}
-        {projection.messages.slice(earlierCount).map((message, index) => <Message key={earlierCount + index} value={message} path={`input.messages[${earlierCount + index}]`} />)}
-        <ExtraFields record={projection.record} known={["messages"]} path="input" />
+        <h3 className="text-[13px] font-semibold">{wholeTrajectory ? "Whole conversation" : "Conversation context"} · {projection.messages.length} recorded messages</h3>
+        {wholeTrajectory ? <p className="text-[12px] text-ink-3">Assessment scope: the entire recorded trajectory. Message numbers follow the source, starting at 0.</p> : null}
+        {Object.hasOwn(projection.record, "availableTools") ? <AvailableTools value={projection.record.availableTools} /> : null}
+        <div className="space-y-4">{messageGroups(projection.messages, wholeTrajectory).map(group => <div key={group[0]!.index}
+          className={group.length > 1 ? "space-y-1 rounded-sm border border-rule-soft p-1" : ""}>
+          {group.map(entry => <Message key={entry.index} entry={entry} targetPrefix={targetPrefix} selectedIndex={selectedIndex ?? null} />)}
+        </div>)}</div>
+        <ExtraFields record={projection.record} known={["messages", "availableTools", ...(wholeTrajectory ? ["assessmentScope"] : [])]} path="input" />
       </section> : preview ? <>
         {projection.turns.length > 0 ? <details className="rounded-sm border border-rule-soft p-3">
           <summary className="cursor-pointer text-[12px] font-medium">Earlier context · {projection.turns.length} recorded {projection.turns.length === 1 ? "turn" : "turns"}</summary>
@@ -118,12 +176,18 @@ export function ConversationEvidence({ input, output, steps, trajectory }: {
         <ExtraFields record={projection.record} known={["precedingTurns", "userRequestPreview", ...(typeof projection.record.evidenceLimitations === "string" ? ["evidenceLimitations"] : [])]} path="input" />
       </> : <section><h3 className="mb-2 text-[13px] font-semibold">Input</h3><Content value={input} /></section>}
       {trajectory}
+      {wholeTrajectory ? <details className="rounded-sm border border-rule-soft p-3" aria-label="Recorded output">
+        <summary className="cursor-pointer text-[12px] font-medium">Source output field</summary>
+        <p className="my-3 text-[12px] text-ink-3">The import records this separately as its source answer. The assessment covers the entire conversation above; this field does not identify its final message.</p>
+        <Content value={output} /><Source path="output" value={output} />
+      </details> : (
       <section className="min-w-0 rounded-sm border-l-4 border-ink bg-card-2 p-4" aria-label="Recorded output">
         <h3 className="mb-1 text-[14px] font-semibold">{preview ? "Response being assessed · preview" : "Recorded output · this case"}</h3>
         <p className="mb-3 text-[12px] text-ink-3">{preview ? "Earlier assistant replies above are context. This is the response captured for this case." : "Shown separately from context. The evaluator can assess the full case, including supplied steps."}</p>
         <Content value={output} />
         <Source path="output" value={output} />
       </section>
+      )}
       <details className="border-t border-rule-soft pt-3">
         <summary className="cursor-pointer text-[12px] text-ink-3">Raw recorded input, output and steps</summary>
         <div className="mt-2"><RawValue value={{ input, output, ...(steps !== undefined ? { steps } : {}) }} /></div>

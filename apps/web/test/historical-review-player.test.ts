@@ -125,6 +125,48 @@ async function mount(items: import("../src/components/review-player.js").ReviewP
   return container;
 }
 describe("historical review player", () => {
+  it("links recorded source references, opens instructions, and clears message focus on another case", async () => {
+    const { TraceDetail } = await import("../src/components/trace-detail.js");
+    const view = structuredClone(detail);
+    view.trace.metadata = { evidenceProjection: "whole-trajectory-v2-lossless-text-blocks" };
+    view.trace.input = { assessmentScope: "Entire recorded trajectory; output repeats the source final answer.", messages: [
+      { role: "system", content: "[source message 0; role=system]\nPolicy" },
+      { role: "tool", content: "[source message 1; role=tool; tool=lookup; call_id=a]\nError: unavailable" }
+    ] };
+    view.judgeRun.reasoning = "Read message 0 then message 1; message 99 has no source.";
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(TraceDetail, { detail: view })));
+    const refs = () => [...container.querySelectorAll<HTMLAnchorElement>("a[href^='#']")];
+    expect(refs().map(a => a.textContent)).toEqual(["message 0", "message 1"]);
+    expect(refs()[0]!.parentElement!.textContent).toBe(view.judgeRun.reasoning);
+    const target = container.querySelector<HTMLElement>('[data-message-index="0"]')!;
+    target.scrollIntoView = vi.fn();
+    await act(async () => refs()[0]!.click());
+    expect(target.scrollIntoView).toHaveBeenCalled();
+    expect(document.activeElement).toBe(target);
+    expect(target.querySelector("details")!.open).toBe(true);
+    expect(target.textContent).toContain("Referenced by the evaluator");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+    const next = structuredClone(view); next.exception.id = "another-case";
+    await act(async () => root!.render(createElement(TraceDetail, { detail: next })));
+    expect(container.textContent).not.toContain("Referenced by the evaluator");
+    expect(container.querySelector('[data-message-index="0"] details')!.hasAttribute("open")).toBe(false);
+    await act(async () => root!.render(createElement(TraceDetail, { detail: view })));
+    expect(container.textContent).not.toContain("Referenced by the evaluator");
+    const revisit = container.querySelector<HTMLElement>('[data-message-index="0"]')!;
+    revisit.scrollIntoView = vi.fn();
+    await act(async () => refs()[0]!.click());
+    expect(container.textContent).toContain("Referenced by the evaluator");
+    const anotherRun = structuredClone(view); anotherRun.judgeRun.id = "judge_2";
+    anotherRun.judgeRun.reasoning = "Different assessment without a citation.";
+    await act(async () => root!.render(createElement(TraceDetail, { detail: anotherRun })));
+    expect(container.textContent).not.toContain("Referenced by the evaluator");
+    expect(container.querySelector('[data-message-index="0"] details')!.hasAttribute("open")).toBe(false);
+    // An unknown import cannot establish what the judge meant by “message 0”.
+    next.trace.metadata = {};
+    await act(async () => root!.render(createElement(TraceDetail, { detail: { ...next } })));
+    expect(refs()).toHaveLength(0);
+  });
   it("loads a pinned result, preserves it across refresh, and records the task even when a prior human agrees", async () => {
     const prior = { id: "prior", projectId: "project_1", caseId: "case_1", skillVersionId: "skillv_other", source: "human" as const, actorUserId: null,
       payload: { kind: "binary" as const, pass: false, rationale: "Previous review" }, externalRunId: null, createdAt: "2026-08-26T10:00:00Z" };
