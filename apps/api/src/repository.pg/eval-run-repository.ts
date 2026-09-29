@@ -730,15 +730,18 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
 
   async listEvalRuns(
     projectId: string,
-    opts?: { limit?: number | undefined; skillVersionId?: string | undefined }
+    opts?: { limit?: number | undefined; skillVersionId?: string | undefined; purpose?: "backfill" | "first_assessment" | undefined }
   ): Promise<EvalRun[]> {
     const result = await this.pool.query(
       `select * from eval_runs
        where project_id = $1
          and ($2::text is null or skill_version_id = $2)
-       order by created_at desc, id desc
+         and ($4::text is null or trigger = 'backfill'
+           or ($4 = 'first_assessment' and trigger = 'api_batch' and dataset_id is null))
+       order by case when $4 = 'first_assessment' and status in ('pending','running') then 0 else 1 end,
+                created_at desc, id desc
        limit $3`,
-      [projectId, opts?.skillVersionId ?? null, opts?.limit ?? 50]
+      [projectId, opts?.skillVersionId ?? null, opts?.limit ?? 50, opts?.purpose ?? null]
     );
     return result.rows.map(rowToEvalRun);
   }

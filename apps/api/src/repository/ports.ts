@@ -536,7 +536,7 @@ export interface EvalRunRepositoryPort {
   getEvalRunDetail(projectId: string, evalRunId: string): Promise<EvalRunDetail | null>;
   listEvalRuns(
     projectId: string,
-    opts?: { limit?: number | undefined; skillVersionId?: string | undefined }
+    opts?: { limit?: number | undefined; skillVersionId?: string | undefined; purpose?: "backfill" | "first_assessment" | undefined }
   ): Promise<EvalRun[]>;
   // Cleanup for partial multi-run creation ONLY: removes a run that never
   // dispatched (still pending, nothing judged or failed). A dispatched run is

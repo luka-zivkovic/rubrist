@@ -738,7 +738,7 @@ export class DemoRepository implements RubristRepository {
 
   async listEvalRuns(
     projectId: string,
-    opts?: { limit?: number | undefined; skillVersionId?: string | undefined }
+    opts?: { limit?: number | undefined; skillVersionId?: string | undefined; purpose?: "backfill" | "first_assessment" | undefined }
   ): Promise<EvalRun[]> {
     return this.evaluationRepository.listEvalRuns(projectId, opts);
   }

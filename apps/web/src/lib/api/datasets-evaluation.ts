@@ -85,8 +85,11 @@ export async function createDatasetRevision(
   throw apiError(response, body, "Dataset revision creation failed");
 }
 
-export async function fetchEvalRuns(limit = 50): Promise<EvalRun[]> {
-  const response = await apiFetch(`${API_BASE}/api/eval-runs?limit=${limit}`, { credentials: "include" });
+export async function fetchEvalRuns(limit = 50, skillVersionId?: string, purpose?: "first_assessment"): Promise<EvalRun[]> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (skillVersionId) query.set("skillVersionId", skillVersionId);
+  if (purpose) query.set("purpose", purpose);
+  const response = await apiFetch(`${API_BASE}/api/eval-runs?${query}`, { credentials: "include" });
   if (!response.ok) throw await apiErrorFromResponse(response, "Eval runs request failed");
   const body = (await response.json()) as { runs?: unknown };
   return EvalRunSchema.array().parse(body.runs ?? []);

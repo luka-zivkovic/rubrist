@@ -106,7 +106,7 @@ export async function runExistingCaseBackfill(
 ) {
   const caseIds = await repository.listCaseIdsForProject(projectId);
   if (caseIds.length === 0) return null;
-  const existing = (await repository.listEvalRuns(projectId, { limit: 100, skillVersionId }))
+  const existing = (await repository.listEvalRuns(projectId, { limit: 1, skillVersionId, purpose: "backfill" }))
     .find((run) => run.trigger === "backfill");
   const run = existing ?? await repository.createEvalRun({
     projectId,

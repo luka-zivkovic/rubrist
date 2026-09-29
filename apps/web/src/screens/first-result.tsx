@@ -14,7 +14,7 @@ import {
   fetchSkillVersionCriterion
 } from "@/lib/api";
 import { useDashboard } from "@/lib/dashboard-context";
-import { backfillRunForVersion, verdictForTrackedItem } from "@/lib/first-result";
+import { firstAssessmentRunForVersion, verdictForTrackedItem } from "@/lib/first-result";
 import { firstResultPath, markSetupReceipt } from "@/lib/journey";
 
 const POLL_MS = 2000;
@@ -31,6 +31,7 @@ export function FirstResultScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dispatchPending, setDispatchPending] = useState(false);
+  const [canStartExisting, setCanStartExisting] = useState(false);
   const [criterionVersion, setCriterionVersion] = useState<CriterionVersion | null>(null);
   const [criterionError, setCriterionError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -69,7 +70,7 @@ export function FirstResultScreen() {
     }
     try {
       const [runs, recordedVerdicts] = await Promise.all([
-        fetchEvalRuns(100),
+        fetchEvalRuns(100, versionId, "first_assessment"),
         fetchProjectVerdicts({
           source: "llm_judge",
           skillVersionId: versionId,
@@ -78,7 +79,7 @@ export function FirstResultScreen() {
         })
       ]);
       if (!current()) return false;
-      const summary = backfillRunForVersion(runs, versionId);
+      const summary = firstAssessmentRunForVersion(runs, versionId, recordedVerdicts);
       let detail: EvalRunDetail | null;
       let observedDispatchPending: boolean | undefined;
       let nextEnsureDelayMs: number | null = null;
@@ -122,11 +123,14 @@ export function FirstResultScreen() {
         setLoading(false);
         return false;
       } else {
-        const ensured = await ensureSkillVersionBackfill(skillId, versionId);
-        nextEnsureDelayMs = ensured.retryAfterMs;
-        observedDispatchPending = ensured.dispatchPending;
-        detail = ensured.run;
+        // The trace may be saved before its import run is scheduled. Absence
+        // of a run is never permission to evaluate all historical cases.
+        setCanStartExisting(true);
+        setError("No saved evaluation run yet. Import a case with this evaluator, or explicitly evaluate existing cases.");
+        setLoading(false);
+        return true;
       }
+      setCanStartExisting(false);
       if (!current()) return false;
       if (nextEnsureDelayMs !== null) nextEnsureAt.current = Date.now() + nextEnsureDelayMs;
       if (observedDispatchPending !== undefined) setDispatchPending(observedDispatchPending);
@@ -187,7 +191,17 @@ export function FirstResultScreen() {
       } else {
         setResult(null);
       }
-      return detail.status === "pending" || detail.status === "running";
+      if (detail.status === "pending" || detail.status === "running") return true;
+      if (completedItem) return false;
+      // A listed active run can finish between reads. Check remaining work,
+      // then recorded assessments, before stopping the onboarding poll.
+      const remaining = await fetchEvalRuns(1, versionId, "first_assessment");
+      if (!current()) return false;
+      if (remaining.some((candidate) => candidate.status === "pending" || candidate.status === "running")) return true;
+      const completed = await fetchProjectVerdicts({
+        source: "llm_judge", skillVersionId: versionId, evidenceScope: "customer", limit: 1
+      });
+      return current() && completed.length > 0;
     } catch (cause) {
       if (current()) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -203,6 +217,7 @@ export function FirstResultScreen() {
     setResult(null);
     setError(null);
     setDispatchPending(false);
+    setCanStartExisting(false);
     setLoading(true);
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -238,11 +253,15 @@ export function FirstResultScreen() {
         eyebrow="First setup · assessment"
         title={result
           ? "Your first assessment is ready"
+          : canStartExisting
+            ? "Choose what to evaluate"
           : dispatchPending
             ? "Waiting to start the saved evaluator run"
             : `Applying ${versionLabel} to a recorded case`}
         sub={result
           ? "This is the evaluator's opinion about evidence your AI already produced. It is not a human decision, proof of accuracy, or permission to ship."
+          : canStartExisting
+            ? "No saved run is visible yet. New imports can start their own evaluations; evaluating existing cases is a separate choice."
           : dispatchPending
             ? "The case is saved, but Rubrist has not confirmed that evaluation started. No assessment exists yet."
             : "Rubrist is evaluating saved evidence. You can leave this page and return—the progress below is stored."}
@@ -282,15 +301,15 @@ export function FirstResultScreen() {
         <StatusCard
           icon={<LoaderCircle className="size-4 animate-spin" />}
           title="Preparing the evaluator run"
-          body="The evaluator has been saved. Rubrist is creating a tracked run over the recorded evidence."
+          body="Loading saved evaluation progress for this evaluator."
         />
       ) : error ? (
         <StatusCard
-          urgent
+          urgent={!canStartExisting}
           icon={<CircleAlert className="size-4" />}
-          title="Could not read the evaluation status"
+          title={canStartExisting ? "No evaluation run has started" : "Could not read the evaluation status"}
           body={error}
-          actions={
+          actions={<>
             <Button size="sm" variant="outline" onClick={() => {
               setLoading(true);
               setError(null);
@@ -299,7 +318,17 @@ export function FirstResultScreen() {
             }}>
               <RefreshCcw /> Try again
             </Button>
-          }
+            {canStartExisting && skillId && versionId ? <Button size="sm" variant="outline" onClick={async () => {
+              setCanStartExisting(false);
+              try {
+                await ensureSkillVersionBackfill(skillId, versionId);
+                setRetryNonce((value) => value + 1);
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : String(cause));
+                setCanStartExisting(true);
+              }
+            }}>Evaluate existing cases</Button> : null}
+          </>}
         />
       ) : dispatchPending && run && run.status === "pending" ? (
         <StatusCard
