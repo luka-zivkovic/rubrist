@@ -28,7 +28,6 @@ export const DEFAULT_SENSITIVE_KEY_PATTERNS = [
   "client_secret"
 ] as const;
 
-const DEFAULT_MAX_STRING_CHARS = 4000;
 const MAX_REDACTION_DEPTH = 200;
 
 // trajectory steps ride inside the normalized payload. The field is
@@ -99,7 +98,9 @@ export function redactTrace(trace: Trace, config: TraceRedactionConfig = {}): Tr
 export function redactJson(value: unknown, config: TraceRedactionConfig = {}): unknown {
   const excludedPaths = new Set((config.excludedPaths ?? []).map(normalizePath).filter(Boolean));
   const sensitivePatterns = normalizeSensitivePatterns(config.sensitiveKeyPatterns);
-  const maxStringChars = config.maxStringChars ?? DEFAULT_MAX_STRING_CHARS;
+  // Length limiting is an explicit ingestion policy, not secret redaction.
+  // Default readers must not shorten evidence already accepted and retained.
+  const maxStringChars = config.maxStringChars;
   const visited = new WeakSet<object>();
 
   function visit(current: unknown, path: string[], depth: number): unknown {
@@ -129,8 +130,13 @@ export function redactJson(value: unknown, config: TraceRedactionConfig = {}): u
       return output;
     }
 
-    if (typeof current === "string" && current.length > maxStringChars) {
-      return `${current.slice(0, maxStringChars)}${TRUNCATED_SUFFIX}`;
+    if (typeof current === "string" && maxStringChars !== undefined && current.length > maxStringChars) {
+      const text = current.endsWith(TRUNCATED_SUFFIX) ? current.slice(0, -TRUNCATED_SUFFIX.length) : current;
+      if (text.length <= maxStringChars && current.endsWith(TRUNCATED_SUFFIX)) return current;
+      let end = maxStringChars;
+      // JS limits count UTF-16 units. Never leave half of a surrogate pair.
+      if (end > 0 && /[\uD800-\uDBFF]/.test(text[end - 1]!) && /[\uDC00-\uDFFF]/.test(text[end] ?? "")) end--;
+      return `${text.slice(0, end)}${TRUNCATED_SUFFIX}`;
     }
 
     return current;

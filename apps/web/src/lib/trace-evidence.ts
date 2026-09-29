@@ -11,6 +11,22 @@ export function evidenceText(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? "Not recorded";
 }
 
+// A marker observation, not a completeness attestation. Source text can itself
+// contain this suffix; absence of it does not establish upstream completeness.
+export function hasTruncationMarker(value: unknown): boolean {
+  const pending = [value];
+  const seen = new WeakSet<object>();
+  while (pending.length) {
+    const current = pending.pop();
+    if (typeof current === "string" && current.endsWith("…[TRUNCATED]")) return true;
+    if (current !== null && typeof current === "object" && !seen.has(current)) {
+      seen.add(current);
+      for (const child of Object.values(current)) pending.push(child);
+    }
+  }
+  return false;
+}
+
 export function additionalFields(record: Record<string, unknown>, known: string[]) {
   return Object.fromEntries(Object.entries(record).filter(([key]) => !known.includes(key)));
 }

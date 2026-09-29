@@ -14,6 +14,18 @@ function routeManifest(options: { auth?: RubristAuth; pool?: Pool } = {}): strin
 }
 
 describe("app route registration contract", () => {
+  it("rejects oversized manual evidence before importing any cases", async () => {
+    const { DemoRepository } = await import("../src/repository.js");
+    const repository = new DemoRepository();
+    const imported = vi.spyOn(repository, "importTrace");
+    const response = await createApp(repository).request("/api/traces/manual", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sourceTraceId: "too-big", input: "x".repeat(256 * 1024 + 1), output: "answer" })
+    });
+    expect(response.status).toBe(413);
+    expect(imported).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });

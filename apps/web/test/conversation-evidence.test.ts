@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { conversationEvidence, evidenceText } from "../src/lib/trace-evidence.js";
+import { CaseEvidence } from "../src/components/case-evidence.js";
 import { ConversationEvidence } from "../src/components/conversation-evidence.js";
 
 vi.mock("@/components/ui/card", () => ({
@@ -30,6 +31,27 @@ function raw(container: HTMLElement) {
 }
 
 describe("recorded conversation evidence", () => {
+  it("renders full long policy and tool text without a completeness claim", () => {
+    const policy = "policy ".repeat(1500) + "policy final condition";
+    const tool = "tool result ".repeat(1500) + "last tool observation";
+    const { container } = render({ messages: [{ role: "system", content: policy }, { role: "tool", content: tool }] });
+    expect(container.textContent).toContain(policy);
+    expect(container.textContent).toContain(tool);
+    expect(container.textContent).not.toContain("Truncation marker");
+  });
+
+  it("warns about markers even in collapsed earlier context and trajectory steps", () => {
+    const input = { messages: [{ role: "system", content: [{ type: "text", text: "old policy…[TRUNCATED]" }] },
+      ...Array.from({ length: 8 }, () => ({ role: "user", content: "short" }))] };
+    const { container } = render(input);
+    expect(container.textContent).toContain("Truncation marker in recorded evidence");
+    expect(container.textContent).toContain("Some context may be missing");
+    expect(raw(container).input).toEqual(input);
+    const html = renderToStaticMarkup(createElement(ConversationEvidence, { input: {}, output: "ok", steps: [{ input: {}, output: "cut…[TRUNCATED]" }] }));
+    expect(html).toContain("Truncation marker in recorded evidence");
+    expect(render({}, "cut…[TRUNCATED]").container.textContent).toContain("Truncation marker in recorded evidence");
+  });
+
   it("keeps arbitrary payloads as input/output instead of inventing two turns", () => {
     for (const input of [{ question: "Q", evidence: ["E"], unknown: { critical: true } }, "{\"messages\":[1]}", null, [], { messages: [] }, { messages: "bad" }]) {
       expect(conversationEvidence(input)).toBeNull();
@@ -127,5 +149,22 @@ describe("recorded conversation evidence", () => {
     expect(container.textContent).toContain("Empty text");
     expect(container.querySelector('[aria-label="Recorded output"]')!.textContent).toContain("Not recorded");
     expect(render([], []).container.querySelector('[aria-label="Recorded output"]')!.textContent).toContain("[]");
+  });
+});
+
+
+describe("structured evidence limitations", () => {
+  it("warns for clipped evidence, claims and steps without claiming completeness", () => {
+    for (const props of [
+      { input: { evidence: ["source…[TRUNCATED]"] }, output: { claim: "claim" } },
+      { input: { evidence: ["source"] }, output: { claim: "claim…[TRUNCATED]" } },
+      { input: { evidence: ["source"] }, output: { claim: "claim" }, steps: [{ output: "tool…[TRUNCATED]" }] }
+    ]) {
+      const html = renderToStaticMarkup(createElement(CaseEvidence, props));
+      expect(html).toContain("Truncation marker in recorded evidence");
+      expect(html).not.toContain("complete source text");
+    }
+    const html = renderToStaticMarkup(createElement(CaseEvidence, { input: { evidence: ["source"] }, output: { claim: "claim" } }));
+    expect(html).not.toContain("Truncation marker");
   });
 });

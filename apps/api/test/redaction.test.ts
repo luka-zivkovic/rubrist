@@ -5,6 +5,25 @@ import { processJudgeRunJob } from "../src/workers/judge.js";
 import { CYCLE_VALUE, EXCLUDED_VALUE, MAX_DEPTH_VALUE, REDACTED_VALUE, TRUNCATED_SUFFIX, redactJson } from "../src/lib/redaction.js";
 
 describe("trace redaction", () => {
+  it("preserves long evidence across default reads while still redacting secrets", () => {
+    const policy = "Policy ".repeat(1500) + "DO NOT CHANGE THE DESTINATION";
+    const toolResponse = "Observation ".repeat(1500) + "payment still pending";
+    const value = { input: { policy, token: "secret" }, output: { toolResponse } };
+    const retained = { input: { policy, token: REDACTED_VALUE }, output: { toolResponse } };
+    expect(redactJson(value)).toEqual(retained);
+    expect(redactJson(redactJson(value))).toEqual(retained);
+    expect(redactJson({ old: "x".repeat(4000) + TRUNCATED_SUFFIX })).toEqual({ old: "x".repeat(4000) + TRUNCATED_SUFFIX });
+  });
+
+  it("keeps configured caps without splitting a Unicode surrogate pair", () => {
+    expect(redactJson("abc😀tail", { maxStringChars: 4 })).toBe("abc" + TRUNCATED_SUFFIX);
+    expect(redactJson("abc😀tail", { maxStringChars: 5 })).toBe("abc😀" + TRUNCATED_SUFFIX);
+    expect(redactJson("abc😀", { maxStringChars: 5 })).toBe("abc😀");
+    const once = redactJson("abc😀tail", { maxStringChars: 4 });
+    expect(redactJson(once, { maxStringChars: 4 })).toBe(once);
+    expect(redactJson(once, { maxStringChars: 2 })).toBe("ab" + TRUNCATED_SUFFIX);
+  });
+
   it("redacts sensitive keys, excludes configured paths, and truncates large strings", () => {
     const redacted = redactJson({
       input: {
@@ -103,11 +122,13 @@ describe("trace redaction", () => {
       sourceTraceId: "manual_sensitive_trace",
       input: {
         question: "Can I get a refund?",
+        policy: "policy ".repeat(1500) + "must preserve this condition",
         api_key: "sk-live-secret",
         context: { raw: "do not send" }
       },
       output: {
         answer: "Yes.",
+        evidence: "tool result ".repeat(1500) + "payment pending",
         token: "customer-token"
       },
       metadata: {
@@ -144,11 +165,13 @@ describe("trace redaction", () => {
       id: "manual_sensitive_trace",
       input: {
         question: "Can I get a refund?",
+        policy: "policy ".repeat(1500) + "must preserve this condition",
         api_key: REDACTED_VALUE,
         context: { raw: EXCLUDED_VALUE }
       },
       output: {
         answer: "Yes.",
+        evidence: "tool result ".repeat(1500) + "payment pending",
         token: REDACTED_VALUE
       },
       metadata: {

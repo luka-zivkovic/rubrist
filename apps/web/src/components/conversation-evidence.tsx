@@ -2,6 +2,8 @@ import { useState, type ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { additionalFields, conversationEvidence, evidenceObject, evidenceText, messageRole } from "../lib/trace-evidence.js";
 
+import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
+
 const TEXT = "whitespace-pre-wrap [overflow-wrap:anywhere] text-[13px] leading-6 text-ink-2";
 const JSON_TEXT = "max-h-[420px] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm bg-card-2 p-3 font-mono text-[11.5px] leading-5";
 
@@ -93,6 +95,7 @@ export function ConversationEvidence({ input, output, steps, trajectory }: {
       <CardDescription>{projection ? "Recorded context, followed by this case’s output. Expand source details to inspect the original fields." : "Recorded input and output. No conversation structure is assumed."}</CardDescription>
     </div></CardHeader>
     <CardContent className="min-w-0 space-y-5">
+      <EvidenceTruncationWarning input={input} output={output} steps={steps} />
       {preview ? <aside className="rounded-sm border border-amber-300 bg-amber-50 p-3 text-[12px] leading-5 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
         <p className="font-semibold">Preview-only evidence</p>
         <p>Messages and tool results may be clipped. Missing content is not evidence of failure.</p>

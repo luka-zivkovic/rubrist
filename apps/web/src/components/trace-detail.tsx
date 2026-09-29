@@ -670,7 +670,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
           </Card>
         </div>
         <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
-          {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} /> : (
+          {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} steps={trace.steps} /> : (
             <ConversationEvidence
               key={exception.id}
               input={trace.input}
