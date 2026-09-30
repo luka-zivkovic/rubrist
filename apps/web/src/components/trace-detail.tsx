@@ -28,6 +28,7 @@ import {
   type VerdictRecord
 } from "@rubrist/shared";
 
+import { ReviewEvidenceNavigation } from "./review-evidence-navigation.js";
 import { AssessmentReasoning } from "./assessment-reasoning.js";
 import { sourceMessageIndices } from "../lib/message-evidence.js";
 import { ConversationEvidence } from "./conversation-evidence.js";
@@ -359,15 +360,21 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
   const structuredEvidence = evidenceClaim(trace.input, trace.output);
   const versionName = recordedVersionName(detail);
   const evidencePrefix = useId();
-  const [inspectedMessage, setInspectedMessage] = useState<{ caseId: string; judgeRunId: string; index: number } | null>(null);
+  const [inspectedMessage, setInspectedMessage] = useState<{ caseId: string; judgeRunId: string; index: number; origin: "evaluator" | "navigation" } | null>(null);
   useEffect(() => { setInspectedMessage(null); }, [exception.id, judgeRun.id]);
   const sourceIndices = structuredEvidence ? [] : sourceMessageIndices(trace.input, trace.metadata);
-  function inspectMessage(index: number) {
-    setInspectedMessage({ caseId: exception.id, judgeRunId: judgeRun.id, index });
+  function inspectMessage(index: number, origin: "evaluator" | "navigation" = "evaluator") {
+    setInspectedMessage({ caseId: exception.id, judgeRunId: judgeRun.id, index, origin });
     const target = document.getElementById(`${evidencePrefix}-${index}`);
     // Referenced instructions may be collapsed; tool responses are always visible.
     const instructions = target?.querySelector<HTMLDetailsElement>(":scope > details");
     if (instructions) instructions.open = true;
+    target?.scrollIntoView({ block: "start", behavior: "instant" });
+    target?.focus({ preventScroll: true });
+  }
+
+  function inspectSection(section: "evidence" | "assessment" | "review") {
+    const target = document.getElementById(`${evidencePrefix}-${section}`);
     target?.scrollIntoView({ block: "start", behavior: "instant" });
     target?.focus({ preventScroll: true });
   }
@@ -621,7 +628,9 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         sub={<span className="[overflow-wrap:anywhere]">{`Captured ${new Date(exception.createdAt).toLocaleString()} · trace ${trace.id}`}</span>}
       />
 
-      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[1.25fr_1fr] xl:grid-rows-[auto_1fr]">
+      <ReviewEvidenceNavigation key={`${exception.id}-${judgeRun.id}`} input={trace.input} metadata={trace.metadata}
+        structured={Boolean(structuredEvidence)} onSection={inspectSection} onMessage={index => inspectMessage(index, "navigation")} />
+      <div className="grid grid-cols-1 items-start gap-5 pb-36 xl:grid-cols-[1.25fr_1fr] xl:grid-rows-[auto_1fr] xl:pb-0">
         <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-1">
           {effectiveRuling ? (
             <HumanRulingCard
@@ -631,7 +640,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
             />
           ) : null}
 
-          <Card className={effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}>
+          <Card id={`${evidencePrefix}-assessment`} tabIndex={-1} className={`scroll-mt-48 xl:scroll-mt-24 ${effectiveRuling ? "border-rule" : `border-2 ${REVIEW_RESULT_TONES[exception.verdict].card}`}`}>
             <CardHeader className={effectiveRuling ? undefined : REVIEW_RESULT_TONES[exception.verdict].header}>
               <div>
                 <CardTitle className="text-[16px] font-semibold">{reviewQueueItemId ? "Recorded assessment" : "Latest assessment"}</CardTitle>
@@ -685,7 +694,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
             </CardContent>
           </Card>
         </div>
-        <div className="min-w-0 flex flex-col gap-5 xl:col-start-1 xl:row-start-1 xl:row-span-2">
+        <div id={`${evidencePrefix}-evidence`} tabIndex={-1} className="min-w-0 scroll-mt-48 flex flex-col gap-5 xl:scroll-mt-24 xl:col-start-1 xl:row-start-1 xl:row-span-2">
           {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} steps={trace.steps} /> : (
             <ConversationEvidence
               key={`${exception.id}-${judgeRun.id}`}
@@ -693,6 +702,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
               metadata={trace.metadata}
               targetPrefix={evidencePrefix}
               selectedIndex={inspectedMessage?.caseId === exception.id && inspectedMessage.judgeRunId === judgeRun.id ? inspectedMessage.index : null}
+              selectionOrigin={inspectedMessage?.origin}
               output={trace.output}
               steps={trace.steps}
               trajectory={trace.steps && trace.steps.length > 0 ? (
@@ -719,7 +729,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
         </div>
 
         <div className="min-w-0 flex flex-col gap-5 xl:col-start-2 xl:row-start-2">
-          <Card className="border-rule-strong">
+          <Card id={`${evidencePrefix}-review`} tabIndex={-1} className="scroll-mt-48 border-rule-strong xl:scroll-mt-24">
             <CardHeader>
               <div>
                 <CardTitle className="text-[16px] font-semibold">{reviewTaskPending ? "Record your review" : effectiveRuling ? `Labeled ${effectiveRulingLabel}` : "Record your human label"}</CardTitle>

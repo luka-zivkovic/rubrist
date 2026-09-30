@@ -65,15 +65,15 @@ function ToolResult({ value, imported }: { value: unknown; imported: boolean }) 
     }
   }
   if (!record || Object.keys(record).length === 0) return <Content value={value} />;
-  return <dl className="text-[12px] leading-5">{Object.entries(record).map(([key, item]) => <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 border-b border-rule-soft py-1.5 last:border-0">
+  return <dl className="text-[12px] leading-5">{Object.entries(record).map(([key, item]) => <div key={key} className="grid grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-3 border-b border-rule-soft py-1.5 last:border-0">
     <dt className="font-mono text-ink-3 [overflow-wrap:anywhere]">{key}</dt>
     <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidenceText(item)}</dd>
   </div>)}</dl>;
 }
 
-function Message({ entry, targetPrefix, selectedIndex }: {
+function Message({ entry, targetPrefix, selectedIndex, selectionOrigin }: {
   entry: ReturnType<typeof messageEvidence> & { value: unknown; index: number };
-  targetPrefix: string; selectedIndex?: number | null;
+  targetPrefix: string; selectedIndex?: number | null; selectionOrigin?: "evaluator" | "navigation" | undefined;
 }) {
   const { record, content, calls, name, sourceIndex, index, value } = entry;
   const path = `input.messages[${index}]`;
@@ -90,8 +90,8 @@ function Message({ entry, targetPrefix, selectedIndex }: {
     <Source path={path} value={value} />
   </>;
   return <section id={`${targetPrefix}-${index}`} tabIndex={-1} data-message-index={index}
-    className={`min-w-0 scroll-mt-24 rounded-sm border-l-2 p-3 focus-visible:outline-2 focus-visible:outline-offset-2 ${selected ? "border-amber-600 bg-amber-50 dark:border-amber-400 dark:bg-amber-950/30" : recordedError ? "border-red-300 bg-red-50/60 dark:border-red-800 dark:bg-red-950/20" : tool ? "border-rule-strong bg-card-2" : "border-rule-soft"}`}>
-    {selected ? <p className="mb-2 text-[11px] font-medium text-amber-900 dark:text-amber-200">Referenced by the evaluator · check its interpretation</p> : null}
+    className={`min-w-0 scroll-mt-48 xl:scroll-mt-24 rounded-sm border-l-2 p-3 focus-visible:outline-2 focus-visible:outline-offset-2 ${selected ? "border-amber-600 bg-amber-50 dark:border-amber-400 dark:bg-amber-950/30" : recordedError ? "border-red-300 bg-red-50/60 dark:border-red-800 dark:bg-red-950/20" : tool ? "border-rule-strong bg-card-2" : "border-rule-soft"}`}>
+    {selected ? <p className="mb-2 text-[11px] font-medium text-amber-900 dark:text-amber-200">{selectionOrigin === "navigation" ? "Selected message" : "Referenced by the evaluator · check its interpretation"}</p> : null}
     {role === "System" || role === "Developer" ? <details>
       <summary className="cursor-pointer text-[12px] font-semibold">{heading} · instructions</summary>
       <div className="mt-3 space-y-2">{body}</div>
@@ -140,8 +140,8 @@ function PreviewTurn({ value, index }: { value: unknown; index: number }) {
   </section>;
 }
 
-export function ConversationEvidence({ input, output, steps, trajectory, metadata, targetPrefix = "conversation-message", selectedIndex }: {
-  input: unknown; output: unknown; steps?: unknown; trajectory?: ReactNode; metadata?: unknown; targetPrefix?: string; selectedIndex?: number | null;
+export function ConversationEvidence({ input, output, steps, trajectory, metadata, targetPrefix = "conversation-message", selectedIndex, selectionOrigin }: {
+  input: unknown; output: unknown; steps?: unknown; trajectory?: ReactNode; metadata?: unknown; targetPrefix?: string; selectedIndex?: number | null; selectionOrigin?: "evaluator" | "navigation" | undefined;
 }) {
   const projection = conversationEvidence(input);
   const wholeTrajectory = projection?.kind === "messages" && isRecordedTrajectory(input, metadata);
@@ -164,7 +164,7 @@ export function ConversationEvidence({ input, output, steps, trajectory, metadat
         {Object.hasOwn(projection.record, "availableTools") ? <AvailableTools value={projection.record.availableTools} /> : null}
         <div className="space-y-4">{messageGroups(projection.messages, wholeTrajectory).map(group => <div key={group[0]!.index}
           className={group.length > 1 ? "space-y-1 rounded-sm border border-rule-soft p-1" : ""}>
-          {group.map(entry => <Message key={entry.index} entry={entry} targetPrefix={targetPrefix} selectedIndex={selectedIndex ?? null} />)}
+          {group.map(entry => <Message key={entry.index} entry={entry} targetPrefix={targetPrefix} selectedIndex={selectedIndex ?? null} selectionOrigin={selectionOrigin} />)}
         </div>)}</div>
         <ExtraFields record={projection.record} known={["messages", "availableTools", ...(wholeTrajectory ? ["assessmentScope"] : [])]} path="input" />
       </section> : preview ? <>

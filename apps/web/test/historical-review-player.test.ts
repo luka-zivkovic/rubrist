@@ -167,6 +167,41 @@ describe("historical review player", () => {
     await act(async () => root!.render(createElement(TraceDetail, { detail: { ...next } })));
     expect(refs()).toHaveLength(0);
   });
+  it("navigates mobile sections and every recorded entry without recording a verdict or claiming evaluator support", async () => {
+    const { TraceDetail } = await import("../src/components/trace-detail.js");
+    const view = structuredClone(detail);
+    view.trace.input = { messages: [{ role: "system", content: "Policy" }, null, { role: "assistant", content: "Answer" }] };
+    const container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
+    await act(async () => root!.render(createElement(TraceDetail, { detail: view })));
+    const nav = container.querySelector<HTMLElement>('[aria-label="Case navigation"]')!;
+    const picker = nav.querySelector("select")!;
+    expect([...picker.options].map(o => o.textContent)).toEqual(["Choose a message…", "Entry 1 · System", "Entry 2 · Unrecognized message", "Entry 3 · Assistant"]);
+    for (const index of [0, 1, 0]) {
+      const target = container.querySelector<HTMLElement>(`[data-message-index="${index}"]`)!;
+      target.scrollIntoView = vi.fn();
+      await act(async () => { picker.value = String(index); picker.dispatchEvent(new Event("change", { bubbles: true })); });
+      expect(target.scrollIntoView).toHaveBeenCalled();
+      expect(document.activeElement).toBe(target);
+      expect(target.textContent).toContain("Selected message");
+      expect(target.textContent).not.toContain("Referenced by the evaluator");
+      expect(picker.value).toBe("");
+    }
+    expect(container.querySelector('[data-message-index="0"] details')!.hasAttribute("open")).toBe(true);
+    for (const section of ["evidence", "assessment", "review"]) {
+      const target = [...container.querySelectorAll<HTMLElement>("[id]")].find(e => e.id.endsWith(`-${section}`))!;
+      target.scrollIntoView = vi.fn();
+      await act(async () => [...nav.querySelectorAll("button")].find(b => b.textContent === section)!.click());
+      expect(document.activeElement).toBe(target);
+      expect(target.scrollIntoView).toHaveBeenCalled();
+    }
+    const next = structuredClone(view); next.exception.id = "next"; next.trace.input = { question: "no messages" };
+    await act(async () => root!.render(createElement(TraceDetail, { detail: next })));
+    expect(container.querySelector('[aria-label="Case navigation"] select')).toBeNull();
+    expect(container.textContent).not.toContain("Selected message");
+    expect(api.recordHumanVerdict).not.toHaveBeenCalled();
+    expect(api.promoteExceptionToGoldenSet).not.toHaveBeenCalled();
+  });
+
   it("loads a pinned result, preserves it across refresh, and records the task even when a prior human agrees", async () => {
     const prior = { id: "prior", projectId: "project_1", caseId: "case_1", skillVersionId: "skillv_other", source: "human" as const, actorUserId: null,
       payload: { kind: "binary" as const, pass: false, rationale: "Previous review" }, externalRunId: null, createdAt: "2026-08-26T10:00:00Z" };
