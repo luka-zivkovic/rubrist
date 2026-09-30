@@ -16,6 +16,12 @@ keep their existing rendering and exposure boundaries.
   grouped. Missing or ambiguous pairings remain independent entries. On wide
   screens the conversation scrolls within its panel, keeping the assessment
   and review actions beside it.
+- On narrow screens, a fixed navigation bar jumps to evidence, the recorded
+  assessment, or review controls. Its message picker includes every recorded
+  entry in source order, including malformed entries and collapsed instructions.
+  A manual jump is labeled “Selected message”, never an evaluator reference.
+  Tool field values occupy the full width on phones; the original source values
+  are unchanged. Navigation does not submit a review or alter saved evidence.
 - The existing LangTracer pilot's explicit `userRequestPreview` /
   `precedingTurns` input shape receives a preview view: earlier turns, current
   request, supplied trajectory and the separately recorded output. Preview-only
