@@ -1,15 +1,18 @@
 # Typed-question evaluators
 
 A guide for criterion authors. It says what a typed-question evaluator is,
-when the #101 spike suggests one fits, and what Rubrist records for it.
+when the #101 spike and later experiments suggest one fits, and what Rubrist
+records for it.
 
-- **CURRENT:** everything except the "When to use one" section describes the
+- **CURRENT:** everything except the "When to use one" section and the
+  advice marked ASSUMPTION under "Choosing the threshold" describes the
   implementation (Batch 8E), as decided in
   [ADR-0014](decisions/0014-model-agnostic-evaluator-execution.md) section 5
   and its founder decisions 8–11.
-- **ASSUMPTION:** "When to use one" reports the #101 spike. Its numbers are in
-  ADR-0014 under "ASSUMPTION: the #101 spike"; they come from public data, not
-  governed truth.
+- **ASSUMPTION:** "When to use one" reports the #101 spike and later
+  experiments. The spike's numbers are in ADR-0014 under "ASSUMPTION: the
+  #101 spike"; the later ones are in the experiments repositories named
+  there. All come from public data, not governed truth.
 
 ## What it is
 
@@ -59,6 +62,53 @@ What the #101 spike showed, and didn't:
   reasoning, or model capability explains the gap.
 - **Prompt injection wasn't tested.**
 
+What later experiments showed, from 2026-09-30 to 2026-10-02. They used public
+benchmark labels, and the AgentRewardBench runs sent Rubrist's exact
+typed-question/v1 requests. Sources: `luka-zivkovic/experiments`, branches
+`claude/jev-agent-judge` (`jev-in-rubrist/`) and `claude/jev-rubrist-roles`,
+and `luka-zivkovic/lodestone`.
+
+- **Whole-run success depends on whether the outcome shows in the trace.**
+  - On AgentRewardBench web-agent runs with expert labels, Jev read success at
+    AUC 0.885 [0.849, 0.920] on 531 held-out runs, and "no looping" at 0.917.
+    A second lab measured 0.917 for success on 1,290 of the same runs with
+    another wording, above GPT-4o's binary verdict (0.855).
+  - On tau2-bench telecom, AUC 0.94.
+  - On tau-bench retail, AUC 0.71 against Opus 5.5's 0.86 on the same 109
+    runs; on airline, 0.43 to 0.51. There the error usually isn't in the
+    transcript: in 7 of 9 real wrong-replacement failures, the customer never
+    named the right item.
+- **The criterion's definition is the biggest lever.**
+  - "No side effects" as first worded was at chance (AUC 0.54). Defining a
+    side effect as an unrequested change to stored data raised it to 0.79.
+    That is one rewrite by one author.
+  - A reworded success question added 0.18 AUC on tau-bench retail.
+- **Where refusing is often right, a fulfilment question inverts.** On
+  airline, about half the right outcomes were "change nothing". Write one
+  criterion for runs where an action was owed, and another that nothing
+  forbidden was done.
+- **The threshold is often far from 0.5.** On AgentRewardBench, good
+  thresholds for success and looping were about 0.07 to 0.25. In a
+  simulation of Rubrist's review loop, thresholds chosen from suggested review
+  batches ran lower than ones chosen from random review (median 0.105 against
+  0.185). On a criterion failing on about 6% of runs, choosing from those
+  batches lowered balanced accuracy in all 30 simulated seeds.
+- **Re-asking isn't exact.** Identical requests flipped about 1–4% of verdicts
+  at a 0.5 threshold.
+- **What didn't help:**
+  - graded examples in the question text, which did no better than the same
+    examples with their labels swapped;
+  - one question per quoted user request (AUC −0.17 on tau-bench retail);
+  - repeated calls, several views of one trace, and score readouts;
+  - combining many questions, which needed 200–400 labels from the same domain
+    and didn't transfer to another.
+- **The user's goal in the trace's input** raised AUC by 0.08–0.12 on
+  tau-bench and telecom. There the goal was the benchmark's script for its
+  simulated user, so the gain with goals that real systems record is
+  unmeasured.
+- **Not yet tested:** narrow criteria over long agent runs, against labels for
+  those criteria.
+
 So a typed-question evaluator for a criterion over whole agent runs needs its
 own calibration evidence before anyone relies on it. Rubrist has no automatic
 trace-length gate; one waits until an effect is measured.
@@ -83,6 +133,10 @@ trace-length gate; one waits until an effect is measured.
   read each verdict's `evaluatorScore` (its `native_probability`) from the
   verdict export (`/api/projects/verdicts/export?format=jsonl`), and save the
   threshold you choose as a new version.
+- **ASSUMPTION:** choose it from a random sample of development cases, and
+  don't start from 0.5. A suggested review batch is triage, not a sample; see
+  "When to use one" for how far thresholds landed and how batch-chosen ones
+  skewed.
 - The threshold is part of the evaluator's identity, not release policy. A
   different threshold is a different evaluator, with its own calibration.
 
