@@ -50,6 +50,9 @@ describe('SQLite ungoverned review queues',()=>{
     await expect(f.r.recordVerdict({...input,reviewContext:{...input.reviewContext,submissionId:randomUUID()}})).rejects.toThrow(/closed/);
     expect(await f.r.getNextPendingQueueItem(f.projectId,q.id)).toBeNull();
     expect((await f.r.reopenReviewQueue(f.projectId,q.id))?.status).toBe('open');
+    expect(await f.r.recordVerdict(input)).toEqual(rulings[0]);
+    await expect(peer.repository.recordVerdict({...input,reviewContext:{...input.reviewContext,submissionId:randomUUID()}})).rejects.toThrow(/already completed/);
+    expect(f.db.prepare('SELECT count(*) n FROM verdicts WHERE review_queue_item_id=?').get(item.id)?.n).toBe(1);
     expect(await f.r.getReviewQueueDetail('other',q.id)).toBeNull();
     expect(()=>f.db.prepare("UPDATE judge_runs SET reasoning='changed' WHERE id=?").run(f.judge.id)).toThrow(/immutable/);
     expect(()=>f.db.prepare('DELETE FROM review_queue_items WHERE id=?').run(item.id)).toThrow(/erasure/);

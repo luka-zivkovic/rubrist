@@ -103,6 +103,7 @@ export function recordSqliteQueueReview(db:DatabaseSync,input:RecordVerdictInput
     return verdict(existing);
   }
   if(task.queue_status!=='open')throw new DatasetRevisionConflictError('This review queue is closed');
+  if(task.status!=='pending')throw new DatasetRevisionConflictError('This review task is already completed');
   const value=VerdictRecordSchema.parse({...input,id:`verdict_${randomUUID()}`,skillVersionId:task.reviewed_version,actorUserId:input.actorUserId??null,externalRunId:null,createdAt:new Date(now).toISOString()});
   const row=one('INSERT INTO verdicts(id,project_id,case_id,skill_version_id,source,actor_user_id,verdict_kind,payload,created_at,review_queue_item_id,reviewed_judge_run_id,review_submission_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *',value.id,value.projectId,value.caseId,value.skillVersionId,'human',value.actorUserId,value.payload.kind,json(value.payload),value.createdAt,context.queueItemId,context.judgeRunId,context.submissionId)!;
   run("UPDATE review_queue_items SET status='completed',completed_at=coalesce(completed_at,?) WHERE id=?",value.createdAt,task.id);
