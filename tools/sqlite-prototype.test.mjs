@@ -106,6 +106,56 @@ test('transaction context: same-command handoff and unmanaged writes fail, commi
   assert.throws(() => store.transaction(() => store.transaction(() => {})), /nested/);
 });
 
+test('managed SQL cannot commit or roll back outside its owner, including prepared statements', t => {
+  const { store } = fixture(t);
+  for (const sql of ['COMMIT', 'END TRANSACTION', 'ROLLBACK', 'BEGIN']) {
+    const prepared = store.db.prepare(sql);
+    for (const escape of [db => db.exec(sql), () => prepared.run()]) {
+      assert.throws(() => store.transaction(db => {
+        db.exec("INSERT INTO attempts(id) VALUES('must-roll-back')");
+        escape(db);
+        db.exec("INSERT INTO attempts(id) VALUES('escaped-autocommit')");
+        throw new Error('later failure');
+      }), /not authorized/);
+      assert.equal(store.db.isTransaction, false);
+      assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 1);
+      assert.throws(() => store.db.prepare('SELECT command_token()').get(), /managed transaction/);
+    }
+  }
+  store.transaction(db => {
+    assert.equal(db.setAuthorizer, undefined);
+    assert.equal(db.close, undefined);
+    db.exec("SAVEPOINT inner_write; INSERT INTO attempts(id) VALUES('discard'); ROLLBACK TO inner_write; RELEASE inner_write");
+    db.exec("INSERT INTO attempts(id) VALUES('kept')");
+  });
+  assert.deepEqual(store.db.prepare('SELECT id FROM attempts ORDER BY id').all().map(r => r.id), ['job', 'kept']);
+});
+
+test('implicit rollback and stale command statements cannot escape managed ownership', t => {
+  const { store } = fixture(t);
+  for (const method of ['exec', 'run', 'get', 'all']) {
+    assert.throws(() => store.transaction(db => {
+      const sql = "INSERT INTO attempts(id) VALUES('escaped') RETURNING id";
+      const write = db.prepare(sql);
+      assert.throws(() => db.exec("INSERT OR ROLLBACK INTO attempts(id) VALUES('job')"), /UNIQUE/);
+      if (method === 'exec') db.exec(sql);
+      else write[method]();
+    }), /ownership lost/);
+    assert.equal(store.db.isTransaction, false);
+    assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 1);
+  }
+  let oldCommand, oldStatement;
+  store.transaction(db => {
+    oldCommand = db;
+    oldStatement = db.prepare("INSERT INTO attempts(id) VALUES('stale')");
+  });
+  for (const use of [() => oldCommand.exec("INSERT INTO attempts(id) VALUES('stale')"), () => oldStatement.run()]) {
+    assert.throws(use, /ownership lost/);
+    assert.throws(() => store.transaction(use), /ownership lost/);
+  }
+  assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 1);
+});
+
 test('unregistered direct SQL connection fails closed on byte and transaction functions', t => {
   const { path } = fixture(t);
   const raw = new DatabaseSync(path);

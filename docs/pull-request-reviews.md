@@ -2,8 +2,10 @@
 
 CURRENT workflow, authorized 2026-10-05. Each completed SQLite milestone is
 pushed and opened as one PR after local validation and independent audit.
-Follow-up corrections update that PR. Merging and deployment are separate
-actions that need their own authorization.
+Follow-up corrections update that PR. The user subsequently authorized
+merging SQLite milestone PRs after passing CI and resolved independent/Copilot
+reviews, in stack order, then continuing to the next authorized milestone.
+Deployment remains a separate action requiring its own authorization.
 
 ## Stacked milestones
 
