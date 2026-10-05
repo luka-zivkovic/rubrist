@@ -1,0 +1,67 @@
+import { randomUUID } from 'node:crypto';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { DatasetSchema, DatasetItemSchema } from '@rubrist/shared';
+import type { AddDatasetItemsInputDb, CreateDatasetInputDb } from '../../repository/contracts.js';
+import { DatasetNameTakenError, DatasetNotFoundError, CaseNotFoundError } from '../../repository/errors.js';
+
+type Row=Record<string,any>;
+function dataset(row:Row,count:number) {
+  return DatasetSchema.parse({id:row.id,projectId:row.project_id,name:row.name,description:row.description,kind:row.kind,
+    itemCount:count,createdAt:row.created_at,archivedAt:row.archived_at});
+}
+function item(row:Row) {
+  return DatasetItemSchema.parse({id:row.id,datasetId:row.dataset_id,caseId:row.case_id,traceId:row.trace_id,
+    expectedLabel:row.expected_label,expectedFailStep:row.expected_fail_step,note:row.note,addedAt:row.added_at});
+}
+export function sqliteDatasetCommands(db:DatabaseSync) {
+  const one=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).get(...args) as Row|undefined;
+  const all=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).all(...args) as Row[];
+  function transaction<T>(work:(now:string)=>T):T {
+    if(db.isTransaction) throw new Error('Nested SQLite dataset command');
+    db.exec('BEGIN IMMEDIATE');
+    try {const value=work(new Date().toISOString());db.exec('COMMIT');return value;}
+    catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
+  }
+  function items(projectId:string,datasetId:string){return all('SELECT * FROM dataset_items WHERE project_id=? AND dataset_id=? ORDER BY added_at,id',projectId,datasetId).map(item);}
+  return {
+    createDataset(input:CreateDatasetInputDb) {
+      return transaction(now=>{
+        const name=input.name.trim();
+        if(one('SELECT 1 FROM datasets WHERE project_id=? AND name=? AND archived_at IS NULL',input.projectId,name)) throw new DatasetNameTakenError(name);
+        const row=one('INSERT INTO datasets VALUES(?,?,?,?,?,?,?,NULL) RETURNING *',`ds_${randomUUID()}`,input.projectId,name,input.description??null,input.kind??'custom',input.createdByUserId??null,now)!;
+        return dataset(row,0);
+      });
+    },
+    listDatasets(projectId:string) {
+      return all(`SELECT d.*,count(di.id) item_count FROM datasets d LEFT JOIN dataset_items di ON di.dataset_id=d.id AND di.project_id=d.project_id
+        WHERE d.project_id=? AND d.archived_at IS NULL GROUP BY d.id ORDER BY d.created_at DESC,d.id`,projectId).map(row=>dataset(row,Number(row.item_count)));
+    },
+    getDatasetDetail(projectId:string,datasetId:string) {
+      const row=one('SELECT * FROM datasets WHERE project_id=? AND id=?',projectId,datasetId);
+      if(!row)return null;
+      const members=items(projectId,datasetId);return {...dataset(row,members.length),items:members};
+    },
+    archiveDataset(projectId:string,datasetId:string) {
+      return transaction(now=>db.prepare('UPDATE datasets SET archived_at=? WHERE project_id=? AND id=? AND archived_at IS NULL').run(now,projectId,datasetId).changes>0);
+    },
+    addDatasetItems(input:AddDatasetItemsInputDb) {
+      return transaction(now=>{
+        if(!one('SELECT 1 FROM datasets WHERE project_id=? AND id=? AND archived_at IS NULL',input.projectId,input.datasetId)) throw new DatasetNotFoundError(input.datasetId);
+        for(const member of input.items) {
+          const source=one('SELECT rt.source_trace_id FROM cases c JOIN raw_traces rt ON rt.id=c.raw_trace_id AND rt.project_id=c.project_id WHERE c.project_id=? AND c.id=?',input.projectId,member.caseId);
+          if(!source)throw new CaseNotFoundError(member.caseId);
+          db.prepare(`INSERT INTO dataset_items VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(dataset_id,case_id) DO UPDATE SET
+            expected_label=coalesce(excluded.expected_label,dataset_items.expected_label),
+            expected_fail_step=CASE WHEN excluded.expected_label='pass' THEN NULL WHEN excluded.expected_fail_step IS NOT NULL
+              THEN excluded.expected_fail_step ELSE dataset_items.expected_fail_step END,
+            note=coalesce(excluded.note,dataset_items.note)`).run(`dsi_${randomUUID()}`,input.datasetId,input.projectId,member.caseId,String(source.source_trace_id),
+              member.expectedLabel??null,member.note??null,now,member.expectedFailStep??null);
+        }
+        return items(input.projectId,input.datasetId);
+      });
+    },
+    removeDatasetItem(projectId:string,datasetId:string,itemId:string) {
+      return db.prepare('DELETE FROM dataset_items WHERE project_id=? AND dataset_id=? AND id=?').run(projectId,datasetId,itemId).changes>0;
+    }
+  };
+}

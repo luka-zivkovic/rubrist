@@ -47,6 +47,7 @@ describe('SQLite native evaluator definitions',()=>{
     await r.createCriterion(f.projectId,f.input,f.actor);
     await expect(r.createCriterion(f.projectId,f.input,f.actor)).rejects.toBeInstanceOf(CriterionStableKeyConflictError);
     expect(await r.listCriteria(f.projectId)).toHaveLength(1);
+    await expect(r.listSkillVersions(f.projectId,'any',-1)).rejects.toThrow(/limit/);
     await r.createCriterion(f.projectId,{...f.input,stableKey:'second'},f.actor);
     await expect(r.getCurrentSkill(f.projectId)).rejects.toBeInstanceOf(AmbiguousProjectSkillError);
   });

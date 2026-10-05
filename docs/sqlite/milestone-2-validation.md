@@ -35,9 +35,21 @@ erasure preserves author subjects and project erasure clears the definition and
 authorization rows with clean foreign keys. This is not an audit of the remaining
 Milestone 2 workflow, and is not approval to merge a partial milestone.
 
+## Native import and collection checkpoint
+
+- Full local Vitest suite after the slice: 2,084 passed, 175 skipped.
+- Focused SQLite suites: 44 passed. Typecheck and production build passed.
+- Repository boundary and shared-contract guards passed; `git diff --check`
+  passed. The large-file report adds no new oversized files and still reports
+  five pre-existing files needing classification.
+- Independent `m2_design_audit` reviewed trace ingestion and the six collection
+  methods. Its negative query-limit finding was fixed in trace and evaluator
+  reads with regression tests. Final interim review has no remaining findings.
+- No real provider calls, deployment, or PostgreSQL data changes occurred.
+
 ## Outstanding milestone validation
 
-Imports, datasets, evaluation runs/items, provider dispatch ownership, exact-byte
+Complete import/dataset workflow integration, evaluation runs/items, provider dispatch ownership, exact-byte
 receipt mint/retrieval, authenticated end-to-end restart/failure injection,
 PostgreSQL regression checks, full milestone independent audit, CI, and Copilot
 review remain outstanding. No Milestone 2 PR has been opened yet.

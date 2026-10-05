@@ -74,3 +74,12 @@ Independent interim audits found and resolved full-slot lease recovery, zero-del
 backoff, polling-generation restart races, mutable criterion author links, and
 unverified regression pins. Regression fixtures cover each finding. These audits
 are not a completed Milestone 2 audit; no milestone PR is ready yet.
+
+Native trace import and mutable dataset collections are now implemented. Imports
+preserve first-origin purpose, source-version/remote-project identity, shared
+redaction, pre-redaction input identity, and transactional traffic counts. Input
+identity rows survive raw traffic retention. Collection adds preserve existing
+labels/notes, clear a failure step on an explicit pass, and roll back the complete
+batch on invalid membership. Integration imports, immutable revisions, and bulk
+example import remain unavailable. Negative, fractional, and unsafe query limits
+are rejected instead of invoking SQLite's unlimited negative-LIMIT behavior.

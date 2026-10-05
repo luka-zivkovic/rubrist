@@ -45,6 +45,19 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    createDataset: (...args) => storage.command('createDataset',...args),
+    listDatasets: (...args) => storage.command('listDatasets',...args),
+    getDatasetDetail: (...args) => storage.command('getDatasetDetail',...args),
+    archiveDataset: (...args) => storage.command('archiveDataset',...args),
+    addDatasetItems: (...args) => storage.command('addDatasetItems',...args),
+    removeDatasetItem: (...args) => storage.command('removeDatasetItem',...args),
+
+    importTrace: (...args) => storage.command('importTrace',...args),
+    getCaseSourceIdentity: (...args) => storage.command('getCaseSourceIdentity',...args),
+    caseExistsForProject: (...args) => storage.command('caseExistsForProject',...args),
+    listCaseIdsForProject: (...args) => storage.command('listCaseIdsForProject',...args),
+    listCases: (...args) => storage.command('listCases',...args),
+
     listCriteria: (...args) => storage.command('listCriteria',...args),
     getCriterion: (...args) => storage.command('getCriterion',...args),
     createCriterion: (...args) => storage.command('createCriterion',...args),

@@ -1,3 +1,4 @@
+import { sqliteLimit } from './query-values.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import {
@@ -144,7 +145,7 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
     getCurrentSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId),
     getLatestSkill: (projectId: string) => skill(projectId,undefined,true),
     getLatestSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId,true),
-    listSkillVersions: (projectId: string, skillId: string, limit=50) => all('SELECT * FROM skill_versions WHERE project_id=? AND skill_id=? ORDER BY created_at DESC,id DESC LIMIT ?',projectId,skillId,limit).map(version),
+    listSkillVersions: (projectId: string, skillId: string, limit=50) => all('SELECT * FROM skill_versions WHERE project_id=? AND skill_id=? ORDER BY created_at DESC,id DESC LIMIT ?',projectId,skillId,sqliteLimit(limit)).map(version),
     authorizeSkillVersionExecution(input: Args<'authorizeSkillVersionExecution'>[0]): void {
       transaction(now=>{
         const digest=evaluatorExecutionAuthorizationDigest({...input,lifecycleEventId:null,calibrationArtifactId:null});
