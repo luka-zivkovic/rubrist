@@ -39,6 +39,14 @@ async function waitTerminal(app:ReturnType<typeof createApp>,headers:Record<stri
   return result;
 }
 describe('SQLite authenticated durable batch workflow',()=>{
+  it('keeps regression-backed version history behind the authenticated M2 staging boundary',async()=> {
+    const f=await fixture(),headers={cookie:f.cookie};
+    const current=await (await f.app.request('/api/skills/current',{headers})).json() as any;
+    const read=vi.spyOn(f.runtime.repository,'listSkillVersions');
+    const response=await f.app.request(`/api/skills/${current.id}/versions`,{headers});
+    expect(response.status).toBe(503);expect(await response.json()).toMatchObject({code:'sqlite_feature_unavailable'});
+    expect(read).not.toHaveBeenCalled();read.mockRestore();
+  });
   it('signs up, authors a native evaluator, survives restart before delivery and serves exact receipt bytes',async()=> {
     const f=await fixture();
     expect((await f.app.request('/api/eval-runs?purpose=backfill',{headers:{cookie:f.cookie}})).status).toBe(503);

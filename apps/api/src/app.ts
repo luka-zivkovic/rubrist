@@ -634,8 +634,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
       /^\/api\/v1\/criteria(?:\/[^/]+(?:\/(?:versions|current-skill))?)?$/.test(path) ||
       /^\/api\/datasets(?:\/[^/]+(?:\/(?:archive|items(?:\/[^/]+)?))?)?$/.test(path) ||
       /^\/api\/eval-runs(?:\/[^/]+)?$/.test(path) ||
-      path === '/api/skills/current' ||
-      (c.req.method === 'GET' && /^\/api\/skills\/[^/]+\/versions$/.test(path))) return next();
+      path === '/api/skills/current') return next();
     if (path === '/api/projects' || path === '/api/project/settings' || path === '/api/project' ||
       path === '/api/api-keys' || path.startsWith('/api/api-keys/') ||
       path === '/api/judge-keys' || path.startsWith('/api/judge-keys/') ||
