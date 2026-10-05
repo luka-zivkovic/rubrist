@@ -60,20 +60,22 @@ unfinished callback is acknowledged merely because shutdown reached its deadline
 - Full authenticated synthetic workflow, tenant isolation, lifecycle rejection,
   and PostgreSQL regression coverage.
 
-## CURRENT interim checkpoint
+## CURRENT implemented boundary
 
-The queue foundation and native definition storage are implemented but not yet
-connected to an HTTP evaluation workflow. The account-stage route boundary stays
-in place. Native criterion/evaluator creation preserves shared schemas, immutable
-bindings, author subjects, and execution-authorization digests. Direct incomplete
-analysis-derived bundles and unverifiable regression revision pins fail closed;
-the corresponding full domain ports remain outstanding. RPC preserves repository
-error classes so route error handling continues to recognize domain failures.
+The SQLite runtime starts the durable queue and shared evaluation workers.
+Native criterion/evaluator creation preserves shared schemas, immutable bindings,
+author subjects and execution-authorization digests. Direct incomplete
+analysis-derived bundles and unverifiable regression revision pins fail closed.
+RPC preserves repository error classes and revives BLOBs as Buffers.
+
+The staged HTTP allowlist exposes native criterion authoring, collection
+management, ordinary collection evaluations, API batch evaluation and receipt
+retrieval/comparison. Unported routes still fail closed. Complete agent bootstrap,
+integrations, immutable revisions and governed lifecycles remain later work.
 
 Independent interim audits found and resolved full-slot lease recovery, zero-delay
 backoff, polling-generation restart races, mutable criterion author links, and
-unverified regression pins. Regression fixtures cover each finding. These audits
-are not a completed Milestone 2 audit; no milestone PR is ready yet.
+unverified regression pins. Regression fixtures cover each finding. The final execution and HTTP audit is recorded in the validation document.
 
 Native trace import and mutable dataset collections are now implemented. Imports
 preserve first-origin purpose, source-version/remote-project identity, shared
@@ -115,9 +117,23 @@ Schema and direct-write tests must enforce tenant ownership, lineage, immutable
 artifacts, and project-erasure boundaries. SQLite worker transport must revive
 artifact BLOBs as Buffer values for existing HTTP consumers.
 
-CURRENT preparation for the next consistency group: the
-[evaluation schema draft](milestone-2-evaluation-schema-draft.sql) records initial
-run/item, verdict, and BLOB artifact tables. It is deliberately outside the
-migration directory: execution commands, function registration, failure-injection
-fixtures, and independent review are not implemented for that draft. Its proposed
-constraints are implementation assumptions, not a claim of completed parity.
+CURRENT: migration `0006_evaluation.sql` applies the run/item, verdict and
+receipt consistency group. Its deferred reciprocal key prevents a terminal
+release-evidence run committing without its root artifact. Receipt comparisons
+and corrections retain exact canonical BLOBs; correction reasons and immediate
+predecessors are mandatory. Completed item verdicts must match the run's exact
+evaluator version and case. Terminal evidence cannot be rewritten.
+
+Mutable dataset-item removal clears only its optional item link; item snapshots
+remain. Raw-case retention follows existing PostgreSQL cascades while retained
+receipt artifacts survive. Project erasure removes the whole evidence graph.
+SQLite integrity checks work without application functions; artifact-writing
+triggers require registered validators. Lease time uses integer epoch
+milliseconds captured after acquiring the write lock; API timestamps use UTC
+ISO strings with millisecond precision.
+
+Pending items receive recovery deadlines in their creation transaction, so a
+process death before queue send is recoverable. Model calls run outside storage
+transactions. The runtime stops the recovery timer before closing the queue and
+storage. The startup recovery sweep and periodic sweep use the same fenced
+repository commands as ordinary workers.

@@ -1,6 +1,6 @@
 # Milestone 2 validation record
 
-Status: **CURRENT — interim foundation only, not milestone completion**.
+Status: **CURRENT — implemented and independently audited; PR CI/Copilot review pending**.
 Date: 2026-10-05. Branch: `sqlite-milestone-2`, based on merged Milestone 1.
 
 ## Authority
@@ -47,9 +47,58 @@ Milestone 2 workflow, and is not approval to merge a partial milestone.
   reads with regression tests. Final interim review has no remaining findings.
 - No real provider calls, deployment, or PostgreSQL data changes occurred.
 
-## Outstanding milestone validation
+## Durable evaluation completion
 
-Complete import/dataset workflow integration, evaluation runs/items, provider dispatch ownership, exact-byte
-receipt mint/retrieval, authenticated end-to-end restart/failure injection,
-PostgreSQL regression checks, full milestone independent audit, CI, and Copilot
-review remain outstanding. No Milestone 2 PR has been opened yet.
+The applied `0006_evaluation.sql` and worker-owned commands now persist native
+runs/items, evaluator verdicts, immutable receipts, comparisons and corrections.
+The shared evaluation worker runs through the SQLite queue. The staged HTTP
+surface includes native authoring, collections, batches and receipt reads.
+
+Validation on Node 24.15.0 / SQLite 3.51.3:
+
+- Full application suite with two workers: **2,092 passed, 175 skipped**.
+- Separate disposable UTF8/UTC PostgreSQL 17 regression run: **187 passed**.
+  The cluster was stopped and removed afterward.
+- Tooling tests: **53 passed**. Typecheck, production build, repository boundary
+  guard, shared contract guard and whitespace checks passed.
+- Six focused SQLite suites: **52 passed**, covering storage, queue,
+  definitions, traces, evaluation and HTTP workflows. This final run includes
+  malformed-artifact and unsupported-feature RPC/HTTP checks.
+- No PostgreSQL migration, evidence wire contract, real provider call or
+  deployed installation changed.
+
+The first full test attempt used default concurrency and hit an existing
+30-second structural-guard test timeout. It passed in the complete two-worker
+rerun. An overlapping build caused one SQLite worker in the first PG run to
+observe a partially rewritten shared module; the complete PG rerun after build
+finished passed. These were validation orchestration problems, not ignored
+failures or product fixes.
+
+Independent reviewer `m2_execution_audit` audited the schema and command group,
+then the final queue/HTTP/runtime integration, and independently ran **19 tests**.
+Resolved findings:
+
+1. Preserve mutable collection removal and ordinary raw-case retention while
+   retaining receipts; verify project erasure clears the full graph.
+2. Require a completion/cached verdict to belong to the exact evaluator version
+   and case, with matching result/step projection.
+3. Validate digest formats and explicitly reject NULL correction reasons.
+4. Preserve the receipt integrity error class for malformed consumer/correction
+   input, including canonicalization errors, across worker RPC.
+5. Make item identity immutable so direct SQL cannot bypass collection tenant
+   ownership while retaining an old dataset-item link.
+
+Final independent audit approved the milestone for a PR after local checks,
+with no remaining actionable findings. The exercised boundaries include live,
+expired and replaced tokens; failure during receipt insertion rolling back the
+item and counters; exact BLOB transport and restart; authenticated HTTP setup,
+authoring, batch submission and cached replay; recovery after a committed run
+but before queue send; and **SIGKILL during provider dispatch**, followed by one
+uncertainty receipt without a second provider call.
+
+Direct SQL fixtures reject terminal release commits without their reciprocal
+receipt, modified terminal artifacts, forged canonical bytes/digests, NULL or
+blank correction reasons, and skipped predecessors. Plain-connection integrity
+and foreign-key checks succeed without application functions.
+
+CI and a completed Copilot review remain required before merging the milestone.

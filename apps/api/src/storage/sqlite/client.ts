@@ -1,3 +1,4 @@
+import { SqliteFeatureUnavailableError } from './feature-error.js';
 import * as repositoryErrors from '../../repository/errors.js';
 import { Worker } from 'node:worker_threads';
 import type { RubristAuth } from '../../lib/auth.js';
@@ -24,11 +25,12 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          if(message.error.name==='SqliteFeatureUnavailableError') Object.setPrototypeOf(error,SqliteFeatureUnavailableError.prototype);
           const domainError = Object.hasOwn(repositoryErrors,message.error.name)
             ? repositoryErrors[message.error.name as keyof typeof repositoryErrors] : undefined;
           if (typeof domainError === 'function' && domainError.prototype instanceof Error) Object.setPrototypeOf(error,domainError.prototype);
           caller.reject(error);
-        } else caller.resolve(message.result);
+        } else caller.resolve(reviveBytes(message.result));
       });
       const failed = (error: Error) => {
         this.failure=error; reject(error);
@@ -78,4 +80,13 @@ export class SqliteStorage {
     try { await this.request({kind:'close'}); }
     finally { this.closed=true; await this.worker.terminate(); }
   }
+}
+
+// Worker structured cloning preserves bytes as Uint8Array, not Buffer. Existing
+// repository consumers use Buffer.equals/toString for canonical evidence.
+function reviveBytes(value:any):any {
+  if(value instanceof Uint8Array) return Buffer.from(value);
+  if(Array.isArray(value)) return value.map(reviveBytes);
+  if(value && Object.getPrototypeOf(value)===Object.prototype) return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,reviveBytes(item)]));
+  return value;
 }

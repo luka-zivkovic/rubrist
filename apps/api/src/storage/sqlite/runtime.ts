@@ -3,9 +3,8 @@ import type { AccountServices } from '../../accounts/ports.js';
 import type { RubristRepository } from '../../repository.js';
 import { SqliteStorage } from './client.js';
 
-export class SqliteFeatureUnavailableError extends Error {
-  constructor() { super('This workflow is not yet available in the SQLite account-stage runtime.'); }
-}
+import { SqliteFeatureUnavailableError } from './feature-error.js';
+export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string) {
   const storage = new SqliteStorage(path);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
@@ -45,6 +44,40 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    createEvalRun: (...args) => storage.command('createEvalRun',...args),
+    getEvalRun: (...args) => storage.command('getEvalRun',...args),
+    getEvalRunItem: (...args) => storage.command('getEvalRunItem',...args),
+    getEvalRunDetail: (...args) => storage.command('getEvalRunDetail',...args),
+    listEvalRuns: (...args) => storage.command('listEvalRuns',...args),
+    completeEvalRunItem: (...args) => storage.command('completeEvalRunItem',...args),
+    failEvalRunItem: (...args) => storage.command('failEvalRunItem',...args),
+    deleteUndispatchedEvalRun: (...args) => storage.command('deleteUndispatchedEvalRun',...args),
+    claimEvalRunDispatch: (...args) => storage.command('claimEvalRunDispatch',...args),
+    rotateEvalRunDispatchJob: (...args) => storage.command('rotateEvalRunDispatchJob',...args),
+    markEvalRunDispatched: (...args) => storage.command('markEvalRunDispatched',...args),
+    releaseEvalRunDispatch: (...args) => storage.command('releaseEvalRunDispatch',...args),
+    armEvalRunItemDeliveryDeadline: (...args) => storage.command('armEvalRunItemDeliveryDeadline',...args),
+    markEvalRunRunning: (...args) => storage.command('markEvalRunRunning',...args),
+    listPendingEvalRunItems: (...args) => storage.command('listPendingEvalRunItems',...args),
+    listPendingEvalRunItemDispatches: (...args) => storage.command('listPendingEvalRunItemDispatches',...args),
+    claimEvalRunItemExecution: (...args) => storage.command('claimEvalRunItemExecution',...args),
+    rearmEvalRunItemDeliveryDeadline: (...args) => storage.command('rearmEvalRunItemDeliveryDeadline',...args),
+    claimEvalRunItemRecovery: (...args) => storage.command('claimEvalRunItemRecovery',...args),
+    beginEvalRunItemProviderCall: (...args) => storage.command('beginEvalRunItemProviderCall',...args),
+    markEvalRunItemProviderCallReturned: (...args) => storage.command('markEvalRunItemProviderCallReturned',...args),
+    releaseEvalRunItemExecution: (...args) => storage.command('releaseEvalRunItemExecution',...args),
+    listStaleEvalRunItemExecutions: (...args) => storage.command('listStaleEvalRunItemExecutions',...args),
+    getOrFreezeAssessmentReceipt: (...args) => storage.command('getOrFreezeAssessmentReceipt',...args),
+    getAssessmentReceiptArtifactByReceiptId: (...args) => storage.command('getAssessmentReceiptArtifactByReceiptId',...args),
+    listAssessmentReceiptArtifacts: (...args) => storage.command('listAssessmentReceiptArtifacts',...args),
+    compareAssessmentReceiptCopy: (...args) => storage.command('compareAssessmentReceiptCopy',...args),
+    createAssessmentReceiptCorrection: (...args) => storage.command('createAssessmentReceiptCorrection',...args),
+    loadJudgeRunContext: (...args) => storage.command('loadJudgeRunContext',...args),
+    recordJudgeRun: (...args) => storage.command('recordJudgeRun',...args),
+    recordVerdict: (...args) => storage.command('recordVerdict',...args),
+    listVerdicts: (...args) => storage.command('listVerdicts',...args),
+    createFeedbackSyncJob: (...args) => storage.command('createFeedbackSyncJob',...args),
+
     createDataset: (...args) => storage.command('createDataset',...args),
     listDatasets: (...args) => storage.command('listDatasets',...args),
     getDatasetDetail: (...args) => storage.command('getDatasetDetail',...args),
@@ -84,7 +117,7 @@ export async function createSqliteRuntime(path: string) {
     getJudgeProviderCredential: (...args) => storage.command('getJudgeProviderCredential',...args),
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Partial<RubristRepository>;
-  // The temporary account-stage adapter fails every unported method. Never
+  // The temporary staged adapter fails every unported method. Never
   // extend DemoRepository or return fabricated project/evaluator evidence.
   const repository = new Proxy(methods,{
     get(target,key,receiver) {

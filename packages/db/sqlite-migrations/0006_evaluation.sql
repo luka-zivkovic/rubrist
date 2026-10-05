@@ -1,9 +1,3 @@
--- DRAFT: next Milestone 2 consistency group, not an applied migration.
--- ASSUMPTION: this initial shape is sufficient for the native evaluation slice.
--- Runtime commands, SQLite functions, execution fencing, fixture coverage,
--- retention compatibility, and independent audit remain required before moving
--- this into packages/db/sqlite-migrations/. Do not execute against installations.
-
 CREATE TABLE judge_runs (
   id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, case_id TEXT NOT NULL, skill_version_id TEXT NOT NULL,
   verdict TEXT NOT NULL CHECK(verdict IN ('pass','fail','ambiguous')), score REAL NOT NULL,
@@ -23,7 +17,7 @@ CREATE TABLE verdicts (
   created_at TEXT NOT NULL, observed TEXT CHECK(observed IS NULL OR (json_valid(observed) AND json_type(observed)='object')),
   evaluator_score TEXT CHECK(evaluator_score IS NULL OR (observed IS NOT NULL AND json_valid(evaluator_score) AND json_type(evaluator_score)='object')),
   UNIQUE(project_id,id), UNIQUE(project_id,case_id,id),
-  FOREIGN KEY(project_id,case_id) REFERENCES cases(project_id,id),
+  FOREIGN KEY(project_id,case_id) REFERENCES cases(project_id,id) ON DELETE CASCADE,
   FOREIGN KEY(project_id,skill_version_id) REFERENCES skill_versions(project_id,id) ON DELETE CASCADE
 ) STRICT;
 CREATE TABLE eval_runs (
@@ -50,7 +44,7 @@ CREATE TABLE eval_runs (
 ) STRICT;
 CREATE TABLE eval_run_items (
   id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, eval_run_id TEXT NOT NULL,
-  dataset_item_id TEXT, dataset_revision_item_id TEXT CHECK(dataset_revision_item_id IS NULL), case_id TEXT NOT NULL,
+  dataset_item_id TEXT REFERENCES dataset_items(id) ON DELETE SET NULL, dataset_revision_item_id TEXT CHECK(dataset_revision_item_id IS NULL), case_id TEXT NOT NULL,
   client_item_id TEXT, content_digest TEXT,
   status TEXT NOT NULL CHECK(status IN ('pending','completed','failed','skipped')),
   verdict_id TEXT, expected_label TEXT CHECK(expected_label IS NULL OR expected_label IN ('pass','fail')),
@@ -66,9 +60,8 @@ CREATE TABLE eval_run_items (
   observed TEXT CHECK(observed IS NULL OR (json_valid(observed) AND json_type(observed)='object')),
   UNIQUE(project_id,id), UNIQUE(eval_run_id,client_item_id),
   FOREIGN KEY(project_id,eval_run_id) REFERENCES eval_runs(project_id,id) ON DELETE CASCADE,
-  FOREIGN KEY(project_id,case_id) REFERENCES cases(project_id,id),
+  FOREIGN KEY(project_id,case_id) REFERENCES cases(project_id,id) ON DELETE CASCADE,
   FOREIGN KEY(project_id,case_id,verdict_id) REFERENCES verdicts(project_id,case_id,id),
-  FOREIGN KEY(project_id,dataset_item_id) REFERENCES dataset_items(project_id,id),
   CHECK((status='pending')=(finished_at IS NULL)),
   CHECK((execution_token IS NULL)=(execution_claimed_at IS NULL)),
   CHECK(provider_call_started_at IS NULL OR execution_token IS NOT NULL),
@@ -85,7 +78,7 @@ CREATE TABLE assessment_receipt_artifacts (
   id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, eval_run_id TEXT NOT NULL, receipt_id TEXT NOT NULL,
   contract_version INTEGER NOT NULL CHECK(contract_version=1), artifact_revision INTEGER NOT NULL CHECK(artifact_revision>0),
   canonical_bytes BLOB NOT NULL CHECK(length(canonical_bytes)>0), artifact_digest TEXT NOT NULL,
-  evidence_digest TEXT NOT NULL, source_snapshot_digest TEXT NOT NULL,
+  evidence_digest TEXT NOT NULL, source_snapshot_digest TEXT NOT NULL CHECK(length(source_snapshot_digest)=71 AND substr(source_snapshot_digest,1,7)='sha256:' AND substr(source_snapshot_digest,8) NOT GLOB '*[^0-9a-f]*'),
   source_kind TEXT NOT NULL CHECK(source_kind IN ('terminal_mint','historical_freeze','correction')),
   predecessor_artifact_id TEXT, correction_reason TEXT, created_by_user_id TEXT,
   created_at TEXT NOT NULL,
@@ -93,12 +86,12 @@ CREATE TABLE assessment_receipt_artifacts (
   FOREIGN KEY(project_id,eval_run_id) REFERENCES eval_runs(project_id,id) ON DELETE CASCADE,
   FOREIGN KEY(project_id,eval_run_id,predecessor_artifact_id) REFERENCES assessment_receipt_artifacts(project_id,eval_run_id,id),
   CHECK((artifact_revision=1 AND predecessor_artifact_id IS NULL AND source_kind<>'correction' AND correction_reason IS NULL)
-    OR (artifact_revision>1 AND predecessor_artifact_id IS NOT NULL AND source_kind='correction' AND length(trim(correction_reason))>0))
+    OR (artifact_revision>1 AND predecessor_artifact_id IS NOT NULL AND source_kind='correction' AND correction_reason IS NOT NULL AND length(trim(correction_reason))>0))
 ) STRICT;
 CREATE TABLE assessment_receipt_comparisons (
   id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL, eval_run_id TEXT NOT NULL, artifact_id TEXT NOT NULL,
   consumer_receipt_id TEXT NOT NULL, consumer_canonical_bytes BLOB NOT NULL CHECK(length(consumer_canonical_bytes)>0),
-  consumer_artifact_digest TEXT NOT NULL, comparison_status TEXT NOT NULL CHECK(comparison_status IN ('match','diverged')),
+  consumer_artifact_digest TEXT NOT NULL CHECK(length(consumer_artifact_digest)=71 AND substr(consumer_artifact_digest,1,7)='sha256:' AND substr(consumer_artifact_digest,8) NOT GLOB '*[^0-9a-f]*'), comparison_status TEXT NOT NULL CHECK(comparison_status IN ('match','diverged')),
   created_at TEXT NOT NULL, UNIQUE(artifact_id,consumer_artifact_digest),
   FOREIGN KEY(project_id,eval_run_id,artifact_id) REFERENCES assessment_receipt_artifacts(project_id,eval_run_id,id) ON DELETE CASCADE
 ) STRICT;
@@ -123,5 +116,46 @@ CREATE TRIGGER receipt_comparison_no_delete BEFORE DELETE ON assessment_receipt_
 BEGIN SELECT RAISE(ABORT,'receipt comparison deletion requires project erasure'); END;
 CREATE TRIGGER verdict_immutable BEFORE UPDATE ON verdicts
 BEGIN SELECT RAISE(ABORT,'immutable evaluator verdict'); END;
-CREATE TRIGGER verdict_no_delete BEFORE DELETE ON verdicts WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)
+CREATE TRIGGER verdict_no_delete BEFORE DELETE ON verdicts WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM cases WHERE id=OLD.case_id)
 BEGIN SELECT RAISE(ABORT,'verdict deletion requires project erasure'); END;
+
+CREATE TRIGGER eval_item_dataset_owner BEFORE INSERT ON eval_run_items WHEN NEW.dataset_item_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM dataset_items d JOIN eval_runs r ON r.project_id=d.project_id AND r.dataset_id=d.dataset_id
+  WHERE d.id=NEW.dataset_item_id AND d.project_id=NEW.project_id AND d.case_id=NEW.case_id AND r.id=NEW.eval_run_id)
+BEGIN SELECT RAISE(ABORT,'eval dataset item ownership mismatch'); END;
+CREATE TRIGGER eval_item_dataset_update BEFORE UPDATE OF dataset_item_id ON eval_run_items WHEN NEW.dataset_item_id IS NOT NULL AND NEW.dataset_item_id IS NOT OLD.dataset_item_id
+BEGIN SELECT RAISE(ABORT,'immutable eval dataset item'); END;
+CREATE TRIGGER receipt_comparison_validate BEFORE INSERT ON assessment_receipt_comparisons
+BEGIN
+  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM assessment_receipt_artifacts a WHERE a.id=NEW.artifact_id AND a.project_id=NEW.project_id AND a.eval_run_id=NEW.eval_run_id AND a.artifact_revision=1
+    AND sqlite_comparison_valid(NEW.consumer_canonical_bytes,a.canonical_bytes,NEW.project_id,NEW.eval_run_id,NEW.consumer_receipt_id,NEW.consumer_artifact_digest,NEW.comparison_status)=1)
+    THEN RAISE(ABORT,'receipt comparison mismatch') END;
+END;
+CREATE TRIGGER eval_item_identity_immutable BEFORE UPDATE ON eval_run_items WHEN
+  NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.eval_run_id<>OLD.eval_run_id OR NEW.case_id<>OLD.case_id OR
+  NEW.client_item_id IS NOT OLD.client_item_id OR NEW.content_digest IS NOT OLD.content_digest OR
+  NEW.expected_label IS NOT OLD.expected_label OR NEW.expected_fail_step IS NOT OLD.expected_fail_step OR NEW.created_at<>OLD.created_at
+BEGIN SELECT RAISE(ABORT,'immutable eval item identity'); END;
+CREATE TRIGGER eval_run_identity_immutable BEFORE UPDATE ON eval_runs WHEN
+  NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.skill_version_id<>OLD.skill_version_id OR NEW.trigger<>OLD.trigger OR
+  NEW.dataset_id IS NOT OLD.dataset_id OR NEW.dataset_revision_id IS NOT OLD.dataset_revision_id OR NEW.total_items<>OLD.total_items OR NEW.created_at<>OLD.created_at
+BEGIN SELECT RAISE(ABORT,'immutable eval run identity'); END;
+CREATE TRIGGER eval_run_terminal_immutable BEFORE UPDATE ON eval_runs WHEN OLD.status IN ('completed','failed') AND
+  (NEW.status<>OLD.status OR NEW.completed_items<>OLD.completed_items OR NEW.failed_items<>OLD.failed_items OR
+   NEW.agreed_items<>OLD.agreed_items OR NEW.error IS NOT OLD.error OR NEW.finished_at IS NOT OLD.finished_at)
+BEGIN SELECT RAISE(ABORT,'immutable terminal eval run'); END;
+CREATE TRIGGER eval_item_terminal_immutable BEFORE UPDATE ON eval_run_items WHEN OLD.status<>'pending' AND
+  (NEW.status<>OLD.status OR NEW.verdict_id IS NOT OLD.verdict_id OR NEW.result_label IS NOT OLD.result_label OR
+   NEW.agreement IS NOT OLD.agreement OR NEW.failing_step IS NOT OLD.failing_step OR NEW.latency_ms IS NOT OLD.latency_ms OR
+   NEW.input_tokens IS NOT OLD.input_tokens OR NEW.output_tokens IS NOT OLD.output_tokens OR NEW.cached<>OLD.cached OR
+   NEW.provider_metadata IS NOT OLD.provider_metadata OR NEW.error IS NOT OLD.error OR NEW.failure_kind IS NOT OLD.failure_kind OR
+   NEW.not_attempted<>OLD.not_attempted OR NEW.observed IS NOT OLD.observed OR NEW.finished_at IS NOT OLD.finished_at)
+BEGIN SELECT RAISE(ABORT,'immutable terminal eval item'); END;
+CREATE TRIGGER eval_item_verdict_insert BEFORE INSERT ON eval_run_items WHEN NEW.verdict_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM verdicts v JOIN eval_runs r ON r.project_id=v.project_id AND r.skill_version_id=v.skill_version_id
+  WHERE r.id=NEW.eval_run_id AND v.project_id=NEW.project_id AND v.case_id=NEW.case_id AND v.id=NEW.verdict_id)
+BEGIN SELECT RAISE(ABORT,'eval verdict evaluator mismatch'); END;
+CREATE TRIGGER eval_item_verdict_update BEFORE UPDATE OF verdict_id ON eval_run_items WHEN NEW.verdict_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM verdicts v JOIN eval_runs r ON r.project_id=v.project_id AND r.skill_version_id=v.skill_version_id
+  WHERE r.id=NEW.eval_run_id AND v.project_id=NEW.project_id AND v.case_id=NEW.case_id AND v.id=NEW.verdict_id)
+BEGIN SELECT RAISE(ABORT,'eval verdict evaluator mismatch'); END;
