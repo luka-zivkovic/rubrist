@@ -232,3 +232,13 @@ CURRENT: taxonomy creation/revision and observation assignment commands preserve
 stable code history, owner/member roles, exact CAS and historical replay. The
 independent audit verified typed assignment conflicts and rejection of unknown
 existing codes before writes. All 5 focused taxonomy/assignment tests pass.
+
+CURRENT: all 21 analysis-study repository methods are registered in the SQLite
+worker and exposed to authenticated API routes. Startup runs the existing
+bounded deadline closer; shutdown drains it before closing storage. Typed
+study errors retain only public code and safe conflict details across RPC.
+Independent wiring audit approved concurrency, restart, HTTP and shutdown
+coverage. Qualification passed 326 SQLite/shared tests; the 12 PostgreSQL study
+tests were run separately with PG_SMOKE_DATABASE_URL and all passed. This
+completes the study port, not M4: governed review, promotion/measurement,
+calibration and evaluator lifecycle remain incomplete.

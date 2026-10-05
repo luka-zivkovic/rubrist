@@ -1,3 +1,4 @@
+import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
 import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { GoldenSetRetirementContextSchema } from '@rubrist/shared';
@@ -37,6 +38,10 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
     result.details=Object.fromEntries(['limit','observed','fixedBudget','existingFixedBudget','requestedFixedBudget'].flatMap(key=>{
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
+  }
+  if(value instanceof AnalysisStudyRepositoryError){
+    result.code=value.code;
+    result.details=typeof value.details.studyId==='string'?{studyId:value.details.studyId}:{};
   }
   return result;
 }

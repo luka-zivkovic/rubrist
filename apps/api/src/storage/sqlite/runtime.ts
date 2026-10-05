@@ -1,3 +1,4 @@
+import type { AnalysisStudyRepository } from '../../analysis-study/repository.js';
 import type { AnalysisPopulationRepository } from '../../analysis-population/repository.js';
 import type { ProductionDecisionRecordRepository } from '../../production-calibration/repository.js';
 import { sqliteRegressionService } from './regression-service.js';
@@ -15,6 +16,29 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const analysisStudies:AnalysisStudyRepository={
+    createStudy:(...args)=>storage.command('studyCreate',...args),
+    listStudies:(...args)=>storage.command('studyList',...args),
+    getStudy:(...args)=>storage.command('studyGet',...args),
+    openStudy:(...args)=>storage.command('studyOpen',...args),
+    closeStudy:(...args)=>storage.command('studyClose',...args),
+    completeStudy:(...args)=>storage.command('studyComplete',...args),
+    abandonStudy:(...args)=>storage.command('studyAbandon',...args),
+    listStudyItems:(...args)=>storage.command('studyItems',...args),
+    listStudyItemEvents:(...args)=>storage.command('studyItemEvents',...args),
+    getStudyItem:(...args)=>storage.command('studyItemGet',...args),
+    appendStudyItemEvent:(...args)=>storage.command('studyItemAppend',...args),
+    getStudyItemContent:(...args)=>storage.command('studyItemContent',...args),
+    createTaxonomy:(...args)=>storage.command('studyTaxonomyCreate',...args),
+    getTaxonomy:(...args)=>storage.command('studyTaxonomyGet',...args),
+    listTaxonomyRevisions:(...args)=>storage.command('studyTaxonomyRevisions',...args),
+    getTaxonomyRevision:(...args)=>storage.command('studyTaxonomyRevisionGet',...args),
+    createTaxonomyRevision:(...args)=>storage.command('studyTaxonomyRevise',...args),
+    listObservationAssignments:(...args)=>storage.command('studyAssignments',...args),
+    appendObservationAssignment:(...args)=>storage.command('studyAssignmentAppend',...args),
+    getTaxonomyCoverage:(...args)=>storage.command('studyCoverage',...args),
+    closeDueStudies:(...args)=>storage.command('studyCloseDue',...args),
+  };
   const analysisPopulations:AnalysisPopulationRepository={
     createPopulation:(...args)=>storage.command('populationCreate',...args),
     listPopulations:(...args)=>storage.command('populationList',...args),
@@ -260,5 +284,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,analysisPopulations,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

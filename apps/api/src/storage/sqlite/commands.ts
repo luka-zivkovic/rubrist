@@ -1,3 +1,8 @@
+import { sqliteStudyCommands } from './study-commands.js';
+import { sqliteStudyReadCommands } from './study-read-commands.js';
+import { sqliteStudyItemCommands } from './study-item-commands.js';
+import { sqliteStudyTaxonomyCommands } from './study-taxonomy-commands.js';
+import { sqliteStudyAssignmentCommands } from './study-assignment-commands.js';
 import { initializePopulationFrameValidator } from './population-validator.js';
 import { sqlitePopulationCommands } from './population-commands.js';
 import { initializeSqliteCommandContext, sqliteCommand } from './command-context.js';
@@ -218,7 +223,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};
