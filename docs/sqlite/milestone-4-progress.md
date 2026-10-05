@@ -280,3 +280,19 @@ as BLOB, deriving the unchanged canonical base64 digest/wire field from those
 bytes. Claude Code's follow-up consultation confirmed this fits ADR-0016, as
 does retaining the imported artifact's existing canonical byte format. No new
 ADR decision was required. Backup custody documentation remains part of M5.
+
+## Governed development authorship and subjects
+
+CURRENT: migration 0041 atomically backfills recorded evaluator authorship using
+retained version timestamps, PostgreSQL's IDs and its exact digest basis.
+Unknown historical authorship remains unknown. New recorded versions append
+immutable development evidence in their owning command. Legacy empty/NUL
+identity values abort the migration; ordinary integrity checks need no UDFs.
+The migration-only BLOB SHA-256 helper is not referenced by persisted schema.
+Claude independently confirmed the fixed string-key canonical byte construction.
+
+CURRENT: governed review now has its own subject helper with PostgreSQL's stable
+48-hex identities. Existing subjects are reused, including identities originally
+created by Analyze. Assignable-subject reads require live owner membership and
+retain pseudonymous evidence after account deletion. The independent audit
+approved this slice with 22 focused tests; API typechecking passes.

@@ -36,6 +36,13 @@ export function migrateSqlite(db: DatabaseSync, directory = fileURLToPath(new UR
   const files = readdirSync(directory).filter(f => f.endsWith('.sql')).sort();
   if (!files.length || files.some((f,i) => !f.startsWith(`${String(i+1).padStart(4,'0')}_`))) throw new Error('Invalid SQLite migration sequence');
   if (db.isTransaction) throw new Error('SQLite migrations require an idle migration connection');
+  // Forward migrations may hash an explicitly constructed immutable byte basis.
+  // This pure helper is private to the idle migration connection; domain writes
+  // use their versioned validation functions instead.
+  db.function('sqlite_migration_sha256', { deterministic: true }, value => {
+    if (!(value instanceof Uint8Array)) throw new Error('Migration digest requires BLOB bytes');
+    return 'sha256:' + createHash('sha256').update(value).digest('hex');
+  });
   // A table rebuild must suppress FK cascade actions during DROP TABLE. This
   // connection never serves application work; every FK is checked before
   // commit, and enforcement is restored on success and on rollback.

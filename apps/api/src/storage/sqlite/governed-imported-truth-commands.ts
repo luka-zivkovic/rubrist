@@ -9,7 +9,7 @@ import { canonicalJson } from '../../lib/canonical-json.js';
 import { datasetInputIdentity } from '../../lib/dataset-revision.js';
 import { governedReviewRequestDigest } from '../../lib/governed-review.js';
 import { governedJsonTextDigest } from './governed-json-text.js';
-import { governedReviewAccess } from './governed-instruction-commands.js';
+import { governedReviewAccess } from './governed-subject-commands.js';
 import { sqliteCommand } from './command-context.js';
 type Args<K extends keyof GovernedReviewRepository>=Parameters<GovernedReviewRepository[K]>;
 function projection(row:Record<string,unknown>):ImportedTruthProjection {
