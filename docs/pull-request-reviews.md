@@ -47,3 +47,14 @@ the independent audit required by the regular batch flow.
 
 References: [GitHub automatic review configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review),
 [custom review instructions](https://docs.github.com/en/copilot/tutorials/customize-code-review).
+
+## Configuration verification
+
+CURRENT verified 2026-10-05: native rulesets
+[24357304](https://github.com/luka-zivkovic/rubrist/rules/24357304) and
+[24511595](https://github.com/luka-zivkovic/rubrist/rules/24511595) were read back
+after configuration with both review flags enabled. Independent review found
+no blocking issues in the workflow, instructions or ruleset payloads. The CI
+YAML parsed successfully; assertions confirmed the two PR base filters,
+main-only pushes and unchanged read-only permissions. This validates the
+configuration; each PR still needs its own completed checks and review.
