@@ -305,17 +305,17 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   app.post("/api/auth/setup", async (c) => {
     c.header("cache-control", "no-store");
     if (!persistent) return c.json({ error: "Auth is not enabled" }, 400);
+    const body = await c.req.json().catch(() => null);
+    const parsed = z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      name: z.string().min(1).optional(),
+      projectName: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH).optional(),
+      mode: ProjectModeSchema.optional()
+    }).safeParse(body);
+    if (!parsed.success) return c.json({ error: "Invalid setup input", details: z.treeifyError(parsed.error) }, 400);
     return accounts!.withSetupLock(async () => {
       if (!(await accounts!.setupRequired())) return c.json({ error: "Setup already completed" }, 409);
-      const body = await c.req.json().catch(() => null);
-      const parsed = z.object({
-        email: z.string().email(),
-        password: z.string().min(8),
-        name: z.string().min(1).optional(),
-        projectName: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH).optional(),
-        mode: ProjectModeSchema.optional()
-      }).safeParse(body);
-      if (!parsed.success) return c.json({ error: "Invalid setup input", details: z.treeifyError(parsed.error) }, 400);
 
       // returnHeaders: signUpEmail auto-signs-in (autoSignIn: true) and emits
       // the session cookie — forward it so the new owner lands in the app
@@ -345,6 +345,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   });
 
   app.post("/api/auth/redeem-invite", async (c) => {
+    c.header("cache-control", "no-store");
     if (!persistent) return c.json({ error: "Auth is not enabled" }, 400);
     const body = await c.req.json().catch(() => null);
     const parsed = z.object({ token: z.string().min(8), email: z.string().email(), password: z.string().min(8), name: z.string().min(1).optional() }).safeParse(body);
@@ -357,14 +358,27 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     // Same auto-signin cookie forwarding as /api/auth/setup: the invited
     // member should land in the app, not on the login form re-typing the
     // credentials they just chose.
-    const { headers, response: result } = await options.auth!.api.signUpEmail({
-      returnHeaders: true,
-      body: {
-        email: parsed.data.email,
-        password: parsed.data.password,
-        name: parsed.data.name ?? parsed.data.email
+    let authenticated: { headers: Headers; response: { user?: { id: string; email: string } } };
+    try {
+      authenticated = await options.auth!.api.signUpEmail({
+        returnHeaders: true,
+        body: { email: parsed.data.email, password: parsed.data.password, name: parsed.data.name ?? parsed.data.email }
+      });
+    } catch (error) {
+      // Signup may have committed before an earlier redemption failed. Prove
+      // ownership of that account with its existing password before retrying;
+      // neither an invitation nor an email match can take over an account.
+      if ((error as { body?: { code?: string } }).body?.code !== "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") throw error;
+      try {
+        authenticated = await options.auth!.api.signInEmail({
+          returnHeaders: true, body: { email: parsed.data.email, password: parsed.data.password }
+        });
+      } catch (loginError) {
+        if ((loginError as { statusCode?: number }).statusCode !== 401) throw loginError;
+        return c.json({ error: "Sign in with this account's existing password to accept the invitation" }, 401);
       }
-    }) as { headers: Headers; response: { user?: { id: string; email: string } } };
+    }
+    const { headers, response: result } = authenticated;
     if (!result.user?.id) return c.json({ error: "User creation failed" }, 500);
     await accounts!.redeemInvitation({ token: parsed.data.token, userId: result.user.id });
     for (const cookie of headers.getSetCookie?.() ?? []) {

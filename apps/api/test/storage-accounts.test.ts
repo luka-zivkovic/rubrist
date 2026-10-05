@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { runMigrations } from '@rubrist/db';
 import { openSqlite } from '@rubrist/db/sqlite';
@@ -44,7 +45,8 @@ async function fixture(kind: 'sqlite' | 'postgres'): Promise<Fixture> {
     return value;
   }
   const database = await openPostgresTestDatabase('storage_accounts');
-  let pool = new Pool({connectionString:database.databaseUrl});
+  // Auth/workspace queries must progress even when only one pool slot exists.
+  let pool = new Pool({connectionString:database.databaseUrl,max:1});
   await runMigrations(pool);
   const compose = () => {
     const repository = new PgRepository(pool), auth = createAuth(pool), accounts = createPgAccountServices(pool);
@@ -53,11 +55,32 @@ async function fixture(kind: 'sqlite' | 'postgres'): Promise<Fixture> {
   const value: Fixture = {
     ...compose(),
     async sql(query, values = []) { let i=0; return (await pool.query(query.replaceAll('?',() => `$${++i}`),values)).rows; },
-    async restart() { await pool.end(); pool = new Pool({connectionString:database.databaseUrl}); Object.assign(value,compose()); },
+    async restart() { await pool.end(); pool = new Pool({connectionString:database.databaseUrl,max:1}); Object.assign(value,compose()); },
     async close() { if (pool !== database.pool) await pool.end(); await database.cleanup(); }
   };
   return value;
 }
+
+it.skipIf(!process.env.PG_SMOKE_DATABASE_URL)('rejects a lost PostgreSQL setup-lock connection without crashing or poisoning later commands', async () => {
+  const database = await openPostgresTestDatabase('setup_lock_failure');
+  const applicationName = `rubrist-lock-test-${randomUUID()}`;
+  const pool = new Pool({connectionString:database.databaseUrl,max:1,application_name:applicationName});
+  const accounts = createPgAccountServices(pool);
+  try {
+    await expect(accounts.withSetupLock(async () => {
+      const locks = await pool.query<{pid:number}>(
+        'select pid from pg_stat_activity where application_name=$1 and pid<>pg_backend_pid()', [applicationName]);
+      expect(locks.rows).toHaveLength(1);
+      // Terminate only this fixture's dedicated session, never another client.
+      const killed = await pool.query('select pg_terminate_backend($1) as killed',[locks.rows[0]!.pid]);
+      expect(killed.rows[0].killed).toBe(true);
+      // Work remains pending while the socket receives its backend error.
+      await pool.query('select pg_sleep(0.1)');
+      return 'must not report success';
+    })).rejects.toThrow(/terminating connection|connection.*terminated/i);
+    await expect(accounts.withSetupLock(async () => (await pool.query('select 1 as n')).rows[0].n)).resolves.toBe(1);
+  } finally { await pool.end(); await database.cleanup(); }
+});
 
 for (const kind of ['sqlite','postgres'] as const) {
   describe.skipIf(kind === 'postgres' && !process.env.PG_SMOKE_DATABASE_URL)(`${kind} persistent account contract`, () => {
@@ -78,8 +101,9 @@ for (const kind of ['sqlite','postgres'] as const) {
       expect(await (await f.app.request('/api/auth/setup-required')).json()).toEqual({setupRequired:true,authEnabled:true});
       expect((await f.app.request('/api/projects')).status).toBe(401);
       expect((await f.app.request('/api/auth/sign-up/email',json({email:'public@example.com',password,name:'Public'}))).status).toBe(403);
-      const responses = await Promise.all(['owner@example.com','loser@example.com'].map(email => f.app.request('/api/auth/setup',json({email,password}))));
-      expect(responses.map(r=>r.status).sort()).toEqual([200,409]);
+      const emails = ['owner@example.com',...Array.from({length:11},(_,i)=>`loser${i}@example.com`)];
+      const responses = await Promise.all(emails.map(email => f.app.request('/api/auth/setup',json({email,password}))));
+      expect(responses.map(r=>r.status).sort()).toEqual([200,...Array(11).fill(409)]);
       expect(await f.accounts.countUsers()).toBe(1);
       const winner = responses.find(r=>r.status===200)!;
       const cookie = cookieOf(winner);
@@ -90,9 +114,62 @@ for (const kind of ['sqlite','postgres'] as const) {
       const signout = await f.app.request('/api/auth/sign-out',json({},cookie));
       expect(signout.status,await signout.clone().text()).toBe(200);
       expect((await f.app.request('/api/projects',{headers:{cookie}})).status).toBe(401);
-      const signin = await f.app.request('/api/auth/sign-in/email',json({email:responses[0]!.status === 200 ? 'owner@example.com' : 'loser@example.com',password}));
+      const signin = await f.app.request('/api/auth/sign-in/email',json({email:emails[responses.findIndex(r=>r.status===200)],password}));
       expect(signin.status,await signin.clone().text()).toBe(200);
       expect((await f.app.request('/api/projects',{headers:{cookie:cookieOf(signin)}})).status).toBe(200);
+    });
+    it('does not let an unfinished request body acquire the setup lock', async () => {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      let reading!: () => void;
+      const bodyRead = new Promise<void>(resolve=>{reading=resolve;});
+      const body = new ReadableStream<Uint8Array>({start(c){controller=c;},pull(){reading();}}, {highWaterMark:0});
+      const slow = f.app.request(new Request('http://localhost/api/auth/setup',{
+        method:'POST',headers:{'content-type':'application/json'},body,duplex:'half'
+      } as RequestInit & {duplex:'half'}));
+      await bodyRead;
+      const ready = setup();
+      let timer!: ReturnType<typeof setTimeout>;
+      try {
+        await Promise.race([ready,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('setup blocked by request body')),3000);})]);
+      } finally {
+        clearTimeout(timer);
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({email:'slow@example.com',password})));
+        controller.close();
+        await Promise.allSettled([slow,ready]);
+      }
+      expect((await slow).status).toBe(409);
+      expect(await f.accounts.countUsers()).toBe(1);
+    });
+    it.each(['interruption','expiry'])('recovers invitation signup after %s without allowing account takeover', async (failure) => {
+      const owner = await setup();
+      const email = 'recover-invite@example.com';
+      const token = await invite(owner.cookie,email);
+      const interrupted = createApp(f.repository,{
+        auth:f.auth,runtimeMode:'persistent',accountStage:kind==='sqlite',
+        accounts:{...f.accounts,async redeemInvitation(input) {
+          if (failure === 'expiry') {
+            await f.sql("update invitations set expires_at='2000-01-01T00:00:00.000Z' where email=?",[email]);
+            return f.accounts.redeemInvitation(input);
+          }
+          throw new Error('Synthetic interruption after signup');
+        }}
+      });
+      const failed = await interrupted.request('/api/auth/redeem-invite',json({token,email,password}));
+      expect(failed.status).toBe(500);
+      expect(failed.headers.getSetCookie()).toEqual([]);
+      expect(await f.accounts.countUsers()).toBe(2);
+      await f.restart();
+      const retryToken = failure === 'expiry' ? await invite(owner.cookie,email) : token;
+      const wrong = await f.app.request('/api/auth/redeem-invite',json({token:retryToken,email,password:'wrong-password'}));
+      expect(wrong.status).toBe(401);
+      expect(wrong.headers.getSetCookie()).toEqual([]);
+      expect(await f.accounts.validateInvitation(retryToken,email)).toBe(true);
+      const recovered = await f.app.request('/api/auth/redeem-invite',json({token:retryToken,email,password}));
+      expect(recovered.status,await recovered.clone().text()).toBe(200);
+      expect(await f.accounts.countUsers()).toBe(2);
+      const projects = await f.app.request('/api/projects',{headers:{cookie:cookieOf(recovered)}});
+      expect(await projects.json()).toMatchObject({projects:[{id:owner.projectId}]});
+      expect(await f.accounts.validateInvitation(retryToken,email)).toBe(false);
     });
     it('binds invites to email, protects tenant/owner operations, persists encrypted credentials and revokes keys', async () => {
       const owner = await setup();

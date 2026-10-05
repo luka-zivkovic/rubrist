@@ -110,3 +110,30 @@ Node 24.15 follow-up validation: three focused API/UI suites pass 53 tests
 PostgreSQL run passes all 12 shared account-contract cases across both backends.
 Type checking and `git diff --check` pass. The disposable PostgreSQL cluster was
 stopped and removed. Fresh Copilot review and CI remain required before merge.
+
+The next Copilot round identified setup lock starvation, a slow-body setup lock,
+and invitation signup recovery. Setup now validates its body before locking.
+PostgreSQL serializes local waiters and holds its advisory lock on a dedicated
+session so auth/workspace commands retain the pool's capacity even with one
+slot. The dedicated client observes connection errors and rejects after ongoing
+work settles; its session always closes. The independent reviewer reproduced
+the otherwise unhandled connection-error crash before this correction.
+
+An invitation retry for an already-created user now requires successful sign-in
+with that user's existing password before atomic redemption. Cookies are sent
+only after redemption succeeds. Tests cover interruption and expiry after signup,
+restart, the original or replacement invitation, rejection of a wrong password,
+and one user/membership without consuming an invite on authentication failure.
+
+Validation of this round: 12 concurrent setup requests with a one-slot PG pool,
+an unfinished streaming request body, and both invitation recovery cases pass.
+The complete PostgreSQL suite passes 186 tests; a subsequent focused run passes
+all 19 account tests including new dedicated-connection termination/recovery.
+The full non-PG suite passes 2,063 tests (174 skipped before adding that PG-only
+failure test). Type checking and build pass. These counts describe their actual
+invocations, not skipped database coverage. Fresh Copilot review and CI remain
+required before merge.
+
+The independent reviewer approved the final correction and independently
+reproduced graceful lock-connection failure followed by successful reuse, with
+no remaining blockers.

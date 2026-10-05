@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import { Client, type Pool } from 'pg';
 import * as auth from '../lib/auth.js';
 import type { AccountServices } from './ports.js';
+
+const setupWaiters = new WeakMap<Pool, Promise<void>>();
 
 export function createPgAccountServices(pool: Pool): AccountServices {
   return {
@@ -23,15 +25,30 @@ export function createPgAccountServices(pool: Pool): AccountServices {
     invalidateAgentSetupPairing: (...args) => auth.invalidateAgentSetupPairing(pool, ...args),
     revokeAgentSetupPairing: (...args) => auth.revokeAgentSetupPairing(pool, ...args),
     getAgentSetupPairing: (...args) => auth.getAgentSetupPairing(pool, ...args),
-    async withSetupLock(work) {
-      const client = await pool.connect();
-      try {
-        await client.query('select pg_advisory_lock(918273646)');
-        return await work();
-      } finally {
-        await client.query('select pg_advisory_unlock(918273646)').catch(() => undefined);
-        client.release();
-      }
+    withSetupLock(work) {
+      const result = (setupWaiters.get(pool) ?? Promise.resolve()).then(async () => {
+        // The lock must not consume a pool slot needed by auth or workspace
+        // commands, even with max=1. Local waiters share one connection;
+        // PostgreSQL's session lock also serializes other application processes.
+        const client = new Client(pool.options);
+        let connectionFailure: Error | null = null;
+        client.on('error', (error: Error) => { connectionFailure ??= error; });
+        try {
+          await client.connect();
+          await client.query('select pg_advisory_lock(918273646)');
+          const value = await work();
+          // Keep local serialization until work settles even if the lock
+          // connection fails. Do not report success after losing that session.
+          if (connectionFailure) throw connectionFailure;
+          return value;
+        } finally {
+          // Closing the dedicated session releases its advisory lock on every
+          // path; it can never be returned to the pool with a retained lock.
+          await client.end();
+        }
+      });
+      setupWaiters.set(pool, result.then(() => undefined, () => undefined));
+      return result;
     },
     async pairingEligibility(projectId) {
       const result = await pool.query(`select imported_trace_count,
