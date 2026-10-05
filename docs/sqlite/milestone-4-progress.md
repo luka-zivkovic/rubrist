@@ -199,3 +199,9 @@ with bounded exponential backoff, command-time comparisons and atomic clearing.
 Independent audit approved 11/11 focused tests, including restart, due boundaries,
 closed/foreign-study isolation and failed-closure rollback. API typecheck passes.
 Study repository and scheduler wiring remain pending.
+
+CURRENT: study/taxonomy read projections now share unchanged public artifact
+mappers with PostgreSQL. Independent audit approved history, tenant scoping and
+coverage semantics after correcting native SQLite bigint decoding. A focused
+regression verifies the signed-bigint maximum; projection, shared model and API
+checks pass. Public repository wiring remains incomplete.
