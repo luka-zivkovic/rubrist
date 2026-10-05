@@ -296,3 +296,14 @@ CURRENT: governed review now has its own subject helper with PostgreSQL's stable
 created by Analyze. Assignable-subject reads require live owner membership and
 retain pseudonymous evidence after account deletion. The independent audit
 approved this slice with 22 focused tests; API typechecking passes.
+
+## Frozen nonsealed review items
+
+CURRENT: migration 0042 and the internal materializer bind review items to an
+exact same-project nonsealed source revision, source item and input identity.
+Stored payloads must equal the safe projection of the immutable source;
+metadata and forbidden reviewer-visible fields cannot be substituted. Exact
+content digests, byte bounds, replay, immutability and project erasure are
+covered. Sealed insertion still fails closed pending its complete population,
+frame and protected-successor port. Independent audit approved all nine focused
+tests, and API typechecking passes. No new public route is exposed yet.

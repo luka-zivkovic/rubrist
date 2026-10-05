@@ -1,3 +1,4 @@
+import { projectGovernedReviewPayload } from '../../governed-review/projection.js';
 import { governedTimestamp } from './governed-timestamp.js';
 import { createHash } from 'node:crypto';
 import { postgresJsonTextOctets, canonicalGovernedJsonText, analysisPayloadSnapshotText, governedJsonTextDigest, analysisJsonTextDigest } from './governed-json-text.js';
@@ -37,6 +38,7 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
   db.function('analysis_payload_snapshot_v1', { deterministic: true }, value => analysisPayloadSnapshotText(text(value)));
   db.function('analysis_trimmed_text_v1', { deterministic: true }, (value,limit) =>
     typeof value==='string' && value.length>0 && value===value.trim() && [...value].length<=Number(limit) ? 1 : 0);
+  db.function('governed_review_payload_project_v1', { deterministic: true }, value => JSON.stringify(projectGovernedReviewPayload(JSON.parse(text(value)))));
   db.function('governed_timestamp_v1', { deterministic: true }, value => governedTimestamp(text(value)));
   db.function('governed_jsonb_octets_v1', { deterministic: true }, value => value===null ? 0 : postgresJsonTextOctets(text(value)));
   db.function('governed_bytes_v1_digest', { deterministic: true }, value => {
