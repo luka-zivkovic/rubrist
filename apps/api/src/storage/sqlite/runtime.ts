@@ -1,3 +1,4 @@
+import type { AnalysisPopulationRepository } from '../../analysis-population/repository.js';
 import type { ProductionDecisionRecordRepository } from '../../production-calibration/repository.js';
 import { sqliteRegressionService } from './regression-service.js';
 import { createStrictJudgeProvider, JudgeProviderUnavailableError, type JudgeProviderFactory } from '../../lib/judge-provider.js';
@@ -14,6 +15,16 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const analysisPopulations:AnalysisPopulationRepository={
+    createPopulation:(...args)=>storage.command('populationCreate',...args),
+    listPopulations:(...args)=>storage.command('populationList',...args),
+    getPopulation:(...args)=>storage.command('populationGet',...args),
+    listMembers:(...args)=>storage.command('populationMembers',...args),
+    listSelections:(...args)=>storage.command('populationSelections',...args),
+    listExclusions:(...args)=>storage.command('populationExclusions',...args),
+    listOverlaps:(...args)=>storage.command('populationOverlaps',...args),
+    getSelectedContent:(...args)=>storage.command('populationSelectedContent',...args)
+  };
   const productionRecords:ProductionDecisionRecordRepository={
     appendRecords:(...args)=>storage.command('productionAppendRecords',...args),
     loadRecords:(...args)=>storage.command('productionLoadRecords',...args),
@@ -249,5 +260,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,analysisPopulations,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

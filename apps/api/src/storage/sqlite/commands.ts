@@ -1,3 +1,4 @@
+import { sqlitePopulationCommands } from './population-commands.js';
 import { initializeSqliteCommandContext, sqliteCommand } from './command-context.js';
 import { seedSqliteStarterEvaluator } from './starter-evaluator.js';
 import { sqliteProductionCommands } from './production-commands.js';
@@ -215,7 +216,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

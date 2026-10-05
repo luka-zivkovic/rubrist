@@ -1,3 +1,4 @@
+import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { GoldenSetRetirementContextSchema } from '@rubrist/shared';
 import * as repositoryErrors from '../../repository/errors.js';
@@ -28,6 +29,12 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
   if(value instanceof ProductionRecordRepositoryError) {
     result.code=value.code;
     result.details=Object.fromEntries(['line','bytes','maximum','records','decisionId','from','to'].flatMap(key=>{
+      const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
+    }));
+  }
+  if(value instanceof AnalysisPopulationRepositoryError){
+    result.code=value.code;
+    result.details=Object.fromEntries(['limit','observed','fixedBudget','existingFixedBudget','requestedFixedBudget'].flatMap(key=>{
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
   }

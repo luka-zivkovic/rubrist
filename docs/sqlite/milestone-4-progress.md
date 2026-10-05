@@ -125,3 +125,14 @@ use the managed command path. Independent audit approved the migration and
 precision changes; 30 population tests pass, and all 159 SQLite tests pass in
 23 files. Repository/API wiring is still in progress; these checks do not claim
 that the full population feature or Milestone 4 is complete.
+
+CURRENT: all eight population repository methods now run through the SQLite
+worker and are wired into the production API entry point. Creation serializes
+ownership checks, exact request replay, frame reuse and atomic bundle writes;
+payloads are loaded one at a time while only compact digests/identities are
+retained. Metadata pages preserve deterministic pagination, and selected-content
+reads record an exact deduplicated exposure before releasing retained content.
+Typed domain errors survive RPC. Invalid retained payloads return conflict
+responses rather than unhandled validation errors. Independent repository audit
+approved the implementation and authenticated HTTP fixes; all 32 population
+tests and API typecheck pass. Other specialist domains remain incomplete.

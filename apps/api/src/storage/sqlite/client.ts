@@ -1,3 +1,4 @@
+import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 import * as repositoryErrors from '../../repository/errors.js';
@@ -26,6 +27,7 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          if(message.error.name==='AnalysisPopulationRepositoryError') Object.setPrototypeOf(error,AnalysisPopulationRepositoryError.prototype);
           if(message.error.name==='ProductionRecordRepositoryError') Object.setPrototypeOf(error,ProductionRecordRepositoryError.prototype);
           if(message.error.name==='SqliteFeatureUnavailableError') Object.setPrototypeOf(error,SqliteFeatureUnavailableError.prototype);
           const domainError = Object.hasOwn(repositoryErrors,message.error.name)
