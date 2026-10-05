@@ -45,3 +45,22 @@ Semantic clustering is deferred. Do not add it to plans or implementations.
 The repository may contain uncommitted work from coordinated batches. Preserve
 unrelated changes, inspect diffs before editing, and never treat an uncommitted
 document as accepted merely because it exists.
+
+## SQLite milestone pull requests
+
+After each authorized SQLite deployment milestone passes its checks and
+independent audit, commit it, push its milestone branch to `origin`, and open
+one PR without asking again. Update an existing milestone PR rather than
+creating a duplicate. Target `main` when its prerequisites have merged;
+otherwise target the previous milestone branch and state the dependency.
+
+Inspect CI and Copilot review results on the PR. Address actionable findings
+and push fixes to that same PR. Copilot supplements the independent audit and
+tests; its review is not authority to change product scope or accept an ADR.
+The user has authorized merging SQLite milestone PRs after CI passes and
+actionable independent/Copilot findings are resolved. Merge from the bottom
+of a stack, retarget the next PR, inspect its diff, and recheck it before
+merging. Continue through the authorized milestones; proposed ADR decisions
+still need explicit approval. Report PR URLs and pending checks. Deployment
+is separate and is not authorized by this workflow. See
+`docs/pull-request-reviews.md`.
