@@ -197,3 +197,5 @@ All ordinary worker and timer registrations are in `apps/api/src/index.ts`.
 Binary calibration jobs and analysis-study deadline closure belong to Milestone 4.
 External clients in backend tests are controlled fixtures; no paid provider or
 real trace-service calls are needed.
+
+CURRENT: M3 migrations now follow M2 terminal metadata guard 0009. Both evaluation-table rebuilds preserve immutable terminal start time and blocking metadata.

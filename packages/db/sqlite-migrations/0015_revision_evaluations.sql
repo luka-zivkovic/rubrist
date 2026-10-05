@@ -113,7 +113,7 @@ CREATE TRIGGER eval_run_identity_immutable BEFORE UPDATE ON eval_runs WHEN
 BEGIN SELECT RAISE(ABORT,'immutable eval run identity'); END;
 CREATE TRIGGER eval_run_terminal_immutable BEFORE UPDATE ON eval_runs WHEN OLD.status IN ('completed','failed') AND
   (NEW.status<>OLD.status OR NEW.completed_items<>OLD.completed_items OR NEW.failed_items<>OLD.failed_items OR
-   NEW.agreed_items<>OLD.agreed_items OR NEW.error IS NOT OLD.error OR NEW.finished_at IS NOT OLD.finished_at)
+   NEW.agreed_items<>OLD.agreed_items OR NEW.error IS NOT OLD.error OR NEW.finished_at IS NOT OLD.finished_at OR NEW.started_at IS NOT OLD.started_at OR NEW.blocking IS NOT OLD.blocking)
 BEGIN SELECT RAISE(ABORT,'immutable terminal eval run'); END;
 CREATE TRIGGER eval_item_terminal_immutable BEFORE UPDATE ON eval_run_items WHEN OLD.status<>'pending' AND
   (NEW.status<>OLD.status OR NEW.verdict_id IS NOT OLD.verdict_id OR NEW.result_label IS NOT OLD.result_label OR

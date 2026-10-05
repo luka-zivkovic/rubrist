@@ -46,9 +46,10 @@ rebuilds preserve columns, rowids and retained BLOBs, check copy equality, recre
 dependent triggers, verify foreign keys and reject unfinished replacement tables
 before commit. Runtime connections separately enable FK enforcement. Migration
 SQL cannot issue transaction/savepoint commands behind the runner's ownership.
-Applied migrations 0001–0008 remain unchanged; this milestone adds 0009–0023.
-The unpublished M3 filenames were advanced by one after M2 added its final
-forward membership guard; only disposable qualification databases existed.
+Applied migrations 0001–0009 remain unchanged; this milestone adds 0010–0024.
+The unpublished M3 filenames were advanced after M2 added its forward
+membership and terminal metadata guards; only disposable qualification
+databases existed.
 
 Claude Code was consulted through agent-bridge. Its synthetic migration probe
 confirmed that deferred foreign keys do not prevent DROP TABLE cascades. Its
@@ -90,3 +91,7 @@ regression outcome after the M2 staging restriction is lifted.
 
 Real customer data and paid provider calls were not used. PR links and hosted
 CI/Copilot results are recorded after opening the milestone PR.
+
+CURRENT: M3 migrations now follow M2 terminal metadata guard 0009. Both evaluation-table rebuilds preserve immutable terminal start time and blocking metadata.
+
+CURRENT rebase validation: independent audit verifies unchanged M2 migration bytes and preserved terminal metadata guards in both M3 rebuilds. Evaluation and interrupted-rebuild tests pass 26/26.
