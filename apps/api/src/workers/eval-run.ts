@@ -31,7 +31,7 @@ export async function registerEvalRunWorkers(
   queue: Queue,
   repository: RubristRepository,
   provider: ProviderArg = createJudgeProvider
-): Promise<{ stop(): void }> {
+): Promise<{ stop(): Promise<void> }> {
   await queue.work<EvalRunJob>("eval.run", async ({ id, data }) => {
     try {
       await processEvalRunJob(repository, queue, data);
@@ -112,14 +112,21 @@ export async function registerEvalRunWorkers(
   // final attempt. Sweep durable claims on startup and periodically so such
   // items become explicit failures instead of pending forever. The timer is
   // unref'd so test/CLI processes can exit normally.
-  await recoverStaleEvalRunItemExecutions(repository, queue);
+  let stopped = false;
+  let inFlight: Promise<void> | undefined;
+  const recover = () => {
+    if (stopped || inFlight) return inFlight;
+    inFlight = recoverStaleEvalRunItemExecutions(repository, queue).then(() => undefined).finally(() => { inFlight = undefined; });
+    return inFlight;
+  };
+  await recover();
   const recoveryTimer = setInterval(() => {
-    void recoverStaleEvalRunItemExecutions(repository, queue).catch((error) => {
+    void recover()?.catch((error) => {
       console.error("eval.item stale-execution recovery failed:", error);
     });
   }, 60_000);
   recoveryTimer.unref();
-  return {stop: () => clearInterval(recoveryTimer)};
+  return {stop: async () => { stopped = true; clearInterval(recoveryTimer); await inFlight; }};
 }
 
 function errorMessage(error: unknown): string {

@@ -19,7 +19,7 @@ export async function registerFeedbackSyncWorker(
   queue: Queue,
   repository: RubristRepository,
   createWriter: FeedbackWriterFactory = defaultFeedbackWriterFactory
-): Promise<void> {
+): Promise<{ stop(): Promise<void> }> {
   await queue.work<FeedbackSyncJob>("feedback.sync", async ({ id, data }) => {
     try {
       await processFeedbackSyncJob(repository, data, createWriter);
@@ -38,16 +38,20 @@ export async function registerFeedbackSyncWorker(
   // The durable blocked row is the outbox: leave it blocked until the worker
   // delivers it. A crash or failed queue send cannot lose the sign-off resume.
   let resuming = false;
+  let stopped = false;
+  let inFlight: Promise<void> | undefined;
   const resume = async () => {
-    if (resuming) return;
+    if (resuming || stopped) return;
     resuming = true;
     try { await resumeSignedOffFeedback(repository, queue); }
     catch (error) { console.error("feedback.sync sign-off recovery failed:", error); }
     finally { resuming = false; }
   };
-  await resume();
-  const timer = setInterval(() => { void resume(); }, 30_000);
+  const start = () => { if (!resuming && !stopped) inFlight = resume(); };
+  start(); await inFlight;
+  const timer = setInterval(start, 30_000);
   timer.unref();
+  return { stop: async () => { stopped = true; clearInterval(timer); await inFlight; } };
 }
 
 export async function resumeSignedOffFeedback(repository: RubristRepository, queue: Queue): Promise<number> {

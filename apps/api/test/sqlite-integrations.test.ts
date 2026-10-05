@@ -1,3 +1,11 @@
+import { registerLangSmithImportWorker } from '../src/workers/langsmith-import.js';
+import { enqueueDueLangSmithImports } from '../src/workers/langsmith-poller.js';
+import { registerLangfuseImportWorker } from '../src/workers/langfuse-import.js';
+import { enqueueDueLangfuseImports } from '../src/workers/langfuse-poller.js';
+import { registerIronsideImportWorker } from '../src/workers/ironside-import.js';
+import { enqueueDueIronsideImports } from '../src/workers/ironside-poller.js';
+import { registerJudgeRunWorker } from '../src/workers/judge.js';
+import { registerFeedbackSyncWorker } from '../src/workers/feedback-sync.js';
 import { PROVISIONAL_FEEDBACK_HOLD } from '../src/lib/provisional-feedback.js';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
@@ -8,7 +16,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
 import { DatasetRevisionConflictError, SealedValidationUnavailableError } from '../src/repository/errors.js';
@@ -33,6 +41,9 @@ it('stores encrypted credentials, serializes polling and retains import identity
  const disconnected=await f.r.createLangSmithIntegration(f.projectId,{apiKey:'synthetic-secret',projectName:'remote',pollIntervalSeconds:60});expect(disconnected.skillVersionId).toBeNull();
  expect(await f.r.claimDueLangSmithImportTargets({now:new Date(),batchSize:5,defaultLimit:25,intervalMs:60_000})).toEqual([]);
  const version=await evaluator(f),integration=await f.r.createLangSmithIntegration(f.projectId,{apiKey:'synthetic-secret',projectName:'remote',pollIntervalSeconds:60,skillVersionId:version});expect(integration.id).toBe(disconnected.id);
+ await f.r.updateLangSmithIntegration(f.projectId,integration.id,{pollLimit:8});
+ expect((await f.r.listLangSmithIntegrations(f.projectId))[0]?.pollLimit).toBe(8);
+ await f.r.recordLangSmithConnectionTest(f.projectId,integration.id,{ok:true,checkedAt:new Date().toISOString()});
  const stored=f.db.prepare('SELECT encrypted_credentials FROM integrations').get()!;expect(String(stored.encrypted_credentials)).not.toContain('synthetic-secret');expect(JSON.stringify(integration)).not.toContain('synthetic-secret');
  const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());const now=new Date();
  const claims=await Promise.all([f.r.claimDueLangSmithImportTargets({now,batchSize:5,defaultLimit:25,intervalMs:60_000}),peer.repository.claimDueLangSmithImportTargets({now,batchSize:5,defaultLimit:25,intervalMs:60_000})]);expect(claims.flat()).toHaveLength(1);expect(claims.flat()[0]?.skillVersionId).toBe(version);
@@ -58,6 +69,7 @@ it('stores encrypted credentials, serializes polling and retains import identity
 it('retains Langfuse polling settings and records failed exact-version selection without ambiguous jobs',async()=>{
  const f=await fixture(),version=await evaluator(f);
  const integration=await f.r.createLangfuseIntegration(f.projectId,{publicKey:'public-synthetic',secretKey:'private-synthetic',endpointUrl:'https://langfuse.example.test',pollEnabled:false,skillVersionId:version});
+ await f.r.recordLangfuseConnectionTest(f.projectId,integration.id,{ok:true,checkedAt:new Date().toISOString()});
  expect((await f.r.listLangfuseIntegrations(f.projectId))[0]?.pollEnabled).toBe(false);
  await f.r.updateLangfuseIntegration(f.projectId,integration.id,{pollEnabled:true,pollLimit:7});
  expect(await f.r.loadLangfuseImportContext({projectId:f.projectId,integrationId:integration.id,skillVersionId:version,limit:7})).toMatchObject({publicKey:'public-synthetic',secretKey:'private-synthetic',pollEnabled:true,pollLimit:7});
@@ -80,6 +92,7 @@ it('fences Ironside cursor races, remote revalidation and quarantine while prese
  await expect(f.r.createIronsideIntegration(f.projectId,{apiKey:'synthetic',url:'https://ironside.example.test'},remote)).rejects.toThrow(/already exists/);
  const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());
  const cas=await Promise.all([f.r.saveIronsideSyncState(f.projectId,integration.id,{cursor:'a'},null),peer.repository.saveIronsideSyncState(f.projectId,integration.id,{cursor:'b'},null)]);expect(cas.filter(Boolean)).toHaveLength(1);
+ await f.r.recordIronsideConnectionTest(f.projectId,integration.id,{ok:true,checkedAt:new Date().toISOString()});
  const before=await f.r.loadIronsideImportContext({projectId:f.projectId,integrationId:integration.id,limit:5});expect(before.syncState.cursor).not.toBeNull();
  const result={ok:false,checkedAt:new Date().toISOString(),error:'Remote changed'};
  expect(await f.r.quarantineIronsideIntegration(f.projectId,integration.id,{remoteProjectId:remote.project.id,connectionRevision:1},result)).toBe(true);
@@ -123,4 +136,41 @@ it('retains exact feedback context, fences terminal success, and atomically refr
  expect(f.db.prepare('SELECT sync_back_coverage FROM projects WHERE id=?').get(f.projectId)?.sync_back_coverage).toBe(1);
  await f.r.deleteLangSmithIntegration(f.projectId,integration.id,{});await expect(f.r.loadFeedbackSyncContext(job)).rejects.toThrow(/not found/);
  await f.r.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('SELECT count(*) n FROM feedback_sync_jobs').get()?.n).toBe(0);expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+});
+
+it('resumes all three scheduled imports after downtime, judges exact versions and delivers controlled feedback',async()=>{
+ const f=await fixture(),version=await evaluator(f),skill=(await f.r.getCurrentSkill(f.projectId)).id;
+ await f.r.signOffSkillVersion(f.projectId,skill,version,{actorUserId:f.user.id});
+ const remote={protocolVersion:'ironside/evaluator/v1' as const,project:{id:'worker-remote',name:'Synthetic'},capabilities:['traces:read','scores:write'] as ('traces:read'|'scores:write')[],settlement:{kind:'quiet_period' as const,quietPeriodSeconds:300}};
+ await f.r.createLangSmithIntegration(f.projectId,{apiKey:'synthetic',skillVersionId:version});
+ await f.r.createLangfuseIntegration(f.projectId,{publicKey:'synthetic',secretKey:'synthetic',skillVersionId:version});
+ await f.r.createIronsideIntegration(f.projectId,{url:'https://ironside.example.test',apiKey:'synthetic',skillVersionId:version},remote);
+ const pollers=[enqueueDueLangSmithImports,enqueueDueLangfuseImports,enqueueDueIronsideImports];
+ for(const poll of pollers)expect(await poll(f.r,f.runtime.queue)).toEqual({claimed:1,queued:1});
+ expect(await f.r.listCases(f.projectId)).toEqual([]);await f.runtime.close();
+ const next=await createSqliteRuntime(f.path);cleanup.push(()=>next.close());
+ const trace=(source:string)=>({sourceTraceId:`${source}-worker`,input:'plain question',output:'plain answer',metadata:{}});
+ await registerLangSmithImportWorker(next.queue,next.repository,()=>({async listRuns(){return [trace('ls')];}}));
+ await registerLangfuseImportWorker(next.queue,next.repository,()=>({async listTraces(){return [trace('lf')];}}));
+ await registerIronsideImportWorker(next.queue,next.repository,()=>({
+  async getContext(){return remote;},
+  async listTraces(){return {protocolVersion:'ironside/evaluator/v1',traces:[{traceId:'ir-worker',traceVersion:'2026-09-01T00:00:00.000Z',timestamp:'2026-09-01T00:00:00.000Z',name:null,userId:null,sessionId:null,environment:null,tags:[],metadata:{}}],hasMore:false,nextCursor:'cursor-worker'};},
+  async getTrace(id,traceVersion){return {id,traceVersion,timestamp:'2026-09-01T00:00:00.000Z',name:null,userId:null,sessionId:null,environment:null,release:null,version:null,tags:[],metadata:{},input:'plain question',output:'plain answer',observations:[]};}
+ }));
+ const evaluations=await registerEvalRunWorkers(next.queue,next.repository,new MockJudgeProvider());cleanup.push(()=>evaluations.stop());
+ await registerJudgeRunWorker(next.queue,next.repository,new MockJudgeProvider());
+ const deliveries:string[]=[];
+ const feedback=await registerFeedbackSyncWorker(next.queue,next.repository,context=>({async createFeedback(){deliveries.push(context.provider);}}));cleanup.push(()=>feedback.stop());
+ await next.queue.start();
+ await vi.waitFor(async()=>{
+  const jobs=await next.repository.listFeedbackSyncJobs({projectId:f.projectId,limit:10});expect(jobs).toHaveLength(3);expect(jobs.every(job=>job.status==='synced')).toBe(true);
+ },{timeout:10_000,interval:40});
+ expect(deliveries.sort()).toEqual(['ironside','langfuse','langsmith']);
+ expect((await next.repository.listImportJobs({projectId:f.projectId,limit:10})).map(job=>[job.status,job.importedCount,job.queuedJudgeCount])).toEqual(Array(3).fill(['completed',1,1]));
+ expect((await next.repository.listEvalRuns(f.projectId)).every(run=>run.status==='completed'&&run.skillVersionId===version)).toBe(true);
+ const local=await next.repository.importTrace(f.projectId,'manual',trace('direct'),{ingestionPurpose:'analysis_eligible_manual'});
+ const id=await next.queue.send('judge.run',{projectId:f.projectId,caseId:local.caseId,skillVersionId:version});
+ await vi.waitFor(async()=>expect(await next.queue.getJobState('judge.run',id!)).toBe('completed'),{timeout:5000,interval:40});
+ expect(await next.repository.listVerdicts({projectId:f.projectId,limit:10})).toHaveLength(4);
+ for(const poll of pollers)expect(await poll(next.repository,next.queue)).toEqual({claimed:0,queued:0});
 });

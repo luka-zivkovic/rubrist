@@ -1,5 +1,6 @@
+import type { ProductionDecisionRecordRepository } from '../../production-calibration/repository.js';
 import { sqliteRegressionService } from './regression-service.js';
-import { createStrictJudgeProvider, type JudgeProviderFactory } from '../../lib/judge-provider.js';
+import { createStrictJudgeProvider, JudgeProviderUnavailableError, type JudgeProviderFactory } from '../../lib/judge-provider.js';
 import { executionBindingFromInput } from '../../lib/execution-binding.js';
 import { RegressionGateUnavailableError } from '../../repository/errors.js';
 import type { CapabilityCheckStore } from '../../lib/capability-check-store.js';
@@ -9,11 +10,23 @@ import type { AccountServices } from '../../accounts/ports.js';
 import type { RubristRepository } from '../../repository.js';
 import { SqliteStorage } from './client.js';
 
-import { SqliteFeatureUnavailableError } from './feature-error.js';
 export { SqliteFeatureUnavailableError } from './feature-error.js';
-export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider) {
-  const storage = new SqliteStorage(path);
+export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
+  const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const productionRecords:ProductionDecisionRecordRepository={
+    appendRecords:(...args)=>storage.command('productionAppendRecords',...args),
+    loadRecords:(...args)=>storage.command('productionLoadRecords',...args),
+    saveSnapshot:(...args)=>storage.command('productionSaveSnapshot',...args),
+    listSnapshots:(...args)=>storage.command('productionListSnapshots',...args),
+    getSnapshot:(...args)=>storage.command('productionGetSnapshot',...args),
+    getRetentionDays:(...args)=>storage.command('productionGetRetentionDays',...args),
+    setRetentionDays:(...args)=>storage.command('productionSetRetentionDays',...args),
+    applyRetention:(...args)=>storage.command('productionApplyRetention',...args),
+    eraseDecision:(...args)=>storage.command('productionEraseDecision',...args),
+    purgeApiKeyRecords:(...args)=>storage.command('productionPurgeApiKeyRecords',...args),
+    deleteSnapshot:(...args)=>storage.command('productionDeleteSnapshot',...args),
+  };
   const capabilityChecks:CapabilityCheckStore={
     put:(entry)=>storage.command('capabilityCheckPut',entry),
     get:(...args)=>storage.command('capabilityCheckGet',...args)
@@ -63,7 +76,7 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
       const stored=executionBindingFromInput(input.executionBinding,undefined,{typedQuestion:input.typedQuestion!==undefined});
       const provider=stored.executionBinding.provider,supplied=context.agentSetup?.providerCredential;
       const key=supplied?.provider===provider?supplied.apiKey:provider!=='mock'?await storage.command('getJudgeProviderCredential',context.projectId,provider):null;
-      const judge=judgeProviderFactory({...stored,rubricMarkdown:input.rubricMarkdown??null,prompt:input.prompt??null,typedQuestion:input.typedQuestion??null,decisionThreshold:input.decisionThreshold??null},key?{apiKey:key}:undefined);
+      const judge=(()=>{try{return judgeProviderFactory({...stored,rubricMarkdown:input.rubricMarkdown??null,prompt:input.prompt??null,typedQuestion:input.typedQuestion??null,decisionThreshold:input.decisionThreshold??null},key?{apiKey:key}:undefined);}catch(error){if(error instanceof JudgeProviderUnavailableError)throw new RegressionGateUnavailableError(provider);throw error;}})();
       if(provider!=='mock'&&judge.name==='mock')throw new RegressionGateUnavailableError(provider);
       return storage.command('insertPendingSkillVersion',skillId,input,context);
     },
@@ -234,16 +247,7 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     listJudgeProviderKeys: (...args) => storage.command('listJudgeProviderKeys',...args),
     getJudgeProviderCredential: (...args) => storage.command('getJudgeProviderCredential',...args),
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
-  } satisfies Partial<RubristRepository>;
-  // The temporary staged adapter fails every unported method. Never
-  // extend DemoRepository or return fabricated project/evaluator evidence.
-  const repository = new Proxy(methods,{
-    get(target,key,receiver) {
-      if (Reflect.has(target,key)) return Reflect.get(target,key,receiver);
-      if (key === 'then') return undefined;
-      return async () => { throw new SqliteFeatureUnavailableError(); };
-    }
-  }) as RubristRepository;
-  Object.assign(methods,sqliteRegressionService(storage,repository,judgeProviderFactory));
-  return {storage,accounts,repository,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
+  const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
+  return {storage,accounts,repository,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

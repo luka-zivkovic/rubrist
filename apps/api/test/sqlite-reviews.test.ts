@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { createAuth } from '../src/lib/auth.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
@@ -33,6 +33,8 @@ describe('SQLite ungoverned review queues',()=>{
     expect(item).toMatchObject({skillVersionId:f.versionId,judgeRunId:f.judge.id,criterionVersionId:f.criterionVersionId});
     expect((await f.r.suggestReviewQueue(f.projectId,f.versionId,5)).items).toEqual([]);
     const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());
+    expect((await f.r.listReviewQueues(f.projectId)).map(row=>row.id)).toContain(q.id);
+    expect(await f.r.listReviewQueues('other')).toEqual([]);
     const input={projectId:f.projectId,caseId:f.trace.caseId,skillVersionId:f.versionId,source:'human' as const,actorUserId:f.user.id,payload:{kind:'binary' as const,pass:true,rationale:'Reviewed'},reviewContext:{queueItemId:item.id,judgeRunId:f.judge.id,submissionId:randomUUID()}};
     const rulings=await Promise.all([f.r.recordVerdict(input),peer.repository.recordVerdict(input)]);expect(rulings[0]).toEqual(rulings[1]);
     expect(rulings[0]?.reviewContext).toEqual(input.reviewContext);

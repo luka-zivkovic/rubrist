@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { createApp } from '../src/app.js';
 import { registerEvalRunWorkers, recoverStaleEvalRunItemExecutions } from '../src/workers/eval-run.js';
 import { MockJudgeProvider } from '@rubrist/audit/runtime';

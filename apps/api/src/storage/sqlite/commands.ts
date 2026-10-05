@@ -1,3 +1,5 @@
+import { seedSqliteStarterEvaluator } from './starter-evaluator.js';
+import { sqliteProductionCommands } from './production-commands.js';
 import { sqliteRegressionCommands } from './regression-commands.js';
 import { sqliteSkillCommands } from './skill-commands.js';
 import { sqliteHistoricalGateCommands } from './historical-gate-commands.js';
@@ -36,7 +38,7 @@ const now = () => new Date().toISOString();
 const future = (ms: number) => new Date(Date.now()+ms).toISOString();
 const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 
-export function sqliteCommands(db: DatabaseSync) {
+export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
   const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);
@@ -80,6 +82,7 @@ export function sqliteCommands(db: DatabaseSync) {
     const projectId = id('proj');
     run('INSERT INTO projects(id,organization_id,name,mode,created_at,updated_at) VALUES(?,?,?,?,?,?)',projectId,organizationId,input.name,input.mode ?? 'tracing',now(),now());
     run('INSERT INTO project_members VALUES(?,?,?,?,?)',id('projmem'),projectId,input.userId,role,now());
+    if(options.seedStarterEvaluators)seedSqliteStarterEvaluator(db,projectId,input.userId,input.mode??'tracing',now());
     const apiKey = input.apiKeyName ? insertKey({projectId,name:input.apiKeyName,createdByUserId:input.userId}) : undefined;
     return {organizationId,projectId,...(apiKey ? {apiKey} : {})};
   }
@@ -101,9 +104,9 @@ export function sqliteCommands(db: DatabaseSync) {
     },
     ensureWorkspaceForUser(input: Args<'ensureWorkspaceForUser'>[0]) {
       return transaction(() => {
-        const existing = one(`SELECT p.id,p.organization_id FROM projects p JOIN project_members pm ON pm.project_id=p.id
+        const existing = one(`SELECT p.id,p.organization_id,p.mode FROM projects p JOIN project_members pm ON pm.project_id=p.id
           WHERE pm.user_id=? ORDER BY p.created_at,p.id LIMIT 1`,input.userId);
-        if(existing) return {organizationId:String(existing.organization_id),projectId:String(existing.id)};
+        if(existing) {if(options.seedStarterEvaluators)seedSqliteStarterEvaluator(db,String(existing.id),input.userId,String(existing.mode),now());return {organizationId:String(existing.organization_id),projectId:String(existing.id)};}
         return createProject({...input,name:input.projectName?.trim() || 'Default Project'},input.owner ? 'owner':'member',true);
       });
     },
@@ -137,7 +140,9 @@ export function sqliteCommands(db: DatabaseSync) {
     pairingEligibility(projectId: string) {
       const row = one('SELECT imported_trace_count,setup_state FROM projects WHERE id=?',projectId);
       if (!row) return null;
-      return Number(row.imported_trace_count) > 0 ? 'project_not_empty' as const : row.setup_state === 'unconfigured' ? 'eligible' as const : 'project_already_configured' as const;
+      if(Number(row.imported_trace_count)>0)return 'project_not_empty' as const;
+      const skills=one('SELECT count(*) n,coalesce(sum(is_starter),0) starters FROM skills WHERE project_id=?',projectId)!;
+      return options.seedStarterEvaluators ? (Number(skills.n)===1&&Number(skills.starters)===1?'eligible' as const:'project_already_configured' as const) : row.setup_state==='unconfigured'?'eligible' as const:'project_already_configured' as const;
     },
     createAgentSetupPairing(input: Args<'createAgentSetupPairing'>[0]) {
       return transaction(() => {
@@ -208,7 +213,7 @@ export function sqliteCommands(db: DatabaseSync) {
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

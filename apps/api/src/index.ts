@@ -51,6 +51,8 @@ const analysisStudyRepository = pool ? new PgAnalysisStudyRepository(pool) : nul
 const analysisPromotionRepository = pool ? new PgAnalysisPromotionRepository(pool) : null;
 const evaluatorLifecycleRepository = pool ? new PgEvaluatorLifecycleRepository(pool) : null;
 const analysisMeasurementRepository = pool ? new PgAnalysisMeasurementRepository(pool) : null;
+const productionDecisionRecordRepository=sqlite?.productionRecords ?? (pool?new PgProductionDecisionRecordRepository(pool):null);
+const resolutionRepository=sqlite?.resolution ?? evaluatorLifecycleRepository;
 const queue = sqlite?.queue ?? (pool ? createQueue() : undefined);
 const pollers: Array<{ stop(): void | Promise<void> }> = [];
 
@@ -58,8 +60,8 @@ if (analysisStudyRepository) {
   pollers.push(await registerAnalysisStudyDeadlineCloser(analysisStudyRepository));
 }
 
-if (pool) {
-  pollers.push(registerProductionRetentionSweeper(new PgProductionDecisionRecordRepository(pool), {
+if (productionDecisionRecordRepository) {
+  pollers.push(registerProductionRetentionSweeper(productionDecisionRecordRepository, {
     intervalMs: parseProductionRetentionIntervalMs(process.env.PRODUCTION_RETENTION_INTERVAL_MS)
   }));
 }
@@ -72,24 +74,23 @@ if (queue) {
   // a deleted project key would otherwise degrade EVERY subsequent judge run
   // to the mock heuristic while still recording source=llm_judge.
   pollers.push(await registerEvalRunWorkers(queue, repository, createStrictJudgeProvider));
-  if (pool) {
   await registerJudgeRunWorker(queue, repository, createStrictJudgeProvider);
   // The gate worker needs no strict factory: runRegressionGateForVersion has
   // its own mock-degradation refusal (the original gate guard).
-  await registerGateRunWorker(queue, repository, evaluatorLifecycleRepository ? {
+  await registerGateRunWorker(queue, repository, resolutionRepository ? {
     // Resolution after save (ADR-0014 section 4): the gate worker confirms a
     // saved binding before its regression gate.
     resolveSaved: savedVersionResolver(
-      evaluatorLifecycleRepository,
+      resolutionRepository,
       bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider), {
-        ...(pool ? { checks: new PgCapabilityCheckStore(pool) } : {})
+        ...(sqlite ? {checks:sqlite.capabilityChecks} : pool ? { checks: new PgCapabilityCheckStore(pool) } : {})
       })
     )
   } : {});
   await registerLangSmithImportWorker(queue, repository);
   await registerLangfuseImportWorker(queue, repository);
   await registerIronsideImportWorker(queue, repository);
-  await registerFeedbackSyncWorker(queue, repository);
+  pollers.push(await registerFeedbackSyncWorker(queue, repository));
   if (binaryCalibrationRepository) {
     const binaryCalibrationOrchestrator = await registerBinaryCalibrationWorker(
       queue,
@@ -119,25 +120,25 @@ if (queue) {
     intervalMs: parseIronsidePollIntervalMs(process.env.IRONSIDE_POLL_INTERVAL_MS),
     importLimit: parseIronsidePollImportLimit(process.env.IRONSIDE_POLL_IMPORT_LIMIT)
   }));
-  }
 }
 
 const server = serve({
   fetch: createApp(repository, {
     auth,
     runtimeMode: config.kind === "demo" ? "demo" : "persistent",
-    ...(sqlite ? {accounts:sqlite.accounts,accountStage:true,capabilityChecks:sqlite.capabilityChecks} : {}),
+    ...(sqlite ? {accounts:sqlite.accounts,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
     queue,
     analysisStudyRepository,
     analysisPromotionRepository,
     evaluatorLifecycleRepository,
-    analysisMeasurementRepository
+    analysisMeasurementRepository,
+    productionDecisionRecordRepository
   }).fetch,
   port
 });
 
-console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite durable evaluation)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
+console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite ordinary workflows)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`Received ${signal}; shutting down Rubrist API`);

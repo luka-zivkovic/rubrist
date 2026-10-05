@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
 import { DatasetRevisionConflictError, SealedValidationUnavailableError } from '../src/repository/errors.js';

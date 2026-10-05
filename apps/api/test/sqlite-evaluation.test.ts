@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { EXECUTION_LEASE_MS } from '../src/storage/sqlite/eval-execution.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';

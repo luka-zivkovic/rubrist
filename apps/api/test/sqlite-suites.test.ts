@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
 import { EvaluatorSuiteBindingError, EvaluatorSuiteIdempotencyConflictError } from '../src/repository/errors.js';
@@ -46,6 +46,9 @@ describe('SQLite suites and comparison bindings',()=>{
       } finally { f.db.exec('ROLLBACK'); }
     }
     const next=await f.r.createEvaluatorSuiteManifest(f.projectId,{...input,suiteId:manifest.suiteId,idempotencyKey:'two'},{});expect(next.revision).toBe(2);
+    expect((await f.r.getEvaluatorSuite(f.projectId,manifest.suiteId))?.id).toBe(manifest.suiteId);
+    expect(await f.r.getEvaluatorSuite('other',manifest.suiteId)).toBeNull();
+    expect((await f.r.listEvaluatorSuiteManifests(f.projectId,manifest.suiteId)).map(row=>row.manifestId)).toEqual([next.manifestId,manifest.manifestId]);
     await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
     expect(await restarted.repository.getEvaluatorSuiteManifest(f.projectId,manifest.manifestId)).toEqual(manifest);
     expect(await restarted.repository.getEvaluatorSuiteManifest('other',manifest.manifestId)).toBeNull();

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { migrateSqlite, openSqlite } from '@rubrist/db/sqlite';
 import { storageConfig } from '../src/storage/config.js';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { createApp } from '../src/app.js';
 import { DemoRepository } from '../src/repository.js';
 

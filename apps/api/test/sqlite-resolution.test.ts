@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { capabilityCheckContext, CAPABILITY_CHECK_CARRY_MS, MemoryCapabilityCheckStore } from '../src/lib/capability-check-store.js';
 import { EvaluatorCallError } from '@rubrist/audit/runtime';
 import { resolveExecutionBinding, runCapabilityCheck } from '../src/lib/evaluator-resolution.js';

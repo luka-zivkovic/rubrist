@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { createAuth } from '../src/lib/auth.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';

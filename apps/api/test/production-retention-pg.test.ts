@@ -97,6 +97,9 @@ run("production record retention, erasure, and purges", () => {
   });
 
   it("deletes whole decisions received before the cutoff, orphans by their own receive time, and nothing newer", async () => {
+    // This suite owns its pool and uses sequential queries here. In a DST
+    // zone the exact 90*DAY_MS cutoff must still match UTC elapsed days.
+    await pool.query("set time zone 'Europe/Belgrade'");
     await append([decision("old"), outcome("orphan_old")]);
     await pause();
     const middle = new Date();
@@ -316,4 +319,26 @@ run("production record retention, erasure, and purges", () => {
     expect(await notRevoked.json()).toMatchObject({ code: "production_calibration_api_key_not_revoked" });
     expect((await send("owner", "DELETE", "/snapshots/pcs_missing")).status).toBe(404);
   });
+  it("uses elapsed days across a fixed summer-to-winter timezone transition",async()=>{
+    const projectId='proj_retention_dst';
+    await pool.query(`insert into projects(id,organization_id,name,trace_provider) values($1,'org_retention','DST fixture','manual')`,[projectId]);
+    await append([decision('dst')],{kind:'user',userId:OWNER_ID},projectId);
+    const received=new Date('2026-10-10T12:00:00.000Z');
+    const client=await pool.connect();
+    try {
+      await client.query('begin');
+      // Only this disposable fixture may move server receive time. Re-enable
+      // the append-only guard before invoking the actual repository command.
+      await client.query('alter table production_decision_records disable trigger production_decision_records_append_only');
+      await client.query('update production_decision_records set received_at=$1 where project_id=$2',[received.toISOString(),projectId]);
+      await client.query('alter table production_decision_records enable trigger production_decision_records_append_only');
+      await client.query('commit');
+      await client.query("set time zone 'Europe/Belgrade'");
+    } catch(error) {await client.query('rollback');throw error;} finally {client.release();}
+    const now=new Date(received.getTime()+90*DAY_MS+30*60_000);
+    const run=await repository.applyRetention(now);
+    expect(run.projects.find(project=>project.projectId===projectId)).toEqual({projectId,cutoff:new Date(received.getTime()+30*60_000).toISOString(),deleted:{decisions:1,actions:0,outcomes:0}});
+    expect(await ids(projectId)).toEqual([]);
+  });
+
 });

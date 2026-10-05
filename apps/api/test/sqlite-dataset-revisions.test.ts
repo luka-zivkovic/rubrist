@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
 import { DatasetRevisionConflictError, SealedValidationUnavailableError } from '../src/repository/errors.js';
@@ -49,6 +49,8 @@ describe('SQLite immutable dataset foundation',()=>{
     await expect(f.r.createDatasetRevision({...input,idempotencyKey:undefined,expectedParentRevisionId:'stale'})).rejects.toBeInstanceOf(DatasetRevisionConflictError);
     const reused=await f.r.createDatasetRevision({...input,idempotencyKey:undefined,reuseLatestContent:true});expect(reused.id).toBe(revision.id);
     const next=await f.r.createDatasetRevision({...input,idempotencyKey:undefined,expectedParentRevisionId:revision.id});expect(next.revisionNumber).toBe(2);expect(next.parentRevisionId).toBe(revision.id);
+    expect((await f.r.listDatasetRevisions(f.projectId,f.dataset.id)).map(row=>row.id)).toEqual([next.id,revision.id]);
+    expect(await f.r.listDatasetRevisions('other',f.dataset.id)).toEqual([]);
     f.db.prepare('DELETE FROM cases WHERE id=?').run(imported.items[0]!.caseId);
     await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
     expect(await restarted.repository.getDatasetRevisionDetail(f.projectId,revision.id)).toEqual(revision);

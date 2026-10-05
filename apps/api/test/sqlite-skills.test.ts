@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema, CreateSkillVersionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { createAuth } from '../src/lib/auth.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
@@ -109,6 +109,7 @@ it('runs one regression across overlapping deliveries and atomically retains its
  const factory=()=>Object.assign(new MockJudgeProvider(),{async judge(){calls++;await new Promise(resolve=>setTimeout(resolve,30));return {label:'pass' as const,score:1,confidence:1,reason:'Pass'};}});
  const a=await createSqliteRuntime(f.path,factory),b=await createSqliteRuntime(f.path,factory);cleanup.push(()=>a.close(),()=>b.close());
  const [first,second]=await Promise.all([a.repository.runRegressionGateForVersion(job),b.repository.runRegressionGateForVersion(job)]);
+ expect(await f.r.listRegressionRunsForVersions(f.projectId,[job.skillVersionId])).toEqual([first.regressionRun]);
  expect(calls).toBe(1);expect(first).toEqual(second);expect(first.version.status).toBe('approved');expect(first.regressionRun).toMatchObject({status:'passed',compared:1});
  expect(f.db.prepare("SELECT count(*) n FROM dataset_exposure_events WHERE evidence_ref_kind='regression_run'").get()?.n).toBe(1);
  expect(f.db.prepare("SELECT count(*) n FROM evaluator_execution_authorizations WHERE execution_context='candidate_regression_evidence'").get()?.n).toBe(1);
@@ -170,4 +171,12 @@ it.each(['dispatch','finalize'])('recovers a regression after SIGKILL at %s with
  expect(await restarted.repository.runRegressionGateForVersion(job)).toEqual(result);expect(calls).toBe(1);
  expect(f.db.prepare('SELECT uncertain_epochs FROM regression_gate_attempts WHERE skill_version_id=?').get(job.skillVersionId)?.uncertain_epochs).toBe(1);
  expect(f.db.prepare('SELECT count(*) n FROM regression_runs WHERE skill_version_id=?').get(job.skillVersionId)?.n).toBe(1);
+});
+
+it('runs synchronous editing through the same retained regression and tenant checks',async()=>{
+ const f=await fixture(),skill=(await f.r.getCurrentSkill(f.projectId)).id;
+ const result=await f.r.createSkillVersion(skill,edit,{projectId:f.projectId});
+ expect(result.version.status).toBe('approved');expect(result.regressionRun.goldenSetMissing).toBe(true);
+ expect(await f.r.getRegressionRunForVersion(f.projectId,result.version.id)).toEqual(result.regressionRun);
+ expect(await f.r.listRegressionRunsForVersions('other',[result.version.id])).toEqual([]);
 });

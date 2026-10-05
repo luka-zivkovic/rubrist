@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
 import { RecursiveTraceSkippedError } from '../src/repository/errors.js';
 import { REDACTED_VALUE, EXCLUDED_VALUE } from '../src/lib/redaction.js';

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { createAuth } from '../src/lib/auth.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
@@ -28,6 +28,9 @@ async function fixture() {
 
 it('projects customer-only onboarding and dashboard evidence with criterion-scoped exceptions',async()=>{
  const f=await fixture();
+ const projects=await f.r.listProjects(f.user.id);expect(projects.map(project=>project.id)).toEqual([f.projectId]);
+ expect((await f.r.getProjectSettings(f.projectId)).projectId).toBe(f.projectId);
+ expect((await f.r.getExceptionDetail(f.projectId,f.trace.caseId,f.versionId)).exception.id).toBe(f.trace.caseId);
  const first=await f.r.getDashboardSummary(f.projectId);expect(first).toMatchObject({currentVersionResultCount:1,verdictDistribution:{pass:0,fail:1,ambiguous:0},exceptionsTotal:1,goldenSetSize:0});expect(first.exceptions[0]?.id).toBeDefined();
  await f.r.importTrace(f.projectId,'manual',{input:null,output:null,steps:[{input:'step',output:'answer'}],metadata:{origin:'synthetic'}},{ingestionPurpose:'dataset_example'});
  await f.r.importTrace(f.projectId,'release_evidence',{input:'release',output:'evidence',metadata:{}},{ingestionPurpose:'release_evidence'});
@@ -78,4 +81,19 @@ it('persists historical compatibility records against exact evaluation and golde
  expect(await f.r.getGateCheckDetail(f.projectId,history.id)).toEqual(history);expect(await f.r.getGateCheckDetail('other',history.id)).toBeNull();expect(await f.r.listGateChecks(f.projectId)).toHaveLength(1);
  await expect(f.r.createGateCheck({...input,items:[{...input.items[0]!,candidateCaseId:f.trace.caseId}]})).rejects.toThrow(/binding/);expect(await f.r.listGateChecks(f.projectId)).toHaveLength(1);
  await f.r.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+});
+
+it('isolates API keys and encrypted provider credentials and applies revocation immediately',async()=>{
+ const f=await fixture(),key=await f.r.createApiKey({projectId:f.projectId,name:'Synthetic',capability:'judge'});
+ expect(await f.r.resolveApiKey(key.key)).toMatchObject({projectId:f.projectId,capability:'judge'});
+ expect(JSON.stringify(await f.r.listApiKeys(f.projectId))).not.toContain(key.key);
+ expect(await f.r.listApiKeys('other')).toEqual([]);
+ expect(await f.r.revokeApiKey('other',key.id)).toBe(false);
+ expect(await f.r.revokeApiKey(f.projectId,key.id)).toBe(true);expect(await f.r.resolveApiKey(key.key)).toBeNull();
+ await f.r.setJudgeProviderKey(f.projectId,'openai','synthetic-provider-secret',f.user.id);
+ expect(await f.r.getJudgeProviderCredential(f.projectId,'openai')).toBe('synthetic-provider-secret');
+ expect(await f.r.getJudgeProviderCredential('other','openai')).toBeNull();
+ expect(JSON.stringify(await f.r.listJudgeProviderKeys(f.projectId))).not.toContain('synthetic-provider-secret');
+ expect(await f.r.deleteJudgeProviderKey('other','openai')).toBe(false);
+ expect(await f.r.deleteJudgeProviderKey(f.projectId,'openai')).toBe(true);expect(await f.r.getJudgeProviderCredential(f.projectId,'openai')).toBeNull();
 });

@@ -66,6 +66,16 @@ runPgSmoke("PgRepository smoke", () => {
         datasetRevisionId: doomed.regressionDatasetRevisionId!,
         timeScope: "new" as const
       };
+      const executionOwner = await pool.connect();
+      try {
+        await executionOwner.query(`select pg_advisory_lock(hashtextextended($1, 0))`, [`candidate-regression:proj_test:${doomed.id}`]);
+        await expect(repo.failRegressionGateForVersion(doomedJob,new Error('overlapping queue finalizer'))).rejects.toThrow(/still owned/);
+        expect((await repo.getSkillVersion('proj_test',doomed.id))?.status).toBe('calibrating');
+        expect(await repo.getRegressionRunForVersion('proj_test',doomed.id)).toBeNull();
+      } finally {
+        await executionOwner.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [`candidate-regression:proj_test:${doomed.id}`]);
+        executionOwner.release();
+      }
       await repo.failRegressionGateForVersion(
         doomedJob,
         new Error("provider timed out")

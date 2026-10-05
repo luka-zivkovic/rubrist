@@ -247,7 +247,7 @@ async function resolveCandidateBinding(
  * every governed gate, so neither is probed.
  */
 export function savedVersionResolver(
-  repository: EvaluatorLifecycleRepository,
+  repository: Pick<EvaluatorLifecycleRepository, 'getGovernedBinding' | 'recordResolution'>,
   services: BindingResolutionServices
 ): (job: { projectId: string; skillVersionId: string }) => Promise<void> {
   return async ({ projectId, skillVersionId }) => {
