@@ -2,6 +2,10 @@ import { EvaluatorCallError } from "@rubrist/audit/runtime";
 import { ExecutionBindingInputError } from "./lib/execution-binding.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
+import type { AccountServices } from "./accounts/ports.js";
+import { createPgAccountServices } from "./accounts/postgres.js";
+import type { RuntimeMode } from "./storage/config.js";
+import { SqliteFeatureUnavailableError } from "./storage/sqlite/runtime.js";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
@@ -28,14 +32,7 @@ import {
 } from "./repository.js";
 import type { RubristAuth } from "./lib/auth.js";
 import {
-  createInvitation,
-  ensureWorkspaceForUser,
-  firstProjectForUser,
   parseTrustedOrigins,
-  redeemInvitation,
-  resolveAgentSetupPairing,
-  setupRequired,
-  userProjectRole
 } from "./lib/auth.js";
 import type { LangSmithTraceFetcher } from "./lib/langsmith.js";
 import type { LangfuseTraceFetcher } from "./lib/langfuse.js";
@@ -191,7 +188,10 @@ export function bootstrapRateLimitIdentity(c: Context): string {
 
 export interface CreateAppOptions {
   auth?: RubristAuth | undefined;
-  pool?: Pool | undefined;
+  pool?: Pool | undefined; // PostgreSQL composition compatibility only.
+  accounts?: AccountServices | undefined;
+  runtimeMode?: RuntimeMode | undefined;
+  accountStage?: boolean | undefined;
   queue?: Queue | undefined;
   langSmithClientFactory?: ((context: LangSmithImportContext) => LangSmithTraceFetcher) | undefined;
   langfuseClientFactory?: ((context: LangfuseImportContext) => LangfuseTraceFetcher) | undefined;
@@ -211,6 +211,10 @@ export interface CreateAppOptions {
 }
 
 export function createApp(repository: RubristRepository = new DemoRepository(), options: CreateAppOptions = {}) {
+  const accounts = options.accounts ?? (options.pool ? createPgAccountServices(options.pool) : undefined);
+  const persistent = (options.runtimeMode ?? (accounts ? 'persistent' : 'demo')) === 'persistent';
+  if (persistent && (!accounts || !options.auth)) throw new Error('Persistent runtime requires authentication and account services');
+  if (!persistent && (accounts || options.auth)) throw new Error('Demo runtime cannot contain persistent authentication services');
   const app = new Hono<{ Variables: AppVariables }>();
   const trustedOrigins = parseTrustedOrigins(process.env.TRUSTED_ORIGINS);
   const governedReviewRepository = options.governedReviewRepository === undefined
@@ -239,9 +243,9 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     : options.productionDecisionRecordRepository;
   const requestServices = createRequestServices({
     repository,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     ...(options.queue ? { queue: options.queue } : {}),
-    ownerAuthorizationEnabled: Boolean(options.auth && options.pool),
+    ownerAuthorizationEnabled: persistent,
     rateLimitPerMinute: JUDGE_RATE_LIMIT_PER_MINUTE,
     batchMaxItems: JUDGE_BATCH_MAX_ITEMS,
     ingestRecordsPerMinute: PRODUCTION_INGEST_RECORDS_PER_MINUTE
@@ -275,7 +279,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   );
 
   app.use("*", async (c, next) => {
-    if (!options.auth) {
+    if (!persistent) {
       c.set("user", null);
       c.set("session", null);
       c.set("projectId", "proj_langsmith_support");
@@ -283,7 +287,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
       return;
     }
 
-    const session = await options.auth.api.getSession({ headers: c.req.raw.headers });
+    const session = await options.auth!.api.getSession({ headers: c.req.raw.headers });
     c.set("user", session?.user ? { id: session.user.id, email: session.user.email, name: session.user.name } : null);
     c.set("session", session?.session ?? null);
     await next();
@@ -294,14 +298,13 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   });
 
   app.get("/api/auth/setup-required", async (c) => {
-    if (!options.pool || !options.auth) return c.json({ setupRequired: false, authEnabled: false });
-    return c.json({ setupRequired: await setupRequired(options.pool), authEnabled: true });
+    if (!persistent) return c.json({ setupRequired: false, authEnabled: false });
+    return c.json({ setupRequired: await accounts!.setupRequired(), authEnabled: true });
   });
 
   app.post("/api/auth/setup", async (c) => {
     c.header("cache-control", "no-store");
-    if (!options.pool || !options.auth) return c.json({ error: "Auth is not enabled" }, 400);
-    if (!(await setupRequired(options.pool))) return c.json({ error: "Setup already completed" }, 409);
+    if (!persistent) return c.json({ error: "Auth is not enabled" }, 400);
     const body = await c.req.json().catch(() => null);
     const parsed = z.object({
       email: z.string().email(),
@@ -311,52 +314,73 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
       mode: ProjectModeSchema.optional()
     }).safeParse(body);
     if (!parsed.success) return c.json({ error: "Invalid setup input", details: z.treeifyError(parsed.error) }, 400);
+    return accounts!.withSetupLock(async () => {
+      if (!(await accounts!.setupRequired())) return c.json({ error: "Setup already completed" }, 409);
 
-    // returnHeaders: signUpEmail auto-signs-in (autoSignIn: true) and emits
-    // the session cookie — forward it so the new owner lands in the app
-    // instead of being bounced to the login form to re-type credentials.
-    const { headers, response: result } = await options.auth.api.signUpEmail({
-      returnHeaders: true,
-      body: {
+      // returnHeaders: signUpEmail auto-signs-in (autoSignIn: true) and emits
+      // the session cookie — forward it so the new owner lands in the app
+      // instead of being bounced to the login form to re-type credentials.
+      const { headers, response: result } = await options.auth!.api.signUpEmail({
+        returnHeaders: true,
+        body: {
+          email: parsed.data.email,
+          password: parsed.data.password,
+          name: parsed.data.name ?? parsed.data.email
+        }
+      }) as { headers: Headers; response: { user?: { id: string; email: string } } };
+      if (!result.user?.id) return c.json({ error: "User creation failed" }, 500);
+      const workspace = await accounts!.ensureWorkspaceForUser({
+        userId: result.user.id,
         email: parsed.data.email,
-        password: parsed.data.password,
-        name: parsed.data.name ?? parsed.data.email
+        owner: true,
+        apiKeyName: FIRST_PROJECT_KEY_NAME,
+        ...(parsed.data.projectName ? { projectName: parsed.data.projectName } : {}),
+        ...(parsed.data.mode ? { mode: parsed.data.mode } : {})
+      });
+      for (const cookie of headers.getSetCookie?.() ?? []) {
+        c.header("set-cookie", cookie, { append: true });
       }
-    }) as { headers: Headers; response: { user?: { id: string; email: string } } };
-    if (!result.user?.id) return c.json({ error: "User creation failed" }, 500);
-    const workspace = await ensureWorkspaceForUser(options.pool, {
-      userId: result.user.id,
-      email: parsed.data.email,
-      owner: true,
-      apiKeyName: FIRST_PROJECT_KEY_NAME,
-      ...(parsed.data.projectName ? { projectName: parsed.data.projectName } : {}),
-      ...(parsed.data.mode ? { mode: parsed.data.mode } : {})
+      return c.json({ ok: true, projectId: workspace.projectId, apiKey: workspace.apiKey });
     });
-    for (const cookie of headers.getSetCookie?.() ?? []) {
-      c.header("set-cookie", cookie, { append: true });
-    }
-    return c.json({ ok: true, projectId: workspace.projectId, apiKey: workspace.apiKey });
   });
 
   app.post("/api/auth/redeem-invite", async (c) => {
-    if (!options.pool || !options.auth) return c.json({ error: "Auth is not enabled" }, 400);
+    c.header("cache-control", "no-store");
+    if (!persistent) return c.json({ error: "Auth is not enabled" }, 400);
     const body = await c.req.json().catch(() => null);
     const parsed = z.object({ token: z.string().min(8), email: z.string().email(), password: z.string().min(8), name: z.string().min(1).optional() }).safeParse(body);
     if (!parsed.success) return c.json({ error: "Invalid invite redemption input", details: z.treeifyError(parsed.error) }, 400);
 
+    if (!(await accounts!.validateInvitation(parsed.data.token, parsed.data.email))) {
+      return c.json({ error: "Invalid or expired invite token" }, 400);
+    }
+
     // Same auto-signin cookie forwarding as /api/auth/setup: the invited
     // member should land in the app, not on the login form re-typing the
     // credentials they just chose.
-    const { headers, response: result } = await options.auth.api.signUpEmail({
-      returnHeaders: true,
-      body: {
-        email: parsed.data.email,
-        password: parsed.data.password,
-        name: parsed.data.name ?? parsed.data.email
+    let authenticated: { headers: Headers; response: { user?: { id: string; email: string } } };
+    try {
+      authenticated = await options.auth!.api.signUpEmail({
+        returnHeaders: true,
+        body: { email: parsed.data.email, password: parsed.data.password, name: parsed.data.name ?? parsed.data.email }
+      });
+    } catch (error) {
+      // Signup may have committed before an earlier redemption failed. Prove
+      // ownership of that account with its existing password before retrying;
+      // neither an invitation nor an email match can take over an account.
+      if ((error as { body?: { code?: string } }).body?.code !== "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") throw error;
+      try {
+        authenticated = await options.auth!.api.signInEmail({
+          returnHeaders: true, body: { email: parsed.data.email, password: parsed.data.password }
+        });
+      } catch (loginError) {
+        if ((loginError as { statusCode?: number }).statusCode !== 401) throw loginError;
+        return c.json({ error: "Sign in with this account's existing password to accept the invitation" }, 401);
       }
-    }) as { headers: Headers; response: { user?: { id: string; email: string } } };
+    }
+    const { headers, response: result } = authenticated;
     if (!result.user?.id) return c.json({ error: "User creation failed" }, 500);
-    await redeemInvitation(options.pool, { token: parsed.data.token, userId: result.user.id });
+    await accounts!.redeemInvitation({ token: parsed.data.token, userId: result.user.id });
     for (const cookie of headers.getSetCookie?.() ?? []) {
       c.header("set-cookie", cookie, { append: true });
     }
@@ -434,7 +458,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   app.use("/api/v1/*", async (c, next) => {
     const ownerWrite = isOwnerSessionContractWrite(c.req.method, c.req.path);
     const ownerArtifactRead = isOwnerSessionArtifactRoute(c.req.path);
-    if (options.auth && options.pool && isSessionContractRoute(c.req.path) &&
+    if (persistent && isSessionContractRoute(c.req.path) &&
       (c.get("user") || ownerWrite || ownerArtifactRead)) {
       const user = c.get("user");
       if (!user) {
@@ -450,9 +474,9 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
         }, 403);
       }
       const requestedProject = c.req.header("x-rubrist-project");
-      const projectId = requestedProject ?? await firstProjectForUser(options.pool, user.id);
+      const projectId = requestedProject ?? await accounts!.firstProjectForUser(user.id);
       if (!projectId) return c.json({ error: "No project membership" }, 403);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId });
+      const role = await accounts!.userProjectRole({ userId: user.id, projectId });
       if (!role) return c.json({ error: "Not a member of this project" }, 403);
       if (ownerArtifactRead && role !== "owner") {
         return c.json({
@@ -470,10 +494,10 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     const header = c.req.header("authorization") ?? "";
     const token = /^bearer\s+/i.test(header) ? header.replace(/^bearer\s+/i, "").trim() : "";
     if (c.req.path === "/api/v1/bootstrap") {
-      // Pool-less mode can never bootstrap: say so BEFORE token dispatch, or a
+      // Demo mode can never bootstrap: say so BEFORE token dispatch, or a
       // pairing token gets a misleading 401 that tells the user to regenerate
       // connections that can never work.
-      if (!options.pool || !options.auth) {
+      if (!persistent) {
         return c.json({
           error: "Agent bootstrap requires database-backed auth mode.",
           code: "bootstrap_requires_auth"
@@ -491,7 +515,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
         }, 429);
       }
       if (token.startsWith("rubrist_pair_")) {
-        const pairing = await resolveAgentSetupPairing(options.pool, token);
+        const pairing = await accounts!.resolveAgentSetupPairing(token);
         if (!pairing) {
           return c.json({
             error: "This agent setup connection is invalid, expired, already used, or revoked.",
@@ -560,7 +584,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
       await next();
       return;
     }
-    if (!options.auth || !options.pool) {
+    if (!persistent) {
       c.set("projectId", "proj_langsmith_support");
       await next();
       return;
@@ -588,16 +612,28 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     // membership is checked, not trusted. No header = oldest membership.
     const requestedProject = c.req.header("x-rubrist-project");
     if (requestedProject) {
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: requestedProject });
+      const role = await accounts!.userProjectRole({ userId: user.id, projectId: requestedProject });
       if (!role) return c.json({ error: "Not a member of this project" }, 403);
       c.set("projectId", requestedProject);
       await next();
       return;
     }
-    const projectId = await firstProjectForUser(options.pool, user.id);
+    const projectId = await accounts!.firstProjectForUser(user.id);
     if (!projectId) return c.json({ error: "No project membership" }, 403);
     c.set("projectId", projectId);
     await next();
+  });
+
+  // Explicit staging boundary until evaluator/job ports land. Authentication
+  // and project membership ran first; no unavailable route can perform work.
+  if (options.accountStage) app.use("/api/*", async (c,next) => {
+    const path=c.req.path;
+    if (path === '/api/projects' || path === '/api/project/settings' || path === '/api/project' ||
+      path === '/api/api-keys' || path.startsWith('/api/api-keys/') ||
+      path === '/api/judge-keys' || path.startsWith('/api/judge-keys/') ||
+      path === '/api/judge/providers' || path === '/api/users/invite' ||
+      path === '/api/agent-setup/pairings' || path.startsWith('/api/agent-setup/pairings/')) return next();
+    return c.json({error:'This workflow is not yet available in the SQLite account-stage runtime.',code:'sqlite_feature_unavailable'},503);
   });
 
   // Governed human truth is a session-only, database-backed module. It is
@@ -605,15 +641,15 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // never falls through to DemoRepository or the API-keyed /api/v1 surface.
   app.route("/api/governed-review", createGovernedReviewRouter({
     repository: governedReviewRepository,
-    authMode: Boolean(options.auth && options.pool),
+    authMode: persistent,
     requestIdentity: (c) => ({
       userId: c.get("user")?.id ?? null,
       projectId: c.get("projectId") ?? "",
       ...(c.get("apiKeyId") ? { apiKeyId: c.get("apiKeyId") } : {})
     }),
     resolveProjectRole: async ({ projectId, userId }) => {
-      if (!options.pool) return null;
-      const role = await userProjectRole(options.pool, { projectId, userId });
+      if (!accounts) return null;
+      const role = await accounts!.userProjectRole({ projectId, userId });
       return role === "owner" || role === "member" ? role : null;
     }
   }));
@@ -630,8 +666,8 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     projectId: string;
     userId: string;
   }) => {
-    if (!options.pool) return null;
-    const role = await userProjectRole(options.pool, { projectId, userId });
+    if (!accounts) return null;
+    const role = await accounts!.userProjectRole({ projectId, userId });
     return role === "owner" || role === "member" ? role : null;
   };
 
@@ -645,14 +681,14 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     });
   app.route("/api/binary-calibration-runs", createBinaryCalibrationControlRouter({
     repository: binaryCalibrationRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole,
     bindingResolution
   }));
   app.route("/api/v1/binary-calibration-artifacts", createBinaryCalibrationArtifactRouter({
     repository: binaryCalibrationRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
@@ -662,31 +698,31 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // not representative evidence until later governed coding completes.
   app.route("/api/analysis-populations", createAnalysisPopulationRouter({
     repository: analysisPopulationRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
   app.route("/api/analysis-studies", createAnalysisStudyRouter({
     repository: analysisStudyRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
   app.route("/api/analysis-taxonomies", createAnalysisTaxonomyRouter({
     repository: analysisStudyRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
   app.route("/api/analysis-promotions", createAnalysisPromotionRouter({
     repository: analysisPromotionRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
   app.route("/api/evaluator-lifecycles", createEvaluatorLifecycleRouter({
     repository: evaluatorLifecycleRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole,
     bindingResolution,
@@ -702,7 +738,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   }));
   app.route("/api/analysis-measurements", createAnalysisMeasurementRouter({
     repository: analysisMeasurementRepository,
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole
   }));
@@ -711,7 +747,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // session-only membership boundary and keep their own body ceiling inside
   // the router.
   app.route("/api/production-calibration", createProductionCalibrationRouter({
-    databaseMode: Boolean(options.auth && options.pool),
+    databaseMode: persistent,
     requestIdentity: binaryCalibrationIdentity,
     resolveProjectRole: resolveBinaryCalibrationRole,
     repository: productionDecisionRecordRepository,
@@ -727,7 +763,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
 
   registerProjectAdministrationRoutes(app, {
     repository,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     requestServices,
     publicApiBaseUrl,
     bindingResolution
@@ -735,22 +771,22 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
 
   registerSkillAdministrationRoutes(app, {
     repository,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     ...(options.queue ? { queue: options.queue } : {}),
     requestServices
   });
 
   app.post("/api/users/invite", async (c) => {
-    if (!options.pool) return c.json({ error: "Auth is not enabled" }, 400);
+    if (!accounts) return c.json({ error: "Auth is not enabled" }, 400);
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
     const projectId = c.get("projectId");
-    const role = await userProjectRole(options.pool, { userId: user.id, projectId });
+    const role = await accounts!.userProjectRole({ userId: user.id, projectId });
     if (role !== "owner") return c.json({ error: "Only owners can invite users" }, 403);
     const body = await c.req.json().catch(() => null);
     const parsed = z.object({ email: z.string().email(), role: z.enum(["member", "owner"]).default("member") }).safeParse(body);
     if (!parsed.success) return c.json({ error: "Invalid invite input", details: z.treeifyError(parsed.error) }, 400);
-    const invite = await createInvitation(options.pool, { email: parsed.data.email, role: parsed.data.role, invitedByUserId: user.id, projectId });
+    const invite = await accounts!.createInvitation({ email: parsed.data.email, role: parsed.data.role, invitedByUserId: user.id, projectId });
     return c.json(invite, 201);
   });
 
@@ -834,14 +870,14 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   registerV1AgentAdministrationRoutes(app, {
     repository,
     ...(options.auth ? { auth: options.auth } : {}),
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     publicApiBaseUrl
   });
 
   registerV1EvaluationAdministrationRoutes(app, {
     repository,
     requestServices,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     judgeTimeoutMs: JUDGE_TIMEOUT_MS,
     judgeBatchMaxItems: JUDGE_BATCH_MAX_ITEMS,
     judgeBatchMaxBodyBytes: JUDGE_BATCH_MAX_BODY_BYTES,
@@ -851,6 +887,8 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // BYO judge provider keys. The raw key is accepted once and never
   // returned; list responses carry only the masked display form.
   app.get("/api/judge-keys", async (c) => {
+    const denied = await requireOwner(c, "view judge provider keys");
+    if (denied) return denied;
     return c.json({ keys: await repository.listJudgeProviderKeys(c.get("projectId")) });
   });
 
@@ -884,20 +922,20 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   });
 
   app.get("/api/api-keys", async (c) => {
-    if (options.auth && options.pool) {
+    if (persistent) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts!.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can view API keys" }, 403);
     }
     return c.json({ apiKeys: await repository.listApiKeys(c.get("projectId")) });
   });
 
   app.post("/api/api-keys", async (c) => {
-    if (options.auth && options.pool) {
+    if (persistent) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts!.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can mint API keys" }, 403);
     }
     const body = await c.req.json().catch(() => null);
@@ -916,10 +954,10 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   });
 
   app.delete("/api/api-keys/:apiKeyId", async (c) => {
-    if (options.auth && options.pool) {
+    if (persistent) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts!.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can revoke API keys" }, 403);
     }
     const revoked = await repository.revokeApiKey(c.get("projectId"), c.req.param("apiKeyId"));
@@ -930,7 +968,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   registerTraceTestAdministrationRoutes(app, {
     repository,
     requestServices,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     ...(options.traceTestDraftGenerator ? { traceTestDraftGenerator: options.traceTestDraftGenerator } : {}),
     ...(options.traceTestValidationRunner ? { traceTestValidationRunner: options.traceTestValidationRunner } : {}),
     judgeRateLimitPerMinute: JUDGE_RATE_LIMIT_PER_MINUTE,
@@ -967,7 +1005,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     repository,
     requestServices,
     ...(options.auth ? { auth: options.auth } : {}),
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(accounts ? { accounts } : {}),
     ...(options.queue ? { queue: options.queue } : {}),
     ...(options.langSmithClientFactory ? { langSmithClientFactory: options.langSmithClientFactory } : {}),
     ...(options.langfuseClientFactory ? { langfuseClientFactory: options.langfuseClientFactory } : {}),
@@ -976,17 +1014,18 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
 
   registerTraceLinkRoutes(app, {
     repository,
-    authMode: Boolean(options.auth && options.pool)
+    authMode: persistent
   });
 
   registerLegacyEvidenceAdministrationRoutes(app, {
     repository,
-    ...(options.pool ? { pool: options.pool } : {})
+    ...(accounts ? { accounts } : {})
   });
 
   app.notFound((c) => c.json({ error: "Not found" }, 404));
 
   app.onError((error, c) => {
+    if (error instanceof SqliteFeatureUnavailableError) return c.json({error:error.message,code:"sqlite_feature_unavailable"},503);
     if (error instanceof ExecutionBindingInputError) return c.json({ error: `Invalid execution binding: ${error.message}` }, 400);
     if (error instanceof EvaluatorCallError) {
       return c.json({ error: `The judge provider call failed: ${error.message}`, failureKind: error.failureKind }, 502);

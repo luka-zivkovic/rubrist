@@ -1,3 +1,5 @@
+import type { AccountServices } from "../src/accounts/ports.js";
+import { createPgAccountServices } from "../src/accounts/postgres.js";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
@@ -8,7 +10,7 @@ const fakeAuth = {
   handler: async () => new Response(null, { status: 404 })
 } as unknown as RubristAuth;
 
-function routeManifest(options: { auth?: RubristAuth; pool?: Pool } = {}): string[] {
+function routeManifest(options: { auth?: RubristAuth; pool?: Pool; accounts?: AccountServices } = {}): string[] {
   const app = createApp(undefined, options);
   return app.routes.map(({ method, path }) => `${method} ${path}`);
 }
@@ -32,7 +34,7 @@ describe("app route registration contract", () => {
 
   it("pins readable demo and auth-enabled route manifests", () => {
     const demo = routeManifest();
-    const authenticated = routeManifest({ auth: fakeAuth });
+    const authenticated = routeManifest({ auth: fakeAuth, accounts:createPgAccountServices({} as Pool) });
     const authenticatedWithPool = routeManifest({ auth: fakeAuth, pool: {} as Pool });
 
     expect(demo).toHaveLength(244);
@@ -41,13 +43,13 @@ describe("app route registration contract", () => {
     expect(demo).toMatchSnapshot("demo route manifest");
     expect(authenticated).toHaveLength(246);
     expect(authenticated).toMatchSnapshot("authenticated route manifest");
-    // Pool-backed auth changes runtime behavior, but not route registration.
+    // Legacy PG composition and injected accounts register the same routes.
     // Real auth behavior is characterized in pg-auth.test.ts.
     expect(authenticatedWithPool).toEqual(authenticated);
   });
 
   it("keeps public routes, body limits, auth, and project resolution in fail-closed order", () => {
-    const routes = routeManifest({ auth: fakeAuth });
+    const routes = routeManifest({ auth: fakeAuth, accounts:createPgAccountServices({} as Pool) });
     expect(routes.slice(0, 18)).toEqual([
       "ALL /*",
       "ALL /*",
@@ -75,7 +77,7 @@ describe("app route registration contract", () => {
     vi.stubEnv("JUDGE_MAX_BODY_BYTES", "1024");
     vi.resetModules();
     const { createApp: createAppWithPinnedLimit } = await import("../src/app.js");
-    const app = createAppWithPinnedLimit(undefined, { auth: fakeAuth });
+    const app = createAppWithPinnedLimit(undefined, { auth: fakeAuth, accounts:createPgAccountServices({} as Pool) });
     const response = await app.request("/api/v1/judge", {
       method: "POST",
       headers: { "content-type": "application/json" },

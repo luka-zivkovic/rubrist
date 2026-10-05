@@ -1,3 +1,4 @@
+import { createPgAccountServices } from "../src/accounts/postgres.js";
 import { describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { Hono } from "hono";
@@ -208,7 +209,7 @@ describe("request services", () => {
     });
     const databaseServices = createRequestServices({
       repository,
-      pool: {} as Pool,
+      accounts: createPgAccountServices({} as Pool),
       ownerAuthorizationEnabled: false,
       rateLimitPerMinute: 60,
       batchMaxItems: 100
@@ -333,7 +334,7 @@ describe("request services", () => {
       } as unknown as Pool;
       const services = createRequestServices({
         repository: new DemoRepository(),
-        pool,
+        accounts: createPgAccountServices(pool),
         ownerAuthorizationEnabled: input.enabled,
         rateLimitPerMinute: 60,
         batchMaxItems: 100

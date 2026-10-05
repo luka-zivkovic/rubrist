@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -36,7 +36,7 @@ type V1EvaluationAdministrationApp = Hono<{ Variables: AppVariables }>;
 export interface V1EvaluationAdministrationRouteOptions {
   repository: RubristRepository;
   requestServices: RequestServices;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   judgeTimeoutMs: number;
   judgeBatchMaxItems: number;
   judgeBatchMaxBodyBytes: number;
@@ -132,7 +132,7 @@ export function registerV1EvaluationAdministrationRoutes(
         judgeAndRecord(
           repository,
           { projectId, caseId: imported.caseId, skillVersionId },
-          ...(options.pool ? [createStrictJudgeProvider] as const : [])
+          ...(options.accounts ? [createStrictJudgeProvider] as const : [])
         ),
         new Promise<typeof timedOut>((resolve) => {
           timeoutHandle = setTimeout(() => resolve(timedOut), JUDGE_TIMEOUT_MS);

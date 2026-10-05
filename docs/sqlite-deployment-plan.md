@@ -2,9 +2,10 @@
 
 Prepared on 2026-10-04 for implementation in a separate session.
 
-Status: Milestone 0 implementation checkpoint (2026-10-05). The user agreed to
-two fixed deployment options for the same application. Isolated SQLite integrity
-and recovery prototypes are implemented; persistent application support is not. This document
+Status: Milestone 1 account-stage implementation checkpoint (2026-10-05). The
+user agreed to two fixed deployment options for the same application. Isolated
+integrity/recovery prototypes and persistent SQLite accounts are implemented;
+full application parity is not. This document
 records that TARGET, the audited CURRENT state, and proposed implementation
 choices. It does not replace `PRODUCT.md` or accepted evidence contracts.
 
@@ -164,7 +165,8 @@ cover deferred immutable and per-command completeness, direct invalid writes,
 BLOB retention/backup, WAL isolation, commit barriers and SIGKILL recovery with
 fenced execution. [ADR-0016](decisions/0016-sqlite-deployment-and-provenance.md)
 records the narrow proposed storage/provenance refinements; no public contract
-or application runtime has changed. Later milestones remain unimplemented.
+or application runtime changed in that milestone. Milestone 1 adds the account
+runtime described below; later milestones remain unimplemented.
 Independent review is complete with findings resolved. Full non-PG validation
 passes after a two-worker rerun; PostgreSQL validation could not start because
 Docker is stopped. This is a reviewed Milestone 0 checkpoint, not product parity.
@@ -195,6 +197,15 @@ Update the effort estimate using those results. If equivalent guarantees cannot
 be preserved, present the concrete tradeoff rather than silently weakening them.
 
 ## Milestone 1 Establish persistent SQLite startup and authentication
+
+CURRENT checkpoint (2026-10-05): [implementation boundary](sqlite/milestone-1.md)
+and [validation/review record](sqlite/milestone-1-validation.md). Explicit backend
+selection, a serialized SQLite worker, ordered checksummed migrations, shared
+account services, browser auth, memberships, invitations, keys and pairing
+lifecycle are implemented. This is an account-stage development runtime;
+unported workflows fail explicitly with 503. Full evaluator/bootstrap execution
+and integration storage remain later milestones, not fabricated demo behavior.
+
 
 - Implement backend selection, SQLite connection lifecycle, separate migration
   execution, and the minimum account/project schema for this slice.

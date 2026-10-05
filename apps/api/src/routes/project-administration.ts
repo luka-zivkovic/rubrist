@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import {
@@ -13,11 +13,6 @@ import {
 import {
   AgentSetupPairingInProgressError,
   AGENT_SETUP_PAIRING_CLAIM_GRACE_MS,
-  createAgentSetupPairing,
-  createProjectForUser,
-  getAgentSetupPairing,
-  revokeAgentSetupPairing,
-  userProjectRole,
   type AgentSetupPairingRecord
 } from "../lib/auth.js";
 import {
@@ -63,7 +58,7 @@ type ProjectAdministrationApp = Hono<{ Variables: AppVariables }>;
 
 export interface ProjectAdministrationRouteOptions {
   repository: RubristRepository;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   requestServices: RequestServices;
   publicApiBaseUrl(c: Context<{ Variables: AppVariables }>): string;
   /** The credential and transport capability checks probe with. */
@@ -76,7 +71,7 @@ export function registerProjectAdministrationRoutes(
   app: ProjectAdministrationApp,
   options: ProjectAdministrationRouteOptions
 ): void {
-  const { repository, pool, requestServices } = options;
+  const { repository, accounts, requestServices } = options;
   // createApp registers these routes once, so one app counts its projects'
   // running capability checks here.
   const checksInFlight = new Map<string, number>();
@@ -89,7 +84,7 @@ export function registerProjectAdministrationRoutes(
   // project owner. This route must work with zero memberships after deletion.
   app.post("/api/projects", async (c) => {
     c.header("cache-control", "no-store");
-    if (!pool) {
+    if (!accounts) {
       return c.json({ error: "Project creation requires auth mode (in-memory demo is single-project)" }, 501);
     }
     const user = c.get("user");
@@ -101,7 +96,7 @@ export function registerProjectAdministrationRoutes(
     if (!parsed.success) {
       return c.json({ error: "Invalid project input", details: z.treeifyError(parsed.error) }, 400);
     }
-    const created = await createProjectForUser(pool, {
+    const created = await accounts.createProjectForUser({
       userId: user.id,
       email: user.email ?? "user",
       name: parsed.data.name,
@@ -117,13 +112,13 @@ export function registerProjectAdministrationRoutes(
   // setup for this project only and never reaches adjudication/golden routes.
   app.post("/api/agent-setup/pairings", async (c) => {
     c.header("cache-control", "no-store");
-    if (!pool) {
+    if (!accounts) {
       return c.json({ error: "Agent pairing requires database-backed auth mode." }, 501);
     }
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
     const projectId = c.get("projectId");
-    const role = await userProjectRole(pool, { userId: user.id, projectId });
+    const role = await accounts.userProjectRole({ userId: user.id, projectId });
     if (role !== "owner") return c.json({ error: "Only project owners can connect a setup agent." }, 403);
     const project = (await repository.listProjects(user.id)).find((candidate) => candidate.id === projectId);
     if (!project) return c.json({ error: "Project not found." }, 404);
@@ -133,17 +128,13 @@ export function registerProjectAdministrationRoutes(
         code: "project_not_empty"
       }, 409);
     }
-    const skill = await repository.getLatestSkill(projectId);
-    if (!skill.isStarter) {
-      return c.json({
-        error: "This project's starter judging skill has already been configured.",
-        code: "project_already_configured"
-      }, 409);
+    if (await accounts.pairingEligibility(projectId) !== "eligible") {
+      return c.json({ error: "This project has already been configured.", code: "project_already_configured" }, 409);
     }
 
     let pairing;
     try {
-      pairing = await createAgentSetupPairing(pool, {
+      pairing = await accounts.createAgentSetupPairing({
         projectId,
         createdByUserId: user.id
       });
@@ -167,13 +158,13 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.get("/api/agent-setup/pairings/:pairingId", async (c) => {
-    if (!pool) return c.json({ error: "Agent pairing requires auth mode." }, 501);
+    if (!accounts) return c.json({ error: "Agent pairing requires auth mode." }, 501);
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
     const projectId = c.get("projectId");
-    const role = await userProjectRole(pool, { userId: user.id, projectId });
+    const role = await accounts.userProjectRole({ userId: user.id, projectId });
     if (role !== "owner") return c.json({ error: "Only project owners can inspect setup connections." }, 403);
-    const pairing = await getAgentSetupPairing(pool, { id: c.req.param("pairingId"), projectId });
+    const pairing = await accounts.getAgentSetupPairing({ id: c.req.param("pairingId"), projectId });
     if (!pairing) return c.json({ error: "Agent setup connection not found." }, 404);
     return c.json({
       id: pairing.id,
@@ -188,18 +179,18 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.delete("/api/agent-setup/pairings/:pairingId", async (c) => {
-    if (!pool) return c.json({ error: "Agent pairing requires auth mode." }, 501);
+    if (!accounts) return c.json({ error: "Agent pairing requires auth mode." }, 501);
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
     const projectId = c.get("projectId");
-    const role = await userProjectRole(pool, { userId: user.id, projectId });
+    const role = await accounts.userProjectRole({ userId: user.id, projectId });
     if (role !== "owner") return c.json({ error: "Only project owners can revoke setup connections." }, 403);
-    const revoked = await revokeAgentSetupPairing(pool, {
+    const revoked = await accounts.revokeAgentSetupPairing({
       id: c.req.param("pairingId"),
       projectId
     });
     if (revoked) return c.body(null, 204);
-    const pairing = await getAgentSetupPairing(pool, { id: c.req.param("pairingId"), projectId });
+    const pairing = await accounts.getAgentSetupPairing({ id: c.req.param("pairingId"), projectId });
     if (pairing && agentSetupPairingStatus(pairing) === "claimed") {
       return c.json({ error: "Agent setup is already running and can no longer be revoked." }, 409);
     }
@@ -257,7 +248,7 @@ export function registerProjectAdministrationRoutes(
     const projectId = c.get("projectId");
     if (parsed.data.provider === "mock") {
       // The demo's deterministic mock has nothing to probe outside demo mode.
-      if (pool) return c.json({ error: "The mock provider has no capabilities to check." }, 400);
+      if (accounts) return c.json({ error: "The mock provider has no capabilities to check." }, 400);
     } else if ((await options.bindingResolution.credential(projectId, parsed.data.provider)).apiKey === null) {
       return c.json({ error: `Configure a key for ${parsed.data.provider} before checking its models.` }, 409);
     }
@@ -280,10 +271,10 @@ export function registerProjectAdministrationRoutes(
   app.get("/api/project/settings", async (c) => {
     c.header("cache-control", "no-store");
     let viewerRole: "owner" | "member" = "owner";
-    if (pool) {
+    if (accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner" && role !== "member") return c.json({ error: "Project membership required" }, 403);
       viewerRole = role;
     }
@@ -291,10 +282,10 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.patch("/api/project/settings", async (c) => {
-    if (pool) {
+    if (accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can edit project settings" }, 403);
     }
 
@@ -309,10 +300,10 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.post("/api/project/retention/prune", async (c) => {
-    if (pool) {
+    if (accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can prune project traces" }, 403);
     }
 
@@ -322,10 +313,10 @@ export function registerProjectAdministrationRoutes(
   });
 
   app.delete("/api/project", async (c) => {
-    if (pool) {
+    if (accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can delete projects" }, 403);
     }
 
@@ -366,8 +357,8 @@ export function registerProjectAdministrationRoutes(
     const user = c.get("user");
     // Demo mode has no roles. In auth mode this prevents member dashboards
     // from rendering owner-only pairing affordances that can only return 403.
-    const role = user && pool
-      ? await userProjectRole(pool, { userId: user.id, projectId: c.get("projectId") })
+    const role = user && accounts
+      ? await accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") })
       : "owner";
     return c.json({ ...summary, viewerRole: role === "owner" ? "owner" : "member" });
   });

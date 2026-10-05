@@ -103,13 +103,13 @@ run("trace-derived test Postgres persistence", () => {
         enabledRevision: null
       });
       expect(created.test.sourceSnapshot).toMatchObject({ input: { password: "[REDACTED]" } });
-      const noAuthPgApp = createApp(repository, { pool });
-      const noAuthEnable = await noAuthPgApp.request(`/api/trace-tests/${created.test.id}/enable`, {
+      expect(() => createApp(repository, { pool })).toThrow(/requires authentication/);
+      const noSessionEnable = await app.request(`/api/trace-tests/${created.test.id}/enable`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ expectedRevision: 1, validationId: "missing" })
       });
-      expect(noAuthEnable.status).toBe(401);
+      expect(noSessionEnable.status).toBe(401);
 
       const invite = await app.request("/api/users/invite", {
         method: "POST",

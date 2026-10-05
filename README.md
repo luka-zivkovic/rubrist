@@ -140,10 +140,15 @@ and follow the setup ledger. It uses saved project state to show what
 is complete and what to do next. The API runs migrations when `DATABASE_URL`
 is configured.
 
+SQLite development work is at the [persistent account checkpoint](docs/sqlite/milestone-1.md).
+It requires explicit backend selection and does not yet support evaluator or
+evidence workflows. Keep using PostgreSQL for a complete installation.
+
 ### d. Zero-infrastructure demo mode
 
-Without `DATABASE_URL`, the API starts against in-memory fixtures instead of
-Postgres. From a checkout with dependencies installed, and without sourcing
+In development, without a backend selector or any database variables, the API
+starts against in-memory fixtures. Explicit `RUBRIST_STORAGE=demo` also selects
+this mode; production requires explicit configuration. From a checkout with dependencies installed, and without sourcing
 `.env`:
 
 ```bash

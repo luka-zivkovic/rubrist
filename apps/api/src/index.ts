@@ -13,6 +13,8 @@ import { createAuth } from "./lib/auth.js";
 import { PgProductionDecisionRecordRepository } from "./production-calibration/repository.pg.js";
 import { parseProductionRetentionIntervalMs, registerProductionRetentionSweeper } from "./production-calibration/retention.js";
 import { createPgPool } from "./lib/db.js";
+import { storageConfig } from "./storage/config.js";
+import { createSqliteRuntime } from "./storage/sqlite/runtime.js";
 import { createStrictJudgeProvider } from "./lib/judge-provider.js";
 import { DemoRepository } from "./repository.js";
 import { PgRepository } from "./repository.pg.js";
@@ -30,16 +32,18 @@ import { bindingResolutionServices, recheckGovernedBinding } from "./lib/binding
 import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
 const port = Number(process.env.PORT ?? 8787);
-const pool = createPgPool();
+const config = storageConfig();
+const sqlite = config.kind === "sqlite" ? await createSqliteRuntime(config.path) : null;
+const pool = config.kind === "postgres" ? createPgPool(config.url) : null;
 
 if (pool) {
   await runMigrations(pool);
 }
 
-const auth = pool ? createAuth(pool) : undefined;
+const auth = sqlite?.auth ?? (pool ? createAuth(pool) : undefined);
 // Demo mode seeds verdicts so κ / disagreement feeds / calibration render
 // without a worker or auth. Real mode (PgRepository) uses live data.
-const repository = pool ? new PgRepository(pool) : new DemoRepository(undefined, { seedVerdicts: true });
+const repository = sqlite?.repository ?? (pool ? new PgRepository(pool) : new DemoRepository(undefined, { seedVerdicts: true }));
 const binaryCalibrationRepository = pool
   ? new PgBinaryCalibrationRepository(pool)
   : null;
@@ -119,6 +123,8 @@ if (queue) {
 const server = serve({
   fetch: createApp(repository, {
     auth,
+    runtimeMode: config.kind === "demo" ? "demo" : "persistent",
+    ...(sqlite ? {accounts:sqlite.accounts,accountStage:true} : {}),
     pool: pool ?? undefined,
     queue,
     analysisStudyRepository,
@@ -129,7 +135,7 @@ const server = serve({
   port
 });
 
-console.log(`Rubrist API listening on http://localhost:${port}${pool ? " (Postgres + judge worker)" : " (demo)"}`);
+console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite accounts; evaluator workflows not yet available)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`Received ${signal}; shutting down Rubrist API`);
@@ -144,6 +150,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     await closeServer();
     await queue?.stop();
     await pool?.end();
+    await sqlite?.close();
     clearTimeout(forceExit);
     process.exit(0);
   } catch (error) {

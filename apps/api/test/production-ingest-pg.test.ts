@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "@rubrist/db";
+import { createAuth } from "../src/lib/auth.js";
 import { createApp } from "../src/app.js";
 import { PRODUCTION_INGEST_PATH } from "../src/production-calibration/ingest-routes.js";
 import { PgRepository } from "../src/repository.pg.js";
@@ -31,7 +32,7 @@ run("production ingest through the app and PostgreSQL", () => {
     ({ pool, cleanup } = await openPostgresTestDatabase("production_ingest"));
     await runMigrations(pool);
     repository = new PgRepository(pool);
-    app = createApp(repository, { pool });
+    app = createApp(repository, { pool, auth:createAuth(pool) });
     await pool.query(`insert into organizations (id,name) values ('org_production_ingest','Ingest Org')`);
     await pool.query(
       `insert into projects (id,organization_id,name,trace_provider) values ($1,'org_production_ingest','Ingest','manual')`,

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import type { DatabaseSync } from "node:sqlite";
 import {
   defaultJudgePromptTemplate,
   MinimumVerdictOutputSchema,
@@ -22,15 +23,15 @@ export function parseTrustedOrigins(value: string | undefined = process.env.TRUS
     .filter(Boolean);
 }
 
-export function createAuth(pool: Pool) {
+export function createAuth(database: Pool | DatabaseSync) {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret) {
     throw new Error(
-      "BETTER_AUTH_SECRET is required when running with auth enabled (DATABASE_URL set). Generate one with: openssl rand -base64 32"
+      "BETTER_AUTH_SECRET is required when running with auth enabled (persistent storage selected). Generate one with: openssl rand -base64 32"
     );
   }
   return betterAuth({
-    database: pool,
+    database,
     secret,
     baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:8787",
     // Without this, better-auth only trusts its own baseURL origin and the
@@ -87,7 +88,9 @@ export function createAuth(pool: Pool) {
   });
 }
 
-export type RubristAuth = ReturnType<typeof createAuth>;
+export type RubristAuth = Pick<ReturnType<typeof createAuth>, 'handler'> & {
+  api: Pick<ReturnType<typeof createAuth>['api'], 'getSession' | 'signUpEmail' | 'signInEmail'>;
+};
 
 export async function countUsers(pool: Pool): Promise<number> {
   const result = await pool.query(`select count(*)::int as count from "user"`);
@@ -600,18 +603,26 @@ export async function createInvitation(pool: Pool, input: { email: string; role:
   return { token };
 }
 
-export async function redeemInvitation(pool: Pool, input: { token: string; userId: string }): Promise<{ projectId: string; role: string }> {
-  const tokenHash = hashInviteToken(input.token);
+export async function validateInvitation(pool: Pool, token: string, email: string): Promise<boolean> {
   const result = await pool.query(
-    `select * from invitations where token_hash = $1 and redeemed_at is null and expires_at > now()`,
-    [tokenHash]
+    `select 1 from invitations where token_hash = $1 and lower(email) = lower($2)
+     and redeemed_at is null and expires_at > now()`, [hashInviteToken(token), email]
   );
-  const invitation = result.rows[0];
-  if (!invitation) throw new Error("Invalid or expired invite token");
+  return result.rows.length === 1;
+}
 
+export async function redeemInvitation(pool: Pool, input: { token: string; userId: string }): Promise<{ projectId: string; role: string }> {
   const client = await pool.connect();
   try {
     await client.query("begin");
+    const result = await client.query(
+      `select i.* from invitations i join "user" u on lower(u.email) = lower(i.email)
+       where i.token_hash = $1 and u.id = $2 and i.redeemed_at is null and i.expires_at > now()
+       for update of i`,
+      [hashInviteToken(input.token), input.userId]
+    );
+    const invitation = result.rows[0];
+    if (!invitation) throw new Error("Invalid or expired invite token");
     await client.query(
       `insert into organization_members (id, organization_id, user_id, role) values ($1,$2,$3,$4)
        on conflict do nothing`,
@@ -624,14 +635,13 @@ export async function redeemInvitation(pool: Pool, input: { token: string; userI
     );
     await client.query(`update invitations set redeemed_at = now(), redeemed_by_user_id = $1 where id = $2`, [input.userId, invitation.id]);
     await client.query("commit");
+    return { projectId: invitation.project_id, role: invitation.role };
   } catch (error) {
     await client.query("rollback");
     throw error;
   } finally {
     client.release();
   }
-
-  return { projectId: invitation.project_id, role: invitation.role };
 }
 
 export async function userProjectRole(pool: Pool, input: { userId: string; projectId: string }): Promise<string | null> {
