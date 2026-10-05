@@ -111,3 +111,9 @@ CREATE TRIGGER eval_trace_test_identity BEFORE UPDATE ON eval_runs WHEN
  NEW.source_trace_test_case_ref IS NOT OLD.source_trace_test_case_ref OR NEW.source_trace_test_case_id IS NOT OLD.source_trace_test_case_id OR NEW.source_trace_test_dataset_item_id IS NOT OLD.source_trace_test_dataset_item_id
 BEGIN SELECT RAISE(ABORT,'immutable trace test run binding'); END;
 ALTER TABLE projects ADD COLUMN last_retention_pruned_at TEXT;
+
+-- Account erasure may anonymize attribution through ON DELETE SET NULL.
+CREATE TRIGGER eval_run_creator_immutable BEFORE UPDATE OF created_by_user_id ON eval_runs WHEN
+  NEW.created_by_user_id IS NOT OLD.created_by_user_id AND NOT(
+    NEW.created_by_user_id IS NULL AND NOT EXISTS(SELECT 1 FROM "user" WHERE id=OLD.created_by_user_id))
+BEGIN SELECT RAISE(ABORT,'immutable eval run creator'); END;

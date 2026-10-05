@@ -148,3 +148,9 @@ END;
 CREATE TRIGGER eval_revision_exposure BEFORE INSERT ON dataset_exposure_events WHEN NEW.evidence_ref_kind='eval_run' AND NOT EXISTS(
  SELECT 1 FROM eval_runs WHERE id=NEW.evidence_ref_id AND project_id=NEW.project_id AND dataset_revision_id=NEW.revision_id AND skill_version_id=NEW.subject_id AND status IN ('running','completed','failed') AND NEW.kind='development_use' AND NEW.exposure_class='development' AND NEW.activity='development_run' AND NEW.subject_kind='evaluator_version')
 BEGIN SELECT RAISE(ABORT,'evaluation exposure binding mismatch'); END;
+
+-- Account erasure may anonymize attribution through ON DELETE SET NULL.
+CREATE TRIGGER eval_run_creator_immutable BEFORE UPDATE OF created_by_user_id ON eval_runs WHEN
+  NEW.created_by_user_id IS NOT OLD.created_by_user_id AND NOT(
+    NEW.created_by_user_id IS NULL AND NOT EXISTS(SELECT 1 FROM "user" WHERE id=OLD.created_by_user_id))
+BEGIN SELECT RAISE(ABORT,'immutable eval run creator'); END;
