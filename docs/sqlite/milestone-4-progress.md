@@ -171,3 +171,10 @@ member/owner provenance and deadline cutoffs. Content views bind their exact
 retained development exposure and closure participation. Independent audit
 approved 20/20 focused checks; the full population/study file passes 74/74.
 Post-closure views will be exercised with the forthcoming closure bundle.
+
+CURRENT: migration 0033 adds complete immutable taxonomy revisions with exact
+request-bound ordered entries, stable code identities, successor CAS, permanent
+retirement and reciprocal deferred finalization. Independent audit found and
+verified a fix for owner membership changing inside the code-creation command.
+All 18 taxonomy tests pass. Combined population/study/taxonomy tests pass 93/93,
+including positive member-authored coding, step anchors and member exposures.

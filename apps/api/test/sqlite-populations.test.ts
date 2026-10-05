@@ -285,8 +285,9 @@ it('enforces the frozen deadline at exact command time and permits draft abandon
  expect(other.db.prepare('SELECT to_state FROM analysis_study_events').get()?.to_state).toBe('abandoned');
 });
 
-function itemEvent(f:Fixture,type:string,options:{itemId?:string;now?:number;target?:RecordValue;anchor?:{kind:string;stepIndex?:number};override?:RecordValue}={}){
+function itemEvent(f:Fixture,type:string,options:{itemId?:string;now?:number;target?:RecordValue;anchor?:{kind:string;stepIndex?:number};override?:RecordValue;actor?:{userId:string;subjectId:string;role:'owner'|'member'}}={}){
  return sqliteCommand(f.db,c=>{
+  const actor=options.actor??{userId:f.userId,subjectId:'subject',role:'owner' as const};
   const studyItemId=options.itemId??'study-item-0';
   const head=f.db.prepare('SELECT *,CAST(version AS TEXT) version_text FROM analysis_study_item_events WHERE study_item_id=? ORDER BY version DESC LIMIT 1').get(studyItemId);
   const version=BigInt(String(head?.version_text??'0'))+1n;
@@ -295,11 +296,11 @@ function itemEvent(f:Fixture,type:string,options:{itemId?:string;now?:number;tar
   const idempotencyKey=studyItemId+'-key-'+version;
   const requestDigest=analysisStudyItemEventRequestDigest(f.projectId,'study',studyItemId,{eventType:type,expectedVersion:String(version-1n),idempotencyKey,...details} as never);
   const event={id:studyItemId+'-event-'+version,projectId:f.projectId,studyId:'study',studyItemId,version:String(version),predecessorEventId:head?.id??null,predecessorEventDigest:head?.event_digest??null,eventType:type,...details,
-   actorSubjectId:'subject',actorUserId:f.userId,actorRole:'owner',idempotencyKey,requestDigest,occurredAt:c.timestamp};
+   actorSubjectId:actor.subjectId,actorUserId:actor.userId,actorRole:actor.role,idempotencyKey,requestDigest,occurredAt:c.timestamp};
   const anchor='evidenceAnchor' in details?details.evidenceAnchor:null;
   const row:RecordValue={id:event.id,project_id:f.projectId,study_id:'study',study_item_id:studyItemId,version,predecessor_event_id:event.predecessorEventId,predecessor_event_digest:event.predecessorEventDigest,event_type:type,
    target_event_id:options.target?.id??null,target_event_digest:options.target?.event_digest??null,failure_label:details.failureLabel??null,rationale:details.rationale??null,anchor_kind:anchor?.kind??null,anchor_step_index:anchor?.stepIndex??null,
-   actor_subject_id:'subject',actor_user_id:f.userId,actor_role:'owner',idempotency_key:idempotencyKey,request_digest:requestDigest,event_digest:analysisStudyItemEventDigest(event as never),occurred_at:c.timestamp,...options.override};
+   actor_subject_id:actor.subjectId,actor_user_id:actor.userId,actor_role:actor.role,idempotency_key:idempotencyKey,request_digest:requestDigest,event_digest:analysisStudyItemEventDigest(event as never),occurred_at:c.timestamp,...options.override};
   const columns=Object.keys(row);c.db.prepare(`INSERT INTO analysis_study_item_events(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(row));return row;
  },()=>options.now??f.now+3);
 }
@@ -344,14 +345,14 @@ it('rejects absent step anchors, wrong target digests, cross-item targets and co
  itemEvent(f,'coding_completed',{now:f.now+999});
 });
 
-function itemView(f:Fixture,override:RecordValue={},now=f.now+4){
+function itemView(f:Fixture,override:RecordValue={},now=f.now+4,actor={userId:f.userId,subjectId:'subject'}){
  return sqliteCommand(f.db,c=>{
-  const exposure={id:'view-exposure',project_id:f.projectId,revision_id:'rev',revision_item_id:null,kind:'human_access',exposure_class:'development',activity:'content_view',subject_kind:'person',subject_id:'subject',actor_user_id:f.userId,evidence_ref_kind:'analysis_population',evidence_ref_id:'ap',reason:null,details:'{}',idempotency_key:'view-exposure',occurred_at:c.timestamp};
+  const exposure={id:'view-exposure',project_id:f.projectId,revision_id:'rev',revision_item_id:null,kind:'human_access',exposure_class:'development',activity:'content_view',subject_kind:'person',subject_id:actor.subjectId,actor_user_id:actor.userId,evidence_ref_kind:'analysis_population',evidence_ref_id:'ap',reason:null,details:'{}',idempotency_key:'view-exposure',occurred_at:c.timestamp};
   const columns=Object.keys(exposure);c.db.prepare(`INSERT INTO dataset_exposure_events(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(exposure));
-  const basis={projectId:f.projectId,studyId:'study',studyItemId:'study-item-0',viewerUserId:f.userId,viewerSubjectId:'subject',datasetRevisionId:'rev'};
+  const basis={projectId:f.projectId,studyId:'study',studyItemId:'study-item-0',viewerUserId:actor.userId,viewerSubjectId:actor.subjectId,datasetRevisionId:'rev'};
   const requestDigest=analysisStudyItemViewRequestDigest(basis);
   const view={...basis,id:'view',datasetExposureEventId:exposure.id,countsTowardClosure:true,requestDigest,viewedAt:c.timestamp};
-  const row:RecordValue={id:'view',project_id:f.projectId,study_id:'study',study_item_id:'study-item-0',dataset_exposure_event_id:exposure.id,viewer_user_id:f.userId,viewer_subject_id:'subject',idempotency_key:'view',request_digest:requestDigest,content_digest:analysisStudyItemViewContentDigest(view),counts_toward_closure:1,viewed_at:c.timestamp,...override};
+  const row:RecordValue={id:'view',project_id:f.projectId,study_id:'study',study_item_id:'study-item-0',dataset_exposure_event_id:exposure.id,viewer_user_id:actor.userId,viewer_subject_id:actor.subjectId,idempotency_key:'view',request_digest:requestDigest,content_digest:analysisStudyItemViewContentDigest(view),counts_toward_closure:1,viewed_at:c.timestamp,...override};
   const keys=Object.keys(row);c.db.prepare(`INSERT INTO analysis_study_item_views(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).run(...Object.values(row));
  },()=>now);
 }
@@ -378,4 +379,16 @@ it('requires overdue closure before another content view',async()=>{
  const f=await fixture();freeze(f);draftStudy(f);studyEvent(f,'coding_opened',{deadline:new Date(f.now+1000).toISOString()});
  expect(()=>itemView(f,{},f.now+1000)).toThrow(/overdue closure/);
  itemView(f,{},f.now+999);
+});
+it('accepts member-authored coding, retained step anchors and member content exposures',async()=>{
+ const f=await fixture();
+ sqliteCommand(f.db,c=>c.db.prepare("UPDATE cases SET normalized_payload=json_set(normalized_payload,'$.steps',json('[{\"input\":\"step input\",\"output\":\"step result\"}]')) WHERE project_id=?").run(f.projectId));
+ freeze(f);draftStudy(f);studyEvent(f);
+ const {user}=await f.runtime.auth.api.signUpEmail({body:{email:'member@example.test',password:'synthetic-long-password',name:'Member'}});
+ f.db.prepare('INSERT INTO project_members(id,project_id,user_id,role,created_at) VALUES(?,?,?,?,?)').run('member-membership',f.projectId,user.id,'member',new Date().toISOString());
+ f.db.prepare('INSERT INTO governed_reviewer_subjects VALUES(?,?,?,sqlite_subject_digest(?,?),?)').run('member-subject',f.projectId,user.id,f.projectId,'member-subject',new Date().toISOString());
+ const actor={userId:user.id,subjectId:'member-subject',role:'member' as const};
+ itemEvent(f,'failure_observed',{actor,anchor:{kind:'step',stepIndex:0}});itemView(f,{},f.now+4,actor);
+ expect(f.db.prepare('SELECT actor_role,anchor_step_index FROM analysis_study_item_events').get()).toMatchObject({actor_role:'member',anchor_step_index:0});
+ expect(f.db.prepare("SELECT subject_id FROM dataset_exposure_events WHERE id='view-exposure'").get()?.subject_id).toBe('member-subject');
 });
