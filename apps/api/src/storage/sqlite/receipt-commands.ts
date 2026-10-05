@@ -25,6 +25,7 @@ export function sqliteReceiptCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db);
   const definitions=sqliteDefinitionCommands(db);
   if(!initializedConnections.has(db)) {
+    db.function('sqlite_correction_reason_valid',{deterministic:true},reason=>typeof reason==='string'&&reason.trim().length>0?1:0);
     db.function('sqlite_receipt_valid',{deterministic:true},(bytes,projectId,evalRunId,receiptId,contractVersion,digest,evidenceDigest)=> {
       try { artifact({canonical_bytes:bytes,project_id:projectId,eval_run_id:evalRunId,receipt_id:receiptId,contract_version:contractVersion,artifact_digest:digest,evidence_digest:evidenceDigest}); return 1; }
       catch { return 0; }

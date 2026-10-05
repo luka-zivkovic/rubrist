@@ -122,3 +122,11 @@ transport tests passed (22 tests across the final targeted sets); API typecheck
 passed. Independent review approved after the retirement-context correction.
 GitHub hosted-runner acquisition failed on the earlier attempt; fresh CI and
 Copilot review remain required on this commit before merging.
+
+CURRENT 2026-10-06: Copilot identified whitespace-only correction reasons that
+SQLite's ASCII-space trim admitted through direct SQL. Forward migration 0010
+uses a trigger-only validator with the command's ECMAScript trim policy. Direct
+SQL tests reject null, empty, tabs, newlines, NBSP and mixed Unicode whitespace,
+accept nonblank reasons, and preserve plain maintenance checks. Independent
+audit approved; all 35 evaluation/storage tests pass. Existing migration bytes
+are unchanged. Updated CI and Copilot review remain required.

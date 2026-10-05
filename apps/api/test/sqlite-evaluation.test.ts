@@ -204,12 +204,15 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
       const row={...candidate,...overrides};
       f.db.prepare(`INSERT INTO assessment_receipt_artifacts(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row) as never[]);
     }
-    expect(()=>insert({correction_reason:null})).toThrow(/CHECK/);
-    expect(()=>insert({correction_reason:'  '})).toThrow(/CHECK/);
+    for(const reason of [null,'','  ','\t','\n','\u00a0',' \t\r\n\u00a0\u2003\ufeff']) {
+      expect(()=>insert({correction_reason:reason})).toThrow(/correction reason/);
+    }
     expect(()=>insert({canonical_bytes:Buffer.from('{}')})).toThrow(/receipt bytes/);
     expect(()=>insert({artifact_digest:`sha256:${'0'.repeat(64)}`})).toThrow(/receipt bytes/);
     expect(()=>insert({predecessor_artifact_id:root.id})).toThrow(/predecessor/);
     expect(()=>insert({source_snapshot_digest:'not-a-digest'})).toThrow(/CHECK/);
+    insert({correction_reason:'\tCorrected source attribution\u00a0'});
+    expect(f.db.prepare('SELECT correction_reason FROM assessment_receipt_artifacts WHERE id=?').get('rart_third')?.correction_reason).toBe('\tCorrected source attribution\u00a0');
     expect(()=>f.db.exec("UPDATE assessment_receipt_artifacts SET canonical_bytes=x'00'")).toThrow(/immutable/);
     expect(()=>f.db.exec('DELETE FROM assessment_receipt_artifacts')).toThrow(/erasure/);
     const plain=openSqlite(f.path);cleanup.push(()=>plain.close());expect(plain.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
