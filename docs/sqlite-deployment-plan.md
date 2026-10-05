@@ -164,7 +164,7 @@ CURRENT checkpoint (2026-10-05): see [design and results](sqlite/milestone-0.md)
 cover deferred immutable and per-command completeness, direct invalid writes,
 BLOB retention/backup, WAL isolation, commit barriers and SIGKILL recovery with
 fenced execution. [ADR-0016](decisions/0016-sqlite-deployment-and-provenance.md)
-records the narrow proposed storage/provenance refinements; no public contract
+records the accepted storage/provenance refinements (approved after Milestone 1); no public contract
 or application runtime changed in that milestone. Milestone 1 adds the account
 runtime described below; later milestones remain unimplemented.
 Independent review is complete with findings resolved. Full non-PG validation

@@ -27,4 +27,4 @@ Status meanings:
 - [0014 — Model-agnostic evaluator execution and evidence v2](0014-model-agnostic-evaluator-execution.md) — Accepted
 - [0015 — One product vocabulary and one display with a help layer](0015-one-vocabulary-one-display.md) — Accepted for vocabulary and single display; additional help-layer behavior remains proposed
 
-- [0016 — SQLite exact-byte storage and Analyze snapshot provenance](0016-sqlite-deployment-and-provenance.md) — Proposed; two-template deployment scope is already authorized, while narrow storage/provenance refinements remain for review
+- [0016 — SQLite exact-byte storage and Analyze snapshot provenance](0016-sqlite-deployment-and-provenance.md) — Accepted; SQLite exact-byte BLOB storage and honest backend provenance, with Analyze transport and compatibility settled in Milestone 4
