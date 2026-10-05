@@ -140,10 +140,11 @@ and follow the setup ledger. It uses saved project state to show what
 is complete and what to do next. The API runs migrations when `DATABASE_URL`
 is configured.
 
-SQLite development work now includes a [durable evaluation slice](docs/sqlite/milestone-2.md):
-accounts, native criteria, batch evaluation, and retained assessment receipts.
-It requires explicit backend selection and Node 24.15+. Integration and governed
-workflows are still being ported; use PostgreSQL for a complete installation.
+SQLite development work now includes [ordinary workflows](docs/sqlite/milestone-3-progress.md):
+accounts, evaluations and receipts, collections/reviews, evaluator regression,
+all three trace integrations, and production monitoring. It requires explicit
+backend selection and Node 24.15+. Advanced governed workflows and installation
+qualification are still being ported; use PostgreSQL for a complete installation.
 
 ### d. Zero-infrastructure demo mode
 

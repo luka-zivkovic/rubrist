@@ -2,9 +2,9 @@
 
 Prepared on 2026-10-04 for implementation in a separate session.
 
-Status: Milestone 2 evaluation slice under final validation (2026-10-05). The
+Status: Milestone 3 ordinary workflows under final qualification (2026-10-05). The
 user agreed to two fixed deployment options for the same application. Isolated
-integrity/recovery prototypes, persistent accounts and native evaluations are implemented;
+integrity/recovery prototypes, persistent accounts, native evaluations and ordinary workflows are implemented;
 full application parity is not. This document
 records that TARGET, the audited CURRENT state, and proposed implementation
 choices. It does not replace `PRODUCT.md` or accepted evidence contracts.
@@ -258,6 +258,11 @@ exactly-once external model calls. Ordinary parallel evaluations remain possible
 This milestone is not a claim of complete product parity.
 
 ## Milestone 3 Complete ordinary workflows and integrations
+
+CURRENT: implementation and independent audit complete; consolidated validation
+and PR CI/Copilot review pending. See the [implementation record](sqlite/milestone-3-progress.md)
+and [165-method/task checklist](sqlite/milestone-3-checklist.md). Advanced
+specialist repositories remain Milestone 4.
 
 - Complete the remaining main repository ports: datasets and revisions,
   golden examples, review queues, trace-derived tests, evaluator regression,

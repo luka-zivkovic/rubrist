@@ -173,4 +173,7 @@ it('resumes all three scheduled imports after downtime, judges exact versions an
  await vi.waitFor(async()=>expect(await next.queue.getJobState('judge.run',id!)).toBe('completed'),{timeout:5000,interval:40});
  expect(await next.repository.listVerdicts({projectId:f.projectId,limit:10})).toHaveLength(4);
  for(const poll of pollers)expect(await poll(next.repository,next.queue)).toEqual({claimed:0,queued:0});
+ const send=vi.spyOn(next.queue,'send').mockRejectedValueOnce(new Error('Synthetic queue outage'));
+ expect(await enqueueDueLangSmithImports(next.repository,next.queue,{now:new Date(Date.now()+2*3600_000)})).toEqual({claimed:1,queued:0});send.mockRestore();
+ expect((await next.repository.listImportJobs({projectId:f.projectId,limit:10})).filter(job=>job.status==='failed')).toHaveLength(1);
 });

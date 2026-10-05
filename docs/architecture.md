@@ -49,9 +49,13 @@ completion. A terminal release-evidence run and its exact receipt BLOB commit
 together. Interrupted dispatched calls become explicit uncertainty, never an
 automatic second provider call. Worker transport revives BLOBs as Buffers.
 
-Integration, revision, analysis, and governed workflows remain explicitly
-unavailable. This is not a release installation option yet. See
-[Milestone 2](sqlite/milestone-2.md) for the exact boundary and validation.
+Ordinary revisions, reviews, regression, integrations and production monitoring
+now use native SQLite storage and the shared workers. Regression ownership uses
+a durable token/epoch lease with whole-attempt recovery; it does not hold a write
+lock across provider calls. Pollers drain active work before shutdown.
+Advanced analysis and governed specialist workflows remain unavailable until
+Milestone 4. This is not a release installation option yet. See
+[Milestone 3](sqlite/milestone-3-progress.md) and its method/task checklist.
 
 ## Core flows
 
