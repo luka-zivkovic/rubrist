@@ -227,6 +227,13 @@ Malformed persistent configuration cannot enter demo mode.
 
 ## Milestone 2 Deliver one durable evaluation workflow
 
+CURRENT work in progress on `sqlite-milestone-2`: the independently audited
+[foundation](sqlite/milestone-2.md) includes durable queue commands, native
+criterion/evaluator definitions, trace ingestion, and mutable dataset collections.
+[Validation](sqlite/milestone-2-validation.md) records the checked intermediate
+commits. Evaluation run execution and receipt minting are still outstanding;
+this is not a completed milestone or a merged product capability.
+
 - Port the storage needed for projects, criteria, evaluator versions,
   credentials, imported traces/cases, datasets, evaluation runs/items,
   immutable receipts, and required audit records.

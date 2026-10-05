@@ -83,3 +83,41 @@ labels/notes, clear a failure step on an explicit pass, and roll back the comple
 batch on invalid membership. Integration imports, immutable revisions, and bulk
 example import remain unavailable. Negative, fractional, and unsafe query limits
 are rejected instead of invoking SQLite's unlimited negative-LIMIT behavior.
+
+## Evaluation execution implementation contract
+
+TARGET: native `release_evidence` batches use the existing worker and receipt
+contracts. The compatibility rule for native lineages without governed lifecycle
+records comes from ADR-0010; it never asserts activation or calibration.
+
+| Item state | Delivery event | Result |
+| --- | --- | --- |
+| pending, unclaimed | claim | persist fresh token and lease |
+| pending, live claim | duplicate claim | busy; no second provider call |
+| pending, expired pre-call claim | claim | replace token; former owner cannot dispatch or finish |
+| pending, expired post-dispatch claim | recovery | outcome unknown; no repeat provider call |
+| pending, live token, no dispatch marker | dispatch | durably record marker before external call |
+| pending, live token, dispatched | provider returns | durably record return marker |
+| pending, live token, returned | complete | item verdict, counters and terminal receipt commit together |
+| terminal | replay | preserve prior evidence and counters |
+
+Queue delivery ownership and domain execution ownership remain separate.
+A returned marker alone does not prove the original live worker died. Recovery
+must respect the original lease before declaring its result unknown. A successful
+completion requires the current unexpired domain token. Recovery may terminalize
+an expired claim as unknown/not-attempted only while that exact claim still owns
+the pending item. No transaction spans a provider request.
+
+The terminal run stores exact receipt bytes in its terminalization transaction.
+Receipt reads validate retained canonical bytes and digest without reconstructing
+them. Corrections append lineage; comparisons retain the consumer's exact bytes.
+Schema and direct-write tests must enforce tenant ownership, lineage, immutable
+artifacts, and project-erasure boundaries. SQLite worker transport must revive
+artifact BLOBs as Buffer values for existing HTTP consumers.
+
+CURRENT preparation for the next consistency group: the
+[evaluation schema draft](milestone-2-evaluation-schema-draft.sql) records initial
+run/item, verdict, and BLOB artifact tables. It is deliberately outside the
+migration directory: execution commands, function registration, failure-injection
+fixtures, and independent review are not implemented for that draft. Its proposed
+constraints are implementation assumptions, not a claim of completed parity.
