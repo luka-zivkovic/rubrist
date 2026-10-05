@@ -31,6 +31,8 @@ it('initializes a real starter and completes authenticated editing through the d
  expect(edit.status).toBe(202);const queued=await edit.json() as any;
  await vi.waitFor(async()=>expect((await runtime.repository.getRegressionRunForVersion(skill.projectId,queued.version.id))?.status).toBe('passed'),{timeout:5000,interval:30});
  expect(calls).toBe(0);expect((await runtime.repository.getSkillVersion(skill.projectId,queued.version.id))?.status).toBe('approved');expect(await runtime.accounts.pairingEligibility(skill.projectId)).toBe('project_already_configured');
+ const history=await app.request(`/api/skills/${skill.id}/versions`,{headers});expect(history.status).toBe(200);
+ const ledger=await history.json() as any;expect(ledger.versions).toHaveLength(2);expect(ledger.regressionRuns).toMatchObject([{skillVersionId:queued.version.id,status:'passed'}]);
  const dashboard=await app.request('/api/dashboard',{headers});expect(dashboard.status).toBe(200);
  const key=await runtime.repository.createApiKey({projectId:skill.projectId,name:'monitoring',capability:'production_ingest'});
  const production=await app.request('/api/v1/production-decisions',{method:'POST',headers:{authorization:`Bearer ${key.key}`,'content-type':'application/json'},body:JSON.stringify({records:[{kind:'outcome',decisionId:'synthetic',at:'2026-09-20T00:00:00Z',question:'correct',value:true,source:'human'}]})});

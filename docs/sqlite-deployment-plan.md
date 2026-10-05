@@ -259,8 +259,8 @@ This milestone is not a claim of complete product parity.
 
 ## Milestone 3 Complete ordinary workflows and integrations
 
-CURRENT: implementation and independent audit complete; consolidated validation
-and PR CI/Copilot review pending. See the [implementation record](sqlite/milestone-3-progress.md)
+CURRENT: implementation, independent audit and local qualification complete;
+PR CI/Copilot review pending. See the [implementation record](sqlite/milestone-3-progress.md)
 and [165-method/task checklist](sqlite/milestone-3-checklist.md). Advanced
 specialist repositories remain Milestone 4.
 
