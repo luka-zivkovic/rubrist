@@ -83,7 +83,11 @@ describe('durable SQLite queue', () => {
     for (const options of [{retryLimit:-1},{retryDelay:NaN},{expireInSeconds:0},{singletonSeconds:0}]) {
       expect(()=>q.queueSend('eval.item',{}, options)).toThrow();
     }
-    expect(()=>q.queueSend('eval.item',[])).toThrow();
+    for(const invalid of [null, [], 1, 'text', true, undefined, Symbol('x'), ()=>{}, new Date(), {toJSON:()=>[]}]) {
+      expect(()=>q.queueSend('eval.item',invalid as object)).toThrow('Queue data must be a JSON object');
+      expect(db.isTransaction).toBe(false);
+    }
+    expect(db.prepare('SELECT count(*) n FROM queue_jobs').get()?.n).toBe(0);
     q.queueSend('eval.item',{}, {id:'protected'});
     expect(()=>db.exec("UPDATE queue_jobs SET data='{} ',retry_limit=5")).toThrow(/immutable/);
     const job=q.queueClaim('eval.item')!; q.queueSettle('eval.item',job.id,job.token,null);

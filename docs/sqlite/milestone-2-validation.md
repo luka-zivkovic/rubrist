@@ -113,3 +113,12 @@ terminal item identities, retained labels, agreement counters and two mock
 provider calls. It asserts the collection mutation took effect. All three
 SQLite HTTP workflow tests pass; independent review found no remaining issues
 in this follow-up. The updated PR still requires fresh CI and Copilot review.
+
+Copilot follow-up (2026-10-05): fixed pass-label partial upserts, validated queue
+payload objects before opening transactions, and replaced arbitrary worker error
+property copying with explicit public error fields. Retirement conflict context
+uses its shared schema so nested extras are removed. Focused workflow/trace/queue/
+transport tests passed (22 tests across the final targeted sets); API typecheck
+passed. Independent review approved after the retirement-context correction.
+GitHub hosted-runner acquisition failed on the earlier attempt; fresh CI and
+Copilot review remain required on this commit before merging.

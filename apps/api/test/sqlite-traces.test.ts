@@ -91,6 +91,8 @@ describe('SQLite dataset collections',()=>{
     expect(append).toEqual(first);
     const pass=await r.addDatasetItems({projectId:f.projectId,datasetId:dataset.id,items:[{caseId:imported.caseId,expectedLabel:'pass'}]});
     expect(pass[0]).toMatchObject({id:first[0]!.id,expectedLabel:'pass',expectedFailStep:null,note:'Check first step'});
+    const partial=await r.addDatasetItems({projectId:f.projectId,datasetId:dataset.id,items:[{caseId:imported.caseId,expectedFailStep:2}]});
+    expect(partial).toEqual(pass);
     expect((await r.listDatasets(f.projectId))[0]?.itemCount).toBe(1);
     await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
     expect((await restarted.repository.getDatasetDetail(f.projectId,dataset.id))?.items).toEqual(pass);

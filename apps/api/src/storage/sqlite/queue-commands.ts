@@ -41,8 +41,11 @@ export function sqliteQueueCommands(db: DatabaseSync, clock = Date.now) {
       const retryDelay = integer(options.retryDelay ?? (options.retryBackoff ? 1 : 0), 'retryDelay', 0);
       const expiry = integer(options.expireInSeconds ?? 900, 'expireInSeconds', 1);
       const singleton = options.singletonSeconds === undefined ? null : integer(options.singletonSeconds, 'singletonSeconds', 1);
+      if (data === null || typeof data !== 'object' || Array.isArray(data) ||
+          ![Object.prototype,null].includes(Object.getPrototypeOf(data))) throw new Error('Queue data must be a JSON object');
       const json = JSON.stringify(data);
-      if (json === undefined) throw new Error('Queue data must be a JSON object');
+      const encoded = json === undefined ? undefined : JSON.parse(json);
+      if (encoded === null || typeof encoded !== 'object' || Array.isArray(encoded)) throw new Error('Queue data must be a JSON object');
       return transaction(now => {
         const result = db.prepare(`INSERT INTO queue_jobs(name,id,data,created_at,available_at,retry_limit,retry_delay_ms,
           retry_backoff,expire_ms,singleton_key,singleton_slot) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`).run(

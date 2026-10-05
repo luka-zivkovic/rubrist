@@ -52,7 +52,7 @@ export function sqliteDatasetCommands(db:DatabaseSync) {
           if(!source)throw new CaseNotFoundError(member.caseId);
           db.prepare(`INSERT INTO dataset_items VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(dataset_id,case_id) DO UPDATE SET
             expected_label=coalesce(excluded.expected_label,dataset_items.expected_label),
-            expected_fail_step=CASE WHEN excluded.expected_label='pass' THEN NULL WHEN excluded.expected_fail_step IS NOT NULL
+            expected_fail_step=CASE WHEN coalesce(excluded.expected_label,dataset_items.expected_label)='pass' THEN NULL WHEN excluded.expected_fail_step IS NOT NULL
               THEN excluded.expected_fail_step ELSE dataset_items.expected_fail_step END,
             note=coalesce(excluded.note,dataset_items.note)`).run(`dsi_${randomUUID()}`,input.datasetId,input.projectId,member.caseId,String(source.source_trace_id),
               member.expectedLabel??null,member.note??null,now,member.expectedFailStep??null);
