@@ -184,3 +184,12 @@ to the current finalized taxonomy head. Writes require an active observation,
 exact actor role and predecessor, an active code for assignments, and an open
 study before its deadline. Withdrawals preserve retired-code history. Independent
 audit approved 12/12 focused tests; combined domain tests pass 105/105.
+
+CURRENT: migrations 0035–0036 materialize immutable closure evidence with exact
+historical coding/view/assignment projections, independent streamed frame and
+SQL draw recomputation, representative-reason precedence and complete-bundle
+finalization bound to the closing event. Same-command frame/coding mutations
+are rejected; later retention and non-counting content views preserve history.
+Deadline effective time and exact owner completion acknowledgment are retained.
+Independent closure audit approved 22/22 tests and inspected scoped query plans;
+API typecheck passes. The study repository is still not wired.
