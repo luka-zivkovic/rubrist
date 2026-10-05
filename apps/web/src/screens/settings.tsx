@@ -97,7 +97,9 @@ export function SettingsScreen() {
       <section id="settings-connections" aria-labelledby="settings-connections-title" className="scroll-mt-36 sm:scroll-mt-24 space-y-4">
         <h2 id="settings-connections-title" className="font-serif text-[20px] font-medium">Connections</h2>
         <p className="text-[12.5px] text-ink-3">Manage credentials here. Configure trace sources in <Link className="underline" to={contextualHref("/integrations", location.search)}>Integrations</Link>; choose models and evaluator settings in <Link className="underline" to={contextualHref("/skill", location.search)}>Evaluator</Link>.</p>
-        <ProviderKeysCard canEdit={canEdit} reportState={reportState} />
+        {demoMode || settings.viewerRole === "owner" ? <ProviderKeysCard canEdit={canEdit} reportState={reportState} />
+          : <Card><CardHeader><CardTitle>Judge provider keys</CardTitle></CardHeader>
+            <CardContent><p className="text-[12.5px] text-ink-3">Only project owners can view or manage provider keys. Ask an owner to configure these credentials.</p></CardContent></Card>}
         <ApiKeysCard canEdit={canEdit} reportState={reportState} />
       </section>
     </fieldset> : null}

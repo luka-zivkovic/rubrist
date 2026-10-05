@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
@@ -123,6 +123,38 @@ describe('SQLite migrations and connection lifecycle', () => {
       db.exec('ROLLBACK'); db.close();
       expect(await write).toBe(false);
     } finally { await Promise.all(runtimes.map(r=>r.close())); }
+  });
+  it('rejects pending and subsequent commands after unexpected worker exit and closes cleanly', async () => {
+    process.env.BETTER_AUTH_SECRET=secret;
+    const path=`${temp()}/worker-exit.sqlite`;
+    const runtime=await createSqliteRuntime(path);
+    // Failure injection uses the actual owned worker; no production escape hatch.
+    const worker=Reflect.get(runtime.storage,'worker') as Worker;
+    const db=openSqlite(path);
+    db.exec('BEGIN IMMEDIATE');
+    const post=worker.postMessage.bind(worker);
+    let markPosted!: () => void;
+    const posted=new Promise<void>(resolve=>{markPosted=resolve;});
+    const spy=vi.spyOn(worker,'postMessage').mockImplementationOnce(message=>{post(message);markPosted();});
+    const pending=runtime.repository.revokeApiKey('absent','absent');
+    // Attach rejection observation before killing the thread.
+    const outcome=pending.then(value=>({value}),error=>({error}));
+    try {
+      await posted;
+      const terminated=worker.terminate();
+      db.exec('ROLLBACK');
+      await terminated;
+      expect(await outcome).toMatchObject({error:expect.objectContaining({message:expect.stringContaining('SQLite worker exited')})});
+      await expect(runtime.accounts.countUsers()).rejects.toThrow(/SQLite worker exited/);
+      await expect(runtime.close()).resolves.toBeUndefined();
+      await expect(runtime.close()).resolves.toBeUndefined();
+      await expect(runtime.accounts.countUsers()).rejects.toThrow(/SQLite worker exited|closed/);
+    } finally {
+      spy.mockRestore();
+      if (db.isTransaction) db.exec('ROLLBACK');
+      db.close();
+      await runtime.close();
+    }
   });
   it('fails startup without a writable/recognized database and never substitutes demo', async () => {
     process.env.BETTER_AUTH_SECRET=secret;

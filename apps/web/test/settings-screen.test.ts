@@ -81,7 +81,15 @@ describe("settings interaction", () => {
     expect(api.fetchApiKeys).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("Delete project…");
     expect(container.textContent).toContain(mode === "member" ? "ask an owner" : "Demo workspace");
-    if (mode === "member") expect(button("Sign out").disabled).toBe(false);
+    if (mode === "member") {
+      expect(button("Sign out").disabled).toBe(false);
+      expect(api.fetchJudgeKeys).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("Only project owners can view or manage provider keys");
+      expect(container.textContent).not.toContain("Retry provider keys");
+    } else {
+      expect(api.fetchJudgeKeys).toHaveBeenCalledOnce();
+      expect(container.querySelector('[data-judge-key-row="anthropic"]')).not.toBeNull();
+    }
   });
   it("fails closed and retries while keeping account access available", async () => {
     api.fetchProjectSettings.mockRejectedValueOnce(new Error("Access unavailable")); await mount();

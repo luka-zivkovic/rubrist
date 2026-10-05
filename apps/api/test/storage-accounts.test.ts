@@ -117,6 +117,11 @@ for (const kind of ['sqlite','postgres'] as const) {
       const key = 'sk-synthetic-provider-secret-abcdefgh';
       const save = await f.app.request('/api/judge-keys/openai',{...json({apiKey:key},owner.cookie),method:'PUT'});
       expect(save.status,await save.clone().text()).toBe(201);
+      expect((await f.app.request('/api/judge-keys',{headers:{cookie:member}})).status).toBe(403);
+      expect((await f.app.request('/api/judge-keys')).status).toBe(401);
+      const ownerKeys = await f.app.request('/api/judge-keys',{headers:{cookie:owner.cookie}});
+      expect(ownerKeys.status).toBe(200);
+      expect(await ownerKeys.json()).toMatchObject({keys:[{provider:'openai',keyDisplay:'sk-synthet…efgh'}]});
       const rows = await f.sql('select * from judge_provider_keys where project_id=?',[owner.projectId]);
       expect(JSON.stringify(rows)).not.toContain(key);
       expect(await f.repository.getJudgeProviderCredential(owner.projectId,'openai')).toBe(key);

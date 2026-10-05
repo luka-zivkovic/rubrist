@@ -873,6 +873,8 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // BYO judge provider keys. The raw key is accepted once and never
   // returned; list responses carry only the masked display form.
   app.get("/api/judge-keys", async (c) => {
+    const denied = await requireOwner(c, "view judge provider keys");
+    if (denied) return denied;
     return c.json({ keys: await repository.listJudgeProviderKeys(c.get("projectId")) });
   });
 

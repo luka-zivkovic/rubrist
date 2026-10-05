@@ -90,3 +90,23 @@ project eligibility uses an explicit temporary unconfigured state until M2.
 Integration storage, jobs, immutable assessment evidence, advanced repositories,
 installation templates and operational release gates remain later milestones.
 Proposed ADR-0016 is unchanged and remains a decision gate for its own scope.
+
+## PR #193 Copilot follow-up
+
+CURRENT: the shared provider-key GET handler now requires project ownership,
+matching the existing credential boundary. The account contract verifies owner
+access and member/anonymous rejection on SQLite and PostgreSQL. An independent
+review caught the related member Settings request: members now see an owner-only
+explanation without making a protected request or offering an ineffective Retry
+button. Owner and read-only demo behavior are preserved.
+
+A real SQLite worker termination test covers an outstanding command, subsequent
+commands, and repeated close after failure. The independent reviewer reran the
+test and repeated actual-worker termination across 30 fresh runtimes, all passing.
+The updated exact diff received independent approval with no remaining findings.
+
+Node 24.15 follow-up validation: three focused API/UI suites pass 53 tests
+(six PostgreSQL cases skipped in that invocation); a separate disposable UTF8/UTC
+PostgreSQL run passes all 12 shared account-contract cases across both backends.
+Type checking and `git diff --check` pass. The disposable PostgreSQL cluster was
+stopped and removed. Fresh Copilot review and CI remain required before merge.
