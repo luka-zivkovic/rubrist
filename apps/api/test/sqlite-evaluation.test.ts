@@ -114,6 +114,22 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     expect(f.db.prepare('SELECT count(*) n FROM assessment_receipt_artifacts').get()?.n).toBe(0);
     expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
+  it.each(['completed','failed'] as const)('preserves terminal %s start time against rewriting and clearing',async(status)=> {
+    const f=await fixture();
+    expect((await f.r.getEvalRun(f.projectId,f.owner.id))?.startedAt).toBeNull();
+    await f.r.markEvalRunRunning(f.projectId,f.owner.id);
+    await f.start();
+    const started=(await f.r.getEvalRun(f.projectId,f.owner.id))!.startedAt;
+    expect(started).not.toBeNull();
+    if(status==='completed') {const verdict=await f.record();await f.r.completeEvalRunItem({...f.execution,verdictId:verdict.id,resultLabel:'pass'});}
+    else await f.r.failEvalRunItem({...f.execution,error:'synthetic failure',failure:{state:'failure',failureKind:'provider_protocol',observed:{model:'mock-heuristic-v1',requestId:'synthetic',responseId:null,systemFingerprint:null,upstreamProvider:null,thinkingReturned:null,reasoningTokens:null}}});
+    const receipt=await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id);
+    expect((await f.r.getEvalRun(f.projectId,f.owner.id))?.status).toBe(status);
+    for(const value of ['2020-01-01T00:00:00.000Z',null])expect(()=>f.db.prepare('UPDATE eval_runs SET started_at=? WHERE id=?').run(value,f.owner.id)).toThrow(/immutable terminal eval run/);
+    expect(()=>f.db.prepare('UPDATE eval_runs SET blocking=1-blocking WHERE id=?').run(f.owner.id)).toThrow(/immutable terminal eval run/);
+    expect((await f.r.getEvalRun(f.projectId,f.owner.id))?.startedAt).toBe(started);
+    expect(await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id)).toEqual(receipt);
+  });
   it('fences live, replaced and expired claims, and does not repeat a provider call after uncertainty',async()=> {
     const f=await fixture(),next={...f.execution,executionToken:'next'};
     expect(await f.r.claimEvalRunItemExecution(f.execution)).toEqual({state:'claimed'});
