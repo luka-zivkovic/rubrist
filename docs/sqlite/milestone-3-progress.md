@@ -46,7 +46,9 @@ rebuilds preserve columns, rowids and retained BLOBs, check copy equality, recre
 dependent triggers, verify foreign keys and reject unfinished replacement tables
 before commit. Runtime connections separately enable FK enforcement. Migration
 SQL cannot issue transaction/savepoint commands behind the runner's ownership.
-Applied migrations 0001–0007 remain unchanged; this milestone adds 0008–0022.
+Applied migrations 0001–0008 remain unchanged; this milestone adds 0009–0023.
+The unpublished M3 filenames were advanced by one after M2 added its final
+forward membership guard; only disposable qualification databases existed.
 
 Claude Code was consulted through agent-bridge. Its synthetic migration probe
 confirmed that deferred foreign keys do not prevent DROP TABLE cascades. Its
