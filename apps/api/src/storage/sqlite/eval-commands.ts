@@ -1,3 +1,4 @@
+import { DatasetNotFoundError } from '../../repository/errors.js';
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -31,6 +32,7 @@ export function sqliteEvalCommands(db:DatabaseSync) {
   }
   const commands={
     createEvalRun(input:Args<'createEvalRun'>[0]) { return transaction(now=> {
+      if(input.datasetId&&!one('SELECT 1 FROM datasets WHERE project_id=? AND id=? AND archived_at IS NULL',input.projectId,input.datasetId)) throw new DatasetNotFoundError(input.datasetId);
       if(input.datasetRevisionId||input.sourceTraceTest||!['manual','api_batch','release_evidence'].includes(input.trigger)) throw new SqliteFeatureUnavailableError('SQLite evaluation source unavailable at this stage');
       const runId=`eval_${randomUUID()}`,stamp=new Date(now).toISOString();
       let completed=0,agreed=0,total=0;

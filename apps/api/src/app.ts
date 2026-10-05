@@ -1,3 +1,4 @@
+import { DatasetNotFoundError } from "./repository/errors.js";
 import { EvaluatorCallError } from "@rubrist/audit/runtime";
 import { ExecutionBindingInputError } from "./lib/execution-binding.js";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -1032,6 +1033,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   app.notFound((c) => c.json({ error: "Not found" }, 404));
 
   app.onError((error, c) => {
+    if (error instanceof DatasetNotFoundError) return c.json({ error: "Dataset not found" }, 404);
     if (error instanceof SqliteFeatureUnavailableError) return c.json({error:error.message,code:"sqlite_feature_unavailable"},503);
     if (error instanceof ExecutionBindingInputError) return c.json({ error: `Invalid execution binding: ${error.message}` }, 400);
     if (error instanceof EvaluatorCallError) {

@@ -47,6 +47,26 @@ describe('SQLite authenticated durable batch workflow',()=>{
     expect(response.status).toBe(503);expect(await response.json()).toMatchObject({code:'sqlite_feature_unavailable'});
     expect(read).not.toHaveBeenCalled();read.mockRestore();
   });
+  it('returns validation errors for blank collection names and refuses archival races before dispatch',async()=> {
+    const f=await fixture(),headers={cookie:f.cookie,'content-type':'application/json'};
+    const blank=await f.app.request('/api/datasets',{method:'POST',headers,body:JSON.stringify({name:' \t '})});
+    expect(blank.status).toBe(400);
+    const {projects}=await (await f.app.request('/api/projects',{headers})).json() as any,projectId=projects[0].id;
+    const trace=await f.runtime.repository.importTrace(projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'dataset_example'});
+    const dataset=await f.runtime.repository.createDataset({projectId,name:'Concurrent archive'});
+    await f.runtime.repository.addDatasetItems({projectId,datasetId:dataset.id,items:[{caseId:trace.caseId}]});
+    const create=f.runtime.repository.createEvalRun.bind(f.runtime.repository);
+    const archive=vi.spyOn(f.runtime.repository,'createEvalRun').mockImplementationOnce(async input=>{
+      await f.runtime.repository.archiveDataset(projectId,dataset.id);
+      return create(input);
+    });
+    const send=vi.spyOn(f.runtime.queue,'send');
+    const response=await f.app.request('/api/eval-runs',{method:'POST',headers,body:JSON.stringify({datasetId:dataset.id,skillVersionId:f.versionId})});
+    expect(response.status).toBe(404);expect(await response.json()).toEqual({error:'Dataset not found'});
+    expect(archive).toHaveBeenCalledOnce();expect(send).not.toHaveBeenCalled();
+    expect(await f.runtime.repository.listEvalRuns(projectId)).toEqual([]);
+    archive.mockRestore();send.mockRestore();
+  });
   it('signs up, authors a native evaluator, survives restart before delivery and serves exact receipt bytes',async()=> {
     const f=await fixture();
     expect((await f.app.request('/api/eval-runs?purpose=backfill',{headers:{cookie:f.cookie}})).status).toBe(503);
