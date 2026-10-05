@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # PR branch filters match the base; later milestones can target an open predecessor.
+    branches: [main, "sqlite-milestone-*"]
 
 permissions:
   contents: read
