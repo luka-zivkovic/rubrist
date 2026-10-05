@@ -164,3 +164,10 @@ exact CAS ancestry, owner binding, frozen stopping rules, canonical digests and
 database command-time deadline enforcement. Independent audit approved 12/12
 focused tests; combined population/context tests pass 58/58. Closure transitions
 remain staged until their complete materialized evidence guards are installed.
+
+CURRENT: migrations 0031–0032 preserve multi-label coding events, explicit
+no-failure evidence, exact withdrawal/reopen targets, frozen payload anchors,
+member/owner provenance and deadline cutoffs. Content views bind their exact
+retained development exposure and closure participation. Independent audit
+approved 20/20 focused checks; the full population/study file passes 74/74.
+Post-closure views will be exercised with the forthcoming closure bundle.
