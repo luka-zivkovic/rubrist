@@ -97,3 +97,9 @@ CURRENT: M3 migrations now follow M2 terminal metadata guard 0009. Both evaluati
 CURRENT rebase validation: independent audit verifies unchanged M2 migration bytes and preserved terminal metadata guards in both M3 rebuilds. Evaluation and interrupted-rebuild tests pass 26/26.
 
 CURRENT: M3 now follows correction-reason guard 0010; its migrations do not rebuild receipt tables or remove that guard.
+
+CURRENT CI follow-up: 2347 tests passed; the 80-worker, ten-round fresh-file
+migration stress test exceeded the default five-second test budget on a loaded
+hosted runner. Its own timeout is now 30 seconds, retaining every concurrent
+round, completion assertion and worker cleanup. Production busy deadlines are
+unchanged. Independent audit approved and all 23 storage tests pass locally.

@@ -109,7 +109,7 @@ describe('SQLite migrations and connection lifecycle', () => {
         await completed;
       } finally { await Promise.all(workers.map(worker=>worker.terminate())); }
     }
-  });
+  }, 30_000); // Ten rounds / 80 workers migrate the full schema under CI contention.
   it('serializes competing migrations from workers and keeps the HTTP event loop responsive under write contention', async () => {
     process.env.BETTER_AUTH_SECRET=secret;
     const path=`${temp()}/parallel.sqlite`;
