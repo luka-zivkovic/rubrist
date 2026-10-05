@@ -1,4 +1,6 @@
 import { Pool } from "pg";
+import { DatabaseSync } from "node:sqlite";
+import { initializeGovernedSqliteFunctions } from "../src/storage/sqlite/governed-functions.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runMigrations } from "@rubrist/db";
 import {
@@ -65,7 +67,7 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
     await cleanup?.();
   });
 
-  it("matches independent golden vectors across runtimes", async () => {
+  it("matches independent golden vectors across JavaScript, PostgreSQL and SQLite", async () => {
     const vectors: unknown[] = [
       null,
       true,
@@ -98,6 +100,9 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
       }
     ];
 
+    const sqlite = new DatabaseSync(":memory:");
+    initializeGovernedSqliteFunctions(sqlite);
+    try {
     for (const [index, content] of vectors.entries()) {
       const kind = `governed-golden-${index}/v1`;
       const row = (await pool.query(
@@ -107,7 +112,27 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
       )).rows[0];
       expect(String(row.canonical)).toBe(governedContentV1CanonicalBytes(kind, content).toString("utf8"));
       expect(String(row.digest)).toBe(governedContentV1Digest(kind, content));
+      const actual = sqlite.prepare("SELECT governed_canonical_json_v1(?) canonical, governed_content_v1_digest(?,?) digest").get(JSON.stringify({ content, kind }), kind, JSON.stringify(content));
+      expect(actual?.canonical).toBe(row.canonical);
+      expect(actual?.digest).toBe(row.digest);
     }
+    } finally { sqlite.close(); }
+  });
+
+  it("uses the same Unicode ordering for SQL aggregates as PostgreSQL and JavaScript", async () => {
+    const values = ["～", "😀", "\ue000", "a", "aa", "é", "中", "10", "2", ""];
+    const expected = [...values].sort();
+    const postgres = await pool.query("SELECT value FROM unnest($1::text[]) value ORDER BY governed_utf16_sort_key_v1(value)", [values]);
+    expect(postgres.rows.map(row => row.value)).toEqual(expected);
+    const sqlite = new DatabaseSync(":memory:");
+    try {
+      initializeGovernedSqliteFunctions(sqlite);
+      const row = sqlite.prepare("SELECT json_group_array(value ORDER BY governed_utf16_sort_key_v1(value)) ordered FROM json_each(?)").get(JSON.stringify(values));
+      expect(JSON.parse(String(row?.ordered))).toEqual(expected);
+      for (const invalid of [null, 7, '{', '"\\u0000"', '"\\ud800"', '1e999']) {
+        expect(() => sqlite.prepare('SELECT governed_canonical_json_v1(?)').get(invalid)).toThrow();
+      }
+    } finally { sqlite.close(); }
   });
 
   it("aligns the exported instruction helper to the persisted row projection", async () => {

@@ -236,6 +236,8 @@ export {
   AnalysisPopulationCreateInputSchema,
   AnalysisPopulationRequestRecordSchema,
   AnalysisPopulationSchema,
+  PostgresAnalysisPopulationSchema,
+  SqliteAnalysisPopulationSchema,
   AnalysisPopulationMemberSchema,
   AnalysisPopulationMemberRecordSchema,
   AnalysisPopulationExclusionReasonSchema,

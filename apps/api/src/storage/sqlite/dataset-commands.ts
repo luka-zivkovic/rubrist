@@ -1,3 +1,4 @@
+import { sqliteCommand } from './command-context.js';
 import { importTraceInTransaction } from './trace-commands.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
@@ -18,10 +19,7 @@ export function sqliteDatasetCommands(db:DatabaseSync) {
   const one=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).get(...args) as Row|undefined;
   const all=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).all(...args) as Row[];
   function transaction<T>(work:(now:string)=>T):T {
-    if(db.isTransaction) throw new Error('Nested SQLite dataset command');
-    db.exec('BEGIN IMMEDIATE');
-    try {const value=work(new Date().toISOString());db.exec('COMMIT');return value;}
-    catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
+    return sqliteCommand(db,context=>work(context.timestamp));
   }
   function items(projectId:string,datasetId:string){return all('SELECT * FROM dataset_items WHERE project_id=? AND dataset_id=? ORDER BY added_at,id',projectId,datasetId).map(item);}
   return {

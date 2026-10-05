@@ -1,3 +1,4 @@
+import { sqliteCommand } from './command-context.js';
 import { sqliteLimit } from './query-values.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
@@ -45,10 +46,7 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
   const all = (sql: string, ...args: SQLInputValue[]) => db.prepare(sql).all(...args) as Row[];
   const run = (sql: string, ...args: SQLInputValue[]) => db.prepare(sql).run(...args);
   function transaction<T>(work: (now: string) => T): T {
-    if (db.isTransaction) throw new Error('Nested SQLite definition command');
-    db.exec('BEGIN IMMEDIATE');
-    try { const result=work(new Date().toISOString()); db.exec('COMMIT'); return result; }
-    catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
+    return sqliteCommand(db,context=>work(context.timestamp));
   }
   if(!initializedConnections.has(db)) {
     db.function('sqlite_subject_digest',{deterministic:true},(projectId,subjectId)=>

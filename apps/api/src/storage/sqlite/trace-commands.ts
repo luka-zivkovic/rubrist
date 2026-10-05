@@ -1,3 +1,4 @@
+import { sqliteCommand } from './command-context.js';
 import { sqliteLimit } from './query-values.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
@@ -13,10 +14,7 @@ export function sqliteTraceCommands(db: DatabaseSync) {
   const run=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).run(...args);
   const commands = {
     importTrace(projectId: string, source: CaseSource, input: ManualTraceImportInput, context: TraceImportContext): TraceImportResult {
-      if(db.isTransaction) throw new Error('Nested SQLite trace import');
-      db.exec('BEGIN IMMEDIATE');
-      try { const result=importTraceInTransaction(db,projectId,source,input,context,new Date().toISOString());db.exec('COMMIT');return result; }
-      catch(error) { if(db.isTransaction)db.exec('ROLLBACK');throw error; }
+      return sqliteCommand(db,command=>importTraceInTransaction(db,projectId,source,input,context,command.timestamp));
     },
     getCaseSourceIdentity(projectId: string, caseId: string): CaseSourceIdentity | null {
       const row=one('SELECT rt.* FROM raw_traces rt JOIN cases c ON c.raw_trace_id=rt.id AND c.project_id=rt.project_id WHERE c.project_id=? AND c.id=?',projectId,caseId);

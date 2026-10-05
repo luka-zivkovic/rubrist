@@ -81,7 +81,7 @@ export const AnalysisPopulationRequestRecordSchema = z.object({
 }).strict();
 export type AnalysisPopulationRequestRecord = z.infer<typeof AnalysisPopulationRequestRecordSchema>;
 
-export const AnalysisPopulationSchema = z.object({
+export const PostgresAnalysisPopulationSchema = z.object({
   id: AnalysisPopulationIdSchema,
   projectId: AnalysisPopulationIdSchema,
   datasetRevisionId: AnalysisPopulationIdSchema,
@@ -95,14 +95,20 @@ export const AnalysisPopulationSchema = z.object({
   exclusionCount: AnalysisPopulationExactCountSchema,
   frameDigest: DatasetEvidenceDigestSchema,
   contentDigest: DatasetEvidenceDigestSchema,
-  // pg_current_snapshot() text is ASCII, so this character bound is the exact
-  // byte bound enforced by the current baseline.
   snapshotXid8: AnalysisPopulationSnapshotXid8Schema,
   snapshotTakenAt: AnalysisPopulationTimestampSchema,
   createdByUserId: AnalysisPopulationIdSchema,
   createdBySubjectId: AnalysisPopulationIdSchema,
   createdAt: AnalysisPopulationTimestampSchema
 }).strict();
+// Preserve PostgreSQL's response exactly; SQLite never invents a snapshot xid.
+export const SqliteAnalysisPopulationSchema = PostgresAnalysisPopulationSchema.omit({ snapshotXid8: true }).extend({
+  snapshotProvenance: z.literal("sqlite-serialized-freeze/v1")
+}).strict();
+export const AnalysisPopulationSchema = z.union([
+  PostgresAnalysisPopulationSchema,
+  SqliteAnalysisPopulationSchema
+]);
 export type AnalysisPopulation = z.infer<typeof AnalysisPopulationSchema>;
 
 const AnalysisPopulationMemberBaseSchema = z.object({
