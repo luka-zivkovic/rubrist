@@ -73,7 +73,7 @@ export async function processGateRunJob(
   if (
     queue &&
     (parsed.timeScope === "existing" || parsed.timeScope === "both") &&
-    regressionRun.status !== "blocked"
+    (regressionRun.status === "passed" || regressionRun.status === "overridden")
   ) {
     try {
       await repository.authorizeSkillVersionExecution({

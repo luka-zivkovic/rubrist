@@ -5,7 +5,7 @@ exports[`golden repository helpers > preserves the exact root surface behind one
   {
     "exported": true,
     "name": "runGoldenSetRegression",
-    "signature": "export async function runGoldenSetRegression(input: { skillVersion: SkillVersion; goldenSet: GoldenSetEntry[]; traces: Map<string, Trace>; overrideReason?: string | undefined; actorUserId?: string | undefined; judgeProvider?: BinaryJudgeProvider | undefined; previousVerdicts?: Map<string, VerdictLabel> | undefined; }): Promise<Omit<RegressionRunResult, "datasetRevisionId">>;",
+    "signature": "export async function runGoldenSetRegression(input: { skillVersion: SkillVersion; signal?: AbortSignal | undefined; goldenSet: GoldenSetEntry[]; traces: Map<string, Trace>; overrideReason?: string | undefined; actorUserId?: string | undefined; judgeProvider?: BinaryJudgeProvider | undefined; previousVerdicts?: Map<string, VerdictLabel> | undefined; }): Promise<Omit<RegressionRunResult, "datasetRevisionId">>;",
   },
   {
     "exported": true,

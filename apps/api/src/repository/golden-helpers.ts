@@ -29,6 +29,7 @@ type BinaryJudgeProvider = Pick<JudgeProvider, "name" | "modelName" | "judge">;
 // PgRepository. This module owns no mutable repository state or policy.
 export async function runGoldenSetRegression(input: {
   skillVersion: SkillVersion;
+  signal?: AbortSignal | undefined;
   goldenSet: GoldenSetEntry[];
   traces: Map<string, Trace>;
   overrideReason?: string | undefined;
@@ -61,24 +62,28 @@ export async function runGoldenSetRegression(input: {
   const verdicts = new Array<JudgeVerdict>(comparable.length);
   const GATE_CONCURRENCY = 4;
   let cursor = 0;
+  let failure: RegressionGateJudgeError | undefined;
   await Promise.all(
     Array.from({ length: Math.min(GATE_CONCURRENCY, comparable.length) }, async () => {
-      while (cursor < comparable.length) {
+      while (!failure && cursor < comparable.length) {
         const index = cursor++;
         const entry = comparable[index]!;
         try {
+          input.signal?.throwIfAborted();
           verdicts[index] = await judgeProvider.judge({
             prompt,
             trace: input.traces.get(entry.caseId)!,
             outputSchema: input.skillVersion.outputSchema ?? DEFAULT_OUTPUT_SCHEMA
           });
         } catch (error) {
-          throw new RegressionGateJudgeError(entry.caseId, error);
+          failure ??= new RegressionGateJudgeError(entry.caseId, error);
         }
       }
     })
   );
 
+  if (failure) throw failure;
+  input.signal?.throwIfAborted();
   let compared = 0;
   let regressed = 0;
   let improved = 0;
