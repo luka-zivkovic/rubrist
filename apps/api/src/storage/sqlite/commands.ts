@@ -1,3 +1,5 @@
+import { sqliteRegressionCommands } from './regression-commands.js';
+import { sqliteSkillCommands } from './skill-commands.js';
 import { sqliteHistoricalGateCommands } from './historical-gate-commands.js';
 import { sqliteProjectCommands } from './project-commands.js';
 import { sqliteFeedbackCommands } from './feedback-commands.js';
@@ -206,7 +208,7 @@ export function sqliteCommands(db: DatabaseSync) {
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

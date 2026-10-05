@@ -1,3 +1,7 @@
+import { sqliteRegressionService } from './regression-service.js';
+import { createStrictJudgeProvider, type JudgeProviderFactory } from '../../lib/judge-provider.js';
+import { executionBindingFromInput } from '../../lib/execution-binding.js';
+import { RegressionGateUnavailableError } from '../../repository/errors.js';
 import type { CapabilityCheckStore } from '../../lib/capability-check-store.js';
 import type { EvaluatorLifecycleRepository } from '../../evaluator-lifecycle/repository.js';
 import { SqliteQueue } from '@rubrist/queue/sqlite';
@@ -7,7 +11,7 @@ import { SqliteStorage } from './client.js';
 
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 export { SqliteFeatureUnavailableError } from './feature-error.js';
-export async function createSqliteRuntime(path: string) {
+export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider) {
   const storage = new SqliteStorage(path);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
   const capabilityChecks:CapabilityCheckStore={
@@ -54,6 +58,15 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    signOffSkillVersion: (...args) => storage.command('signOffSkillVersion',...args),
+    async createSkillVersionPending(skillId,input,context) {
+      const stored=executionBindingFromInput(input.executionBinding,undefined,{typedQuestion:input.typedQuestion!==undefined});
+      const provider=stored.executionBinding.provider,supplied=context.agentSetup?.providerCredential;
+      const key=supplied?.provider===provider?supplied.apiKey:provider!=='mock'?await storage.command('getJudgeProviderCredential',context.projectId,provider):null;
+      const judge=judgeProviderFactory({...stored,rubricMarkdown:input.rubricMarkdown??null,prompt:input.prompt??null,typedQuestion:input.typedQuestion??null,decisionThreshold:input.decisionThreshold??null},key?{apiKey:key}:undefined);
+      if(provider!=='mock'&&judge.name==='mock')throw new RegressionGateUnavailableError(provider);
+      return storage.command('insertPendingSkillVersion',skillId,input,context);
+    },
     createGateCheck: (...args) => storage.command('createGateCheck',...args),
     getGateCheckDetail: (...args) => storage.command('getGateCheckDetail',...args),
     listGateChecks: (...args) => storage.command('listGateChecks',...args),
@@ -231,5 +244,6 @@ export async function createSqliteRuntime(path: string) {
       return async () => { throw new SqliteFeatureUnavailableError(); };
     }
   }) as RubristRepository;
+  Object.assign(methods,sqliteRegressionService(storage,repository,judgeProviderFactory));
   return {storage,accounts,repository,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }
