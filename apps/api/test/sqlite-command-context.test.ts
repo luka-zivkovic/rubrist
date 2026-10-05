@@ -75,7 +75,7 @@ it('seeds the command clock from retained M3 times and enforces real ingestion/e
  const path=join(dir,'db.sqlite'),db=openSqlite(path);cleanup.push(()=>db.close());
  const history=join(dir,'migrations');mkdirSync(history);
  const source=fileURLToPath(new URL('../../../packages/db/sqlite-migrations/',import.meta.url));
- for(const name of readdirSync(source).filter(name=>name.endsWith('.sql')&&name<'0023'))copyFileSync(join(source,name),join(history,name));
+ for(const name of readdirSync(source).filter(name=>name.endsWith('.sql')&&name<'0024'))copyFileSync(join(source,name),join(history,name));
  migrateSqlite(db,history);sqliteDatasetRevisionCommands(db);
  const caseStamp='2030-01-01T00:00:00.123Z',exposureStamp='2030-01-01T00:00:01.234Z';
  db.prepare('INSERT INTO organizations VALUES(?,?,?)').run('org','Org',caseStamp);

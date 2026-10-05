@@ -51,7 +51,9 @@ PostgreSQL/SQLite golden-vector and SQL Unicode-ordering tests passed together
 with command context tests (10/10, PostgreSQL enabled). The full SQLite suite
 initially passed 124/125; the historical fixture was then adapted to supply a
 TEMP clock while generating old-schema data, removed before migration. The
-focused rerun passed; a final full rerun is still required after stack rebase.
+focused rerun passed. After rebasing onto the M2 membership fix and updated M3,
+the full SQLite suite passed 126/126 tests in 21 files. Migration 0024 adds the
+command clock after the preserved M2/M3 migration history.
 
 ## Remaining work
 
