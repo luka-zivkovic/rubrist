@@ -57,5 +57,10 @@ otherwise target the previous milestone branch and state the dependency.
 Inspect CI and Copilot review results on the PR. Address actionable findings
 and push fixes to that same PR. Copilot supplements the independent audit and
 tests; its review is not authority to change product scope or accept an ADR.
-Report the PR URL and any pending checks. PR creation/review authorization
-does not authorize merging or deploying. See `docs/pull-request-reviews.md`.
+The user has authorized merging SQLite milestone PRs after CI passes and
+actionable independent/Copilot findings are resolved. Merge from the bottom
+of a stack, retarget the next PR, inspect its diff, and recheck it before
+merging. Continue through the authorized milestones; proposed ADR decisions
+still need explicit approval. Report PR URLs and pending checks. Deployment
+is separate and is not authorized by this workflow. See
+`docs/pull-request-reviews.md`.

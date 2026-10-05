@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { digest } from './database.mjs';
 
 const root = new URL('../../', import.meta.url);
-const migrationDir = new URL('packages/db/migrations/', root);
+const defaultMigrationDir = new URL('packages/db/migrations/', root);
 const strategies = {
   finalization: 'Mandatory reciprocal deferred foreign key to an immutable finalization row; immediate finalizer checks the complete joined bundle; later child changes rejected. Mutable event-head rules also need a per-command validation obligation, not a one-time finalizer.',
   immutability: 'Immediate UPDATE/DELETE triggers; retain exact permitted project/user erasure exceptions and production deletion audit obligations; recursive triggers ON closes REPLACE bypass.',
@@ -24,7 +24,7 @@ function strategy(name, sql, deferred) {
   if (/RETURNS trigger/i.test(sql) || /^guard_|^ensure_/.test(name)) kinds.push('guard');
   return kinds.length ? kinds : ['query'];
 }
-export function inventory() {
+export function inventory({ migrationDir = defaultMigrationDir } = {}) {
   const migrations = readdirSync(migrationDir).filter(f => f.endsWith('.sql')).sort().map(file => {
     const sql = readFileSync(new URL(file, migrationDir), 'utf8');
     return { file, sql, sha256: digest(Buffer.from(sql)) };
@@ -35,13 +35,16 @@ export function inventory() {
     for (const match of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([\w]+)\s*\([\s\S]*?\bAS\s+(\$\w*\$)[\s\S]*?\2\s*;/gi)) {
       definitions.push({ name: match[1], sql: match[0], file, line: sql.slice(0, match.index).split('\n').length });
     }
-    for (const match of sql.matchAll(/CREATE\s+(CONSTRAINT\s+)?TRIGGER\s+(\w+)\s+([\s\S]*?);/gi)) {
+    const triggerStart = triggers.length;
+    for (const match of sql.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?(CONSTRAINT\s+)?TRIGGER\s+(\w+)\s+([\s\S]*?);/gi)) {
       const fn = match[3].match(/EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(\w+)/i)?.[1];
       const table = match[3].match(/\bON\s+(\w+)/i)?.[1];
       if (!fn || !table) throw new Error(`Unparsed trigger ${match[2]}`);
       triggers.push({ name: match[2], table, function: fn, deferred: /INITIALLY DEFERRED/i.test(match[3]),
         source: `packages/db/migrations/${file}:${sql.slice(0,match.index).split('\n').length}`, sha256: digest(Buffer.from(match[0])) });
     }
+    const expectedTriggers = [...sql.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\b/gi)].length;
+    if (triggers.length - triggerStart !== expectedTriggers) throw new Error(`Unparsed triggers in ${file}`);
     const expected = [...sql.matchAll(/^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/gim)].length;
     if (definitions.filter(d => d.file === file).length !== expected) throw new Error(`Unparsed functions in ${file}`);
   }

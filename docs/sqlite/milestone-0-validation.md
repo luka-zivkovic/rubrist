@@ -68,5 +68,27 @@ and recovery (Milestone 0)”.
   independently. Public API version/negotiation remains to be specified.
 - Node/Linux release packaging, performance, full queue leasing/renewal,
   power-loss durability and installation restore drills remain unqualified.
-- Stop at this reviewed Milestone 0 boundary, as required by the repository's
-  regular batch flow, before mixing in Milestone 1.
+- This checkpoint stopped at the reviewed Milestone 0 boundary. Subsequent
+  user authorization permits continuing through separately reviewed milestones.
+
+## PR #192 Copilot follow-up
+
+CURRENT: Copilot identified a managed-callback transaction escape and a missing
+source-count check for trigger parsing. The callback now receives only SQL
+operations; a SQLite authorizer denies top-level transaction control while the
+callback runs, including statements prepared before the command. Savepoints
+remain usable. Adversarial tests assert rollback, private-context cleanup and
+no escaped autocommit writes. The authorizer is an application transaction
+ownership boundary, not a sandbox against arbitrary trusted Node code.
+
+Inventory generation now checks each migration's source trigger declaration
+count against parsed triggers, supports `CREATE OR REPLACE TRIGGER`, and fails
+closed for unsupported quoted trigger syntax. Generated inventory bytes and
+all migration hashes remain unchanged. The independent follow-up audit found
+two additional cases: implicit rollback followed by an autocommit write, and an
+unsupported trigger on the same source line as another statement. Operations
+and prepared statements now check the current command's ownership before every
+execution; source counting no longer depends on line starts. Regressions cover
+both cases and stale command/statement reuse. Both focused suites pass all 16
+tests, also independently rerun by the reviewer with no remaining blockers.
+These corrections still require fresh Copilot review and CI before merge.
