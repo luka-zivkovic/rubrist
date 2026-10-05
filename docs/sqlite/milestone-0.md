@@ -226,7 +226,7 @@ The root `pnpm test` picks up these tests through `tools/*.test.mjs`; no SQLite
 test is conditional on a database environment. Tests create and remove temporary
 files and kill only child processes they launched. They access no configured DB.
 
-CURRENT: 15 prototype tests plus three source-inventory tests pass. The SQLite
+CURRENT: 16 prototype tests plus three source-inventory tests pass. The SQLite
 backup API restores committed BLOBs and passes FK/integrity checks. This is a
 consistent backup mechanism check, not a power-loss test or operator restore
 qualification. Review and broader validation results are recorded in

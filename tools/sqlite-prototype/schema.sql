@@ -94,11 +94,11 @@ CREATE TRIGGER attempt_insert BEFORE INSERT ON attempts
 CREATE TRIGGER attempt_transition BEFORE UPDATE ON attempts BEGIN
   SELECT CASE WHEN NEW.id IS NOT OLD.id OR NOT (
     (OLD.state IN ('ready','claimed') AND NEW.state='claimed' AND NEW.epoch=OLD.epoch+1
-      AND (OLD.state='ready' OR OLD.expires_at <= clock_ms()) AND NEW.expires_at > clock_ms())
+      AND (OLD.state='ready' OR OLD.expires_at <= command_time()) AND NEW.expires_at > command_time())
     OR (OLD.state='claimed' AND NEW.state='started' AND NEW.epoch=OLD.epoch
-      AND NEW.owner=OLD.owner AND NEW.expires_at=OLD.expires_at AND OLD.expires_at > clock_ms())
-    OR (OLD.state='started' AND NEW.state='completed' AND NEW.epoch=OLD.epoch AND OLD.expires_at > clock_ms())
-    OR (OLD.state='started' AND NEW.state='outcome_unknown' AND NEW.epoch=OLD.epoch AND OLD.expires_at <= clock_ms())
+      AND NEW.owner=OLD.owner AND NEW.expires_at=OLD.expires_at AND OLD.expires_at > command_time())
+    OR (OLD.state='started' AND NEW.state='completed' AND NEW.epoch=OLD.epoch AND OLD.expires_at > command_time())
+    OR (OLD.state='started' AND NEW.state='outcome_unknown' AND NEW.epoch=OLD.epoch AND OLD.expires_at <= command_time())
   ) THEN RAISE(ABORT, 'invalid attempt transition') END;
 END;
 CREATE TRIGGER attempt_no_delete BEFORE DELETE ON attempts BEGIN SELECT RAISE(ABORT, 'retain attempt'); END;

@@ -41,7 +41,6 @@ export function openPrototype(path, { initialize = false, clock = Date.now } = {
     if (!context || !db.isTransaction) throw new Error('managed transaction required');
     return context.time;
   });
-  db.function('clock_ms', () => clock());
   if (initialize) db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
   return {
     db,

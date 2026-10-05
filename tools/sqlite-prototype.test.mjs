@@ -219,6 +219,29 @@ test('ownership: competing claims fence stale workers before dispatch and after 
   assert.equal(claim(store, 'job', 'third', 100), undefined);
 });
 
+test('lease predicates use one command timestamp even when the clock advances on each read', t => {
+  const { store, path } = fixture(t);
+  store.db.exec("INSERT INTO attempts(id) VALUES('recover-clock')");
+  let now = 100;
+  const advancing = openPrototype(path, { clock: () => now++ });
+  try {
+    const short = claim(advancing, 'job', 'short', 1); // time 100
+    assert.ok(short);
+    assert.equal(now, 101);
+    assert.equal(start(advancing, short), false); // exactly expires, time 101
+    const replacement = claim(advancing, 'job', 'replacement', 3); // time 102
+    assert.ok(replacement);
+    assert.equal(start(advancing, replacement), true); // time 103
+    assert.equal(finish(advancing, replacement, Buffer.from('done')), true); // time 104
+    assert.equal(finish(advancing, replacement, Buffer.from('duplicate')), false); // time 105
+    const interrupted = claim(advancing, 'recover-clock', 'interrupted', 2); // time 106
+    assert.equal(start(advancing, interrupted), true); // time 107
+    assert.equal(finish(advancing, interrupted, Buffer.from('late')), false); // time 108
+    assert.equal(recover(advancing), 1); // time 109
+    assert.equal(now, 110);
+  } finally { advancing.close(); }
+});
+
 test('model boundary: unrelated writes progress during overlapping calls and expiry records permanent uncertainty', async t => {
   const { store, open, time } = fixture(t);
   const second = open();

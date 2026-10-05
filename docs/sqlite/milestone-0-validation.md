@@ -9,7 +9,7 @@ Application runtime, PostgreSQL migration bytes and public contracts are unchang
 | Check | Result |
 | --- | --- |
 | Node 24.15.0 / SQLite 3.51.3, macOS arm64 | Runtime identity verified |
-| `node --test tools/sqlite-prototype.test.mjs tools/sqlite-inventory.test.mjs` | 18 passed, zero skipped; rerun after both Copilot follow-up rounds |
+| `node --test tools/sqlite-prototype.test.mjs tools/sqlite-inventory.test.mjs` | 19 passed, zero skipped; rerun after all Copilot follow-up corrections |
 | All root Node test globs (`tools/*.test.mjs tools/ci/*.test.mjs tools/mcp/*.test.mjs`) | 47 passed, zero skipped; focused SQLite tests rerun after final cascade fix |
 | `pnpm typecheck` | Passed |
 | `pnpm build` | Passed; existing web bundle-size advisory |
@@ -98,4 +98,9 @@ declaration counting also ignores line position and rejects unsupported quoted
 names. The current focused total is 18 passing tests (15 prototype, three
 inventory). Earlier counts above identify the historical runs they describe.
 The independent reviewer reran all 18 tests and approved this correction with no
-remaining blockers. Fresh Copilot review and CI are still required before merge.
+remaining blockers. A further review found inconsistent lease clock sampling:
+ownership UPDATEs and their triggers now use the same captured command time.
+An advancing-clock regression covers short TTLs, exact expiry, replacement,
+completion and recovery. The latest independent audit reran and approved all
+19 focused tests (16 prototype, three inventory). Fresh Copilot review and CI
+are still required before merge.
