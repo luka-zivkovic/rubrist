@@ -1,3 +1,4 @@
+import { analysisStudyContentDigest, analysisStudyItemContentDigest, analysisStudyRequestDigest } from '../src/lib/analysis-study.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -202,4 +203,42 @@ it('independently re-derives retained population frames through a streaming trig
  sqliteCommand(f.db,c=>c.db.exec("DELETE FROM cases WHERE id=(SELECT case_id FROM analysis_population_members WHERE position=0)"),()=>f.now+1);
  expect(()=>check(3,digest)).toThrow(/frame assessment/);check(4,null);
  expect(f.db.prepare('SELECT count(*) n FROM study_frame_checks').get()?.n).toBe(2);
+});
+
+function draftStudy(f:Fixture,hook:Hook=(_,row)=>row){
+ return sqliteCommand(f.db,c=>{
+  const insert=(table:string,row:RecordValue)=>{const value=hook(table,row,c);if(!value)return;const columns=Object.keys(value);c.db.prepare(`INSERT INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(value));};
+  const basis={projectId:f.projectId,populationId:'ap',drawId:'draw',datasetRevisionId:'rev',contractVersion:'analysis-study/v1' as const};
+  insert('analysis_studies',{id:'study',project_id:f.projectId,population_id:'ap',draw_id:'draw',dataset_revision_id:'rev',contract_version:basis.contractVersion,idempotency_key:'study-create',request_digest:analysisStudyRequestDigest(f.projectId,'ap'),content_digest:analysisStudyContentDigest(basis),created_by_user_id:f.userId,created_by_subject_id:'subject',created_at:c.timestamp,created_command_token:c.token});
+  for(const d of f.db.prepare('SELECT * FROM analysis_population_draw_items ORDER BY position').all()){
+   const item={studyId:'study',drawItemId:String(d.id),memberId:String(d.member_id),revisionItemId:String(d.revision_item_id),caseId:String(d.case_id),position:Number(d.position)};
+   insert('analysis_study_items',{id:'study-item-'+item.position,project_id:f.projectId,study_id:'study',draw_item_id:item.drawItemId,member_id:item.memberId,revision_item_id:item.revisionItemId,case_id:item.caseId,position:item.position,content_digest:analysisStudyItemContentDigest(item),created_at:c.timestamp});
+  }
+  insert('analysis_study_finalizations',{study_id:'study',project_id:f.projectId,command_token:c.token});
+ },()=>f.now+1);
+}
+it('freezes one permanent study per draw with exact selected items and project-only erasure',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_study_items').get()?.n).toBe(2);
+ for(const table of ['analysis_studies','analysis_study_items','analysis_study_finalizations'])expect(()=>f.db.exec(`DELETE FROM ${table}`)).toThrow(/project erasure/);
+ expect(()=>f.db.exec("UPDATE analysis_study_items SET case_id='forged'")).toThrow(/immutable/);
+ expect(()=>sqliteCommand(f.db,c=>c.db.exec("INSERT INTO analysis_study_items SELECT 'late',project_id,study_id,draw_item_id,member_id,revision_item_id,case_id,position,content_digest,created_at FROM analysis_study_items LIMIT 1"),()=>f.now+2)).toThrow(/creating command/);
+ expect(()=>draftStudy(f,(table,row)=>table==='analysis_studies'?{...row,id:'second-study',idempotency_key:'second'}:row)).toThrow(/UNIQUE/);
+ const fresh=await createUnseededSqliteRuntime(f.path);cleanup.push(()=>fresh.close());await fresh.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_studies').get()?.n).toBe(0);expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+});
+it.each([
+ ['analysis_studies','created_by_user_id','other-user'],
+ ['analysis_studies','content_digest','sha256:'+'b'.repeat(64)],
+ ['analysis_studies','draw_id','missing-draw'],
+ ['analysis_study_items','revision_item_id','other-item'],
+ ['analysis_study_items','content_digest','sha256:'+'b'.repeat(64)],
+ ['analysis_study_finalizations','command_token','foreign-command']
+])('rejects forged draft study %s %s',async(table,column,value)=>{
+ const f=await fixture();freeze(f);expect(()=>draftStudy(f,(name,row)=>name===table?{...row,[column]:value}:row)).toThrow();
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_studies').get()?.n).toBe(0);
+});
+it.each(['analysis_study_items','analysis_study_finalizations'])('rejects missing draft study bundle %s',async(table)=>{
+ const f=await fixture();freeze(f);expect(()=>draftStudy(f,(name,row)=>name===table?null:row)).toThrow();
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_studies').get()?.n).toBe(0);
 });

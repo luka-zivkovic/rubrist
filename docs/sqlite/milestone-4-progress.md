@@ -148,3 +148,11 @@ payload digest basis and exact identity-count/source-binding rules. It returns
 an assessment verdict checked by a trigger's RAISE(ABORT). Independent validator,
 evaluation and population tests pass 52/52. Actual study-closure wiring and
 same-command closure source guards are still pending.
+
+CURRENT: migration 0028 adds permanent study/draw ownership and frozen selected
+study items, with exact owner/subject, lineage and digest checks and reciprocal
+complete-bundle finalization. The records survive ordinary retention and erase
+only with their project. Independent draft-study audit approved 9/9 focused
+checks; the complete population/draft test file passes 42/42. Study transitions,
+observations, taxonomy and closures remain pending, so the study repository is
+not yet enabled.
