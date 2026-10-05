@@ -14,7 +14,7 @@ export function evalItem(row: Row) {
     providerMetadata:parse(row.provider_metadata),observed:parse(row.observed)});
 }
 export function verdict(row: Row) {
-  return VerdictRecordSchema.parse({...camel(row),actorName:null,payload:parse(row.payload),observed:parse(row.observed),evaluatorScore:parse(row.evaluator_score)});
+  return VerdictRecordSchema.parse({...camel(row),actorName:row.actor_name??null,reviewContext:row.review_queue_item_id?{queueItemId:row.review_queue_item_id,judgeRunId:row.reviewed_judge_run_id,submissionId:row.review_submission_id}:null,payload:parse(row.payload),observed:parse(row.observed),evaluatorScore:parse(row.evaluator_score)});
 }
 export function evaluationDatabase(db: DatabaseSync) {
   return {

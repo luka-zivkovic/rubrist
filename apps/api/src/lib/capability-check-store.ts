@@ -24,7 +24,7 @@ export function capabilityCheckContext(check: Pick<CapabilityCheckResult, "base"
     credentialDigest: apiKey === null ? null : sha256Digest(apiKey) });
 }
 
-function combined(entries: StoredCapabilityCheck[], binding: ExecutionBinding): CapabilityCheckResult | null {
+export function combineCapabilityChecks(entries: StoredCapabilityCheck[], binding: ExecutionBinding): CapabilityCheckResult | null {
   if (entries.length === 0) return null;
   // A fresh full check supersedes earlier checks. Keep raw calls in the short
   // lived store; carry only the bounded evidence relevant to this binding.
@@ -63,7 +63,7 @@ export class MemoryCapabilityCheckStore implements CapabilityCheckStore {
     const entries = this.entries.filter((entry) => entry.projectId === projectId && entry.contextDigest === contextDigest &&
       entry.checkedAt.getTime() > now.getTime() - CAPABILITY_CHECK_CARRY_MS && entry.checkedAt <= now)
       .sort((a, b) => a.checkedAt.getTime() - b.checkedAt.getTime());
-    return structuredClone(combined(entries, binding));
+    return structuredClone(combineCapabilityChecks(entries, binding));
   }
 }
 
@@ -85,7 +85,7 @@ export class PgCapabilityCheckStore implements CapabilityCheckStore {
        where project_id=$1 and context_digest=$2 and checked_at > $3 and checked_at <= $4
        order by checked_at, sequence`,
       [projectId, contextDigest, new Date(now.getTime() - CAPABILITY_CHECK_CARRY_MS), now]);
-    return combined(result.rows.map((row) => ({ projectId, contextDigest, checkedAt: row.checked_at,
+    return combineCapabilityChecks(result.rows.map((row) => ({ projectId, contextDigest, checkedAt: row.checked_at,
       classification: row.classification, check: row.check_result })), binding);
   }
 }

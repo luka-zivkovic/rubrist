@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, chmodSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,8 +35,14 @@ export function openSqlite(path: string): DatabaseSync {
 export function migrateSqlite(db: DatabaseSync, directory = fileURLToPath(new URL('../sqlite-migrations/', import.meta.url))): void {
   const files = readdirSync(directory).filter(f => f.endsWith('.sql')).sort();
   if (!files.length || files.some((f,i) => !f.startsWith(`${String(i+1).padStart(4,'0')}_`))) throw new Error('Invalid SQLite migration sequence');
-  db.exec('BEGIN IMMEDIATE');
+  if (db.isTransaction) throw new Error('SQLite migrations require an idle migration connection');
+  // A table rebuild must suppress FK cascade actions during DROP TABLE. This
+  // connection never serves application work; every FK is checked before
+  // commit, and enforcement is restored on success and on rollback.
   try {
+    db.exec('PRAGMA foreign_keys=OFF');
+    if (db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 0) throw new Error('Cannot prepare SQLite migration connection');
+    db.exec('BEGIN IMMEDIATE');
     const tables = db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT GLOB 'sqlite_*'").all();
     if (tables.length && !tables.some(t => t.name === 'rubrist_sqlite_migrations')) throw new Error('Unrecognized SQLite database; refusing initialization');
     db.exec('CREATE TABLE IF NOT EXISTS rubrist_sqlite_migrations (id TEXT PRIMARY KEY NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL) STRICT');
@@ -50,11 +56,23 @@ export function migrateSqlite(db: DatabaseSync, directory = fileURLToPath(new UR
       if (applied[i]) {
         if (applied[i]!.checksum !== checksum) throw new Error(`SQLite migration checksum mismatch: ${file}`);
       } else {
-        db.exec(sql);
+        // Only this runner may end the transaction. Checking isTransaction
+        // after execution would be too late to undo an accidental COMMIT.
+        db.setAuthorizer(action => action === constants.SQLITE_TRANSACTION || action === constants.SQLITE_SAVEPOINT
+          ? constants.SQLITE_DENY : constants.SQLITE_OK);
+        try { db.exec(sql); } finally { db.setAuthorizer(null); }
         db.prepare('INSERT INTO rubrist_sqlite_migrations VALUES(?,?,?)').run(file,checksum,new Date().toISOString());
       }
     }
     if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('SQLite foreign-key integrity check failed');
+    if (db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name GLOB '*__new'").all().length) throw new Error('SQLite migration left unfinished replacement tables');
+    if (db.prepare("SELECT name FROM temp.sqlite_schema WHERE name NOT GLOB 'sqlite_*'").all().length) throw new Error('SQLite migration left temporary objects');
     db.exec('COMMIT');
   } catch(error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
+  finally {
+    try {
+      db.exec('PRAGMA foreign_keys=ON');
+      if (db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) throw new Error('Cannot restore SQLite foreign-key enforcement');
+    } catch(error) { try { db.close(); } catch { /* Preserve restoration failure. */ } throw error; }
+  }
 }

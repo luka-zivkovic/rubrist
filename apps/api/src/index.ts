@@ -126,7 +126,7 @@ const server = serve({
   fetch: createApp(repository, {
     auth,
     runtimeMode: config.kind === "demo" ? "demo" : "persistent",
-    ...(sqlite ? {accounts:sqlite.accounts,accountStage:true} : {}),
+    ...(sqlite ? {accounts:sqlite.accounts,accountStage:true,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
     queue,
     analysisStudyRepository,

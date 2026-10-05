@@ -7,8 +7,9 @@ import { sqliteCommands } from './commands.js';
 const port = parentPort!;
 // All messages (including async authentication) run in order. Domain commands
 // cannot enter the auth driver's open transaction or block its completion.
+const migration = openSqlite(workerData.path);
+try { migrateSqlite(migration); } finally { if (migration.isOpen) migration.close(); }
 const domain = openSqlite(workerData.path);
-migrateSqlite(domain);
 const authentication = openSqlite(workerData.path);
 const auth = createAuth(authentication);
 const commands = sqliteCommands(domain);

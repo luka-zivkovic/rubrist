@@ -1,0 +1,77 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { openSqlite } from '@rubrist/db/sqlite';
+import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { sqliteCommands } from '../src/storage/sqlite/commands.js';
+import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
+import { DatasetRevisionConflictError, SealedValidationUnavailableError } from '../src/repository/errors.js';
+const cleanup:Array<()=>void|Promise<void>>=[];
+afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
+async function fixture() {
+  vi.stubEnv('BETTER_AUTH_SECRET','sqlite-revision-test-secret-at-least-32-characters');
+  const dir=mkdtempSync(join(tmpdir(),'rubrist-revisions-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
+  const path=join(dir,'db.sqlite'),runtime=await createSqliteRuntime(path);cleanup.push(()=>runtime.close());
+  const {user}=await runtime.auth.api.signUpEmail({body:{email:'owner@example.test',password:'synthetic-long-password',name:'Owner'}});
+  const {projectId}=await runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+  const r=runtime.repository,dataset=await r.createDataset({projectId,name:'Examples'});
+  const db=openSqlite(path);cleanup.push(()=>db.close());sqliteCommands(db);
+  return {path,runtime,r,projectId,dataset,db};
+}
+describe('SQLite immutable dataset foundation',()=>{
+  it('imports examples atomically, including identity and counters, and preserves upsert labels',async()=> {
+    const f=await fixture();const input={projectId:f.projectId,datasetId:f.dataset.id,ingestionPurpose:'dataset_example' as const,items:[{sourceTraceId:'one',input:{text:'question',api_key:'synthetic-private'},output:'answer',metadata:{},expectedLabel:'fail' as const,note:'original'}]};
+    const imported=await f.r.importDatasetExamples(input);expect(imported.items[0]?.created).toBe(true);
+    const replay=await f.r.importDatasetExamples({...input,items:[{...input.items[0]!,expectedLabel:undefined,note:undefined}]});expect(replay.items[0]?.created).toBe(false);
+    expect((await f.r.getDatasetDetail(f.projectId,f.dataset.id))?.items[0]).toMatchObject({expectedLabel:'fail',note:'original'});
+    const count=f.db.prepare('SELECT count(*) n FROM cases').get()?.n;
+    await expect(f.r.importDatasetExamples({...input,items:[{...input.items[0]!,sourceTraceId:'new'}, {...input.items[0]!,sourceTraceId:'internal',metadata:{rubrist:{internal:true}}}]})).rejects.toThrow();
+    expect(f.db.prepare('SELECT count(*) n FROM cases').get()?.n).toBe(count);
+    expect(f.db.prepare('SELECT imported_trace_count FROM projects').get()?.imported_trace_count).toBe(1);
+  });
+  it('freezes exact input identities and redacted payloads, serializes idempotency, retains history after cleanup and restart',async()=> {
+    const f=await fixture();const raw={text:'question 😀',api_key:'synthetic-private'};
+    const imported=await f.r.importDatasetExamples({projectId:f.projectId,datasetId:f.dataset.id,ingestionPurpose:'dataset_example',items:[{sourceTraceId:'one',input:raw,output:'answer',metadata:{},expectedLabel:'pass'}]});
+    const input={projectId:f.projectId,datasetId:f.dataset.id,role:'iterative_development' as const,idempotencyKey:'freeze'};
+    const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());
+    const frozen=await Promise.all([f.r.createDatasetRevision(input),peer.repository.createDatasetRevision(input)]);
+    expect(frozen[0]).toEqual(frozen[1]);const revision=frozen[0]!;
+    expect(revision.items[0]?.inputDigest).toBe(datasetInputIdentity({input:raw}).digest);
+    expect(JSON.stringify(revision)).not.toContain('synthetic-private');
+    expect(revision.items[0]?.referenceProvenance.kind).toBe('dataset_claim');
+    expect(revision.exposures).toHaveLength(1);
+    await expect(f.r.createDatasetRevision({...input,role:'analysis_authoring'})).rejects.toBeInstanceOf(DatasetRevisionConflictError);
+    await expect(f.r.createDatasetRevision({...input,idempotencyKey:undefined,expectedParentRevisionId:'stale'})).rejects.toBeInstanceOf(DatasetRevisionConflictError);
+    const reused=await f.r.createDatasetRevision({...input,idempotencyKey:undefined,reuseLatestContent:true});expect(reused.id).toBe(revision.id);
+    const next=await f.r.createDatasetRevision({...input,idempotencyKey:undefined,expectedParentRevisionId:revision.id});expect(next.revisionNumber).toBe(2);expect(next.parentRevisionId).toBe(revision.id);
+    f.db.prepare('DELETE FROM cases WHERE id=?').run(imported.items[0]!.caseId);
+    await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
+    expect(await restarted.repository.getDatasetRevisionDetail(f.projectId,revision.id)).toEqual(revision);
+    await restarted.repository.recordDatasetRevisionContentView({projectId:f.projectId,revisionId:revision.id});
+    expect((await restarted.repository.getDatasetRevisionDetail(f.projectId,revision.id))?.exposures).toHaveLength(2);
+    expect(await restarted.repository.getDatasetRevisionDetail('other',revision.id)).toBeNull();
+    await restarted.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(f.db.prepare('SELECT count(*) n FROM dataset_revision_items').get()?.n).toBe(0);
+  });
+  it('rejects public governance creation, incomplete bundles and mutations of finalized evidence',async()=> {
+    const f=await fixture();
+    await expect(f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'sealed_validation'})).rejects.toBeInstanceOf(SealedValidationUnavailableError);
+    await expect(f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'regression_golden'})).rejects.toBeInstanceOf(DatasetRevisionConflictError);
+    await expect(f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'analysis_authoring'})).rejects.toThrow(/empty/);
+    await f.r.importDatasetExamples({projectId:f.projectId,datasetId:f.dataset.id,ingestionPurpose:'dataset_example',items:[{sourceTraceId:'one',input:'x',output:'y',metadata:{}}]});
+    const revision=await f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'analysis_authoring'});
+    expect(()=>f.db.exec("UPDATE cases SET normalized_payload=json_set(normalized_payload,'$.output','changed')")).toThrow(/immutable/);
+    expect(()=>f.db.exec("UPDATE dataset_revision_items SET note='changed'")).toThrow(/immutable/);
+    expect(()=>f.db.prepare('INSERT INTO criterion_regression_revisions VALUES(?,?,?,?)').run(f.projectId,'unbound',revision.id,new Date().toISOString())).toThrow(/regression revision mismatch/);
+    expect(()=>f.db.exec('DELETE FROM dataset_revisions')).toThrow(/erasure/);
+    const row=f.db.prepare('SELECT * FROM dataset_revisions WHERE id=?').get(revision.id)!;
+    f.db.exec('BEGIN IMMEDIATE');
+    const clone={...row,id:'incomplete',series_id:'incomplete',idempotency_key:null};
+    f.db.prepare(`INSERT INTO dataset_revisions(${Object.keys(clone).join(',')}) VALUES(${Object.keys(clone).map(()=>'?').join(',')})`).run(...Object.values(clone) as never[]);
+    expect(()=>f.db.exec("INSERT INTO dataset_revision_finalizations VALUES('incomplete','wrong-project')")).toThrow(/bundle/);
+    expect(()=>f.db.exec('COMMIT')).toThrow(/FOREIGN KEY/);f.db.exec('ROLLBACK');
+    expect(f.db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
+  });
+});

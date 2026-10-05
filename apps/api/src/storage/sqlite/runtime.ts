@@ -1,3 +1,5 @@
+import type { CapabilityCheckStore } from '../../lib/capability-check-store.js';
+import type { EvaluatorLifecycleRepository } from '../../evaluator-lifecycle/repository.js';
 import { SqliteQueue } from '@rubrist/queue/sqlite';
 import type { AccountServices } from '../../accounts/ports.js';
 import type { RubristRepository } from '../../repository.js';
@@ -8,6 +10,14 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string) {
   const storage = new SqliteStorage(path);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const capabilityChecks:CapabilityCheckStore={
+    put:(entry)=>storage.command('capabilityCheckPut',entry),
+    get:(...args)=>storage.command('capabilityCheckGet',...args)
+  };
+  const resolution:Pick<EvaluatorLifecycleRepository,'getGovernedBinding'|'recordResolution'>={
+    getGovernedBinding:(...args)=>storage.command('getGovernedBinding',...args),
+    recordResolution:(...args)=>storage.command('recordResolution',...args)
+  };
   const queue = new SqliteQueue({
     send: (...args) => storage.command('queueSend', ...args),
     state: (...args) => storage.command('queueState', ...args),
@@ -44,6 +54,48 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    listGoldenSet: (...args) => storage.command('listGoldenSet',...args),
+    getSkillFormatExamples: (...args) => storage.command('getSkillFormatExamples',...args),
+    getGoldenSetHealth: (...args) => storage.command('getGoldenSetHealth',...args),
+    getGoldenSetTraces: (...args) => storage.command('getGoldenSetTraces',...args),
+    getExceptionDetail: (...args) => storage.command('getExceptionDetail',...args),
+    getCaseDetail: (...args) => storage.command('getCaseDetail',...args),
+    getOrCreateRegressionDatasetRevision: (...args) => storage.command('getOrCreateRegressionDatasetRevision',...args),
+    promoteExceptionToGoldenSet: (...args) => storage.command('promoteExceptionToGoldenSet',...args),
+    retireGoldenSetEntry: (...args) => storage.command('retireGoldenSetEntry',...args),
+
+    getConvergenceAudit: (...args) => storage.command('getConvergenceAudit',...args),
+    getProjectKappaSummary: (...args) => storage.command('getProjectKappaSummary',...args),
+    getProjectJudgeHumanCalibration: (...args) => storage.command('getProjectJudgeHumanCalibration',...args),
+    getDisagreementSummary: (...args) => storage.command('getDisagreementSummary',...args),
+    getJudgeHumanDisagreementSummary: (...args) => storage.command('getJudgeHumanDisagreementSummary',...args),
+    getSelfConsistencyReport: (...args) => storage.command('getSelfConsistencyReport',...args),
+    listAuditEntries: (...args) => storage.command('listAuditEntries',...args),
+
+    suggestReviewQueue: (...args) => storage.command('suggestReviewQueue',...args),
+    createReviewQueue: (...args) => storage.command('createReviewQueue',...args),
+    listReviewQueues: (...args) => storage.command('listReviewQueues',...args),
+    getReviewQueueDetail: (...args) => storage.command('getReviewQueueDetail',...args),
+    getNextPendingQueueItem: (...args) => storage.command('getNextPendingQueueItem',...args),
+    closeReviewQueue: (...args) => storage.command('closeReviewQueue',...args),
+    reopenReviewQueue: (...args) => storage.command('reopenReviewQueue',...args),
+    addReviewQueueItems: (...args) => storage.command('addReviewQueueItems',...args),
+
+    listEvaluatorSuites: (...args) => storage.command('listEvaluatorSuites',...args),
+    getEvaluatorSuite: (...args) => storage.command('getEvaluatorSuite',...args),
+    createEvaluatorSuiteManifest: (...args) => storage.command('createEvaluatorSuiteManifest',...args),
+    listEvaluatorSuiteManifests: (...args) => storage.command('listEvaluatorSuiteManifests',...args),
+    getEvaluatorSuiteManifest: (...args) => storage.command('getEvaluatorSuiteManifest',...args),
+    createRunComparison: (...args) => storage.command('createRunComparison',...args),
+    getRunComparison: (...args) => storage.command('getRunComparison',...args),
+    listRunComparisons: (...args) => storage.command('listRunComparisons',...args),
+
+    createDatasetRevision: (...args) => storage.command('createDatasetRevision',...args),
+    listDatasetRevisions: (...args) => storage.command('listDatasetRevisions',...args),
+    getDatasetRevisionDetail: (...args) => storage.command('getDatasetRevisionDetail',...args),
+    recordDatasetRevisionContentView: (...args) => storage.command('recordDatasetRevisionContentView',...args),
+
+    importDatasetExamples: (...args) => storage.command('importDatasetExamples',...args),
     createEvalRun: (...args) => storage.command('createEvalRun',...args),
     getEvalRun: (...args) => storage.command('getEvalRun',...args),
     getEvalRunItem: (...args) => storage.command('getEvalRunItem',...args),
@@ -126,5 +178,5 @@ export async function createSqliteRuntime(path: string) {
       return async () => { throw new SqliteFeatureUnavailableError(); };
     }
   }) as RubristRepository;
-  return {storage,accounts,repository,queue,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }
