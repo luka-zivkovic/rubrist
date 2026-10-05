@@ -52,6 +52,8 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     const [item]=await f.r.addDatasetItems({projectId:f.projectId,datasetId:dataset.id,items:[{caseId:trace.caseId}]});
     const run=await f.r.createEvalRun({projectId:f.projectId,datasetId:dataset.id,skillVersionId:f.versionId,trigger:'manual',items:[{caseId:trace.caseId,datasetItemId:item!.id,status:'skipped'}]});
     expect(run.status).toBe('completed');
+    expect(()=>f.db.prepare('UPDATE eval_run_items SET dataset_item_id=NULL WHERE id=?').run(run.items[0]!.id)).toThrow(/immutable eval dataset item/);
+    expect((await f.r.getEvalRunDetail(f.projectId,run.id))?.items[0]?.datasetItemId).toBe(item!.id);
     const {user}=await f.runtime.auth.api.signUpEmail({body:{email:'second@example.test',password:'synthetic-long-password',name:'Second'}});
     const other=await f.runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
     const otherTrace=await f.r.importTrace(other.projectId,'manual',{input:'other',output:'other',metadata:{}},{ingestionPurpose:'dataset_example'});
