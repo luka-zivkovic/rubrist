@@ -31,3 +31,13 @@ test('inventory parses replacement triggers and rejects source declarations it c
   writeFileSync(`${dir}/0001_test.sql`, `${fn.trim()} CREATE TRIGGER "missed" AFTER INSERT ON examples FOR EACH ROW EXECUTE FUNCTION guard();`);
   assert.throws(() => inventory({ migrationDir }), /Unparsed triggers in 0001_test.sql/);
 });
+
+test('inventory rejects unsupported function declarations regardless of line position', t => {
+  const dir = mkdtempSync(`${tmpdir()}/rubrist-function-parser-`);
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const migrationDir = pathToFileURL(`${dir}/`);
+  for (const prefix of ['  ', 'SELECT 1; ']) {
+    writeFileSync(`${dir}/0001_test.sql`, `${prefix}CREATE FUNCTION "missed"() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$;`);
+    assert.throws(() => inventory({ migrationDir }), /Unparsed functions in 0001_test.sql/);
+  }
+});

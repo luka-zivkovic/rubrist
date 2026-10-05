@@ -156,6 +156,21 @@ test('implicit rollback and stale command statements cannot escape managed owner
   assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 1);
 });
 
+test('clock initialization failure rolls back and releases the writer for subsequent commands', t => {
+  const { path, store } = fixture(t);
+  let fail = true;
+  const failing = openPrototype(path, { clock() { if (fail) throw new Error('clock unavailable'); return 100; } });
+  try {
+    assert.throws(() => failing.transaction(() => assert.fail('callback must not run')), /clock unavailable/);
+    assert.equal(failing.db.isTransaction, false);
+    assert.throws(() => failing.db.prepare('SELECT command_token()').get(), /managed transaction/);
+    store.transaction(db => db.exec("INSERT INTO attempts(id) VALUES('other-writer')"));
+    fail = false;
+    failing.transaction(db => db.exec("INSERT INTO attempts(id) VALUES('recovered')"));
+    assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 3);
+  } finally { failing.close(); }
+});
+
 test('unregistered direct SQL connection fails closed on byte and transaction functions', t => {
   const { path } = fixture(t);
   const raw = new DatabaseSync(path);
