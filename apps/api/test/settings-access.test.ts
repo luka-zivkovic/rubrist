@@ -1,3 +1,4 @@
+import { createPgAccountServices } from "../src/accounts/postgres.js";
 import { Hono } from "hono";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
@@ -18,7 +19,7 @@ function fixture(role: string | null, user = true, demo = false) {
     await next();
   });
   registerProjectAdministrationRoutes(app, {
-    repository, ...(demo ? {} : { pool }),
+    repository, ...(demo ? {} : { accounts:createPgAccountServices(pool) }),
     requestServices: createRequestServices({ repository, ownerAuthorizationEnabled: false, rateLimitPerMinute: 60, batchMaxItems: 100 }),
     publicApiBaseUrl: () => "https://rubrist.example", bindingResolution: bindingResolutionServices(async () => null)
   });

@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import {
@@ -27,15 +27,6 @@ import {
 } from "@rubrist/shared";
 import { executionBindingFromInput, executionBindingInputProblem } from "../lib/execution-binding.js";
 import type { RubristAuth } from "../lib/auth.js";
-import {
-  bootstrapOwnerUserByEmail,
-  claimAgentSetupPairing,
-  completeAgentSetupPairing,
-  createProjectForUser,
-  invalidateAgentSetupPairing,
-  releaseAgentSetupPairing,
-  setupRequired
-} from "../lib/auth.js";
 import { sha256Digest } from "../lib/canonical-json.js";
 import { canonicalEvaluatorSuiteManifestBytes } from "../lib/evaluator-suite-manifest.js";
 import { buildFindings, latestDiscreteVerdictByCase } from "../lib/findings.js";
@@ -65,7 +56,7 @@ type V1AgentAdministrationApp = Hono<{ Variables: AppVariables }>;
 export interface V1AgentAdministrationRouteOptions {
   repository: RubristRepository;
   auth?: RubristAuth | undefined;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   publicApiBaseUrl(c: Context<{ Variables: AppVariables }>): string;
 }
 
@@ -84,7 +75,7 @@ export function registerV1AgentAdministrationRoutes(
   // Both end by minting the project key used for every later /api/v1 call.
   app.post("/api/v1/bootstrap", async (c) => {
     c.header("cache-control", "no-store");
-    if (!options.pool || !options.auth) {
+    if (!options.accounts || !options.auth) {
       return c.json({
         error: "Agent bootstrap requires database-backed auth mode.",
         code: "bootstrap_requires_auth"
@@ -132,7 +123,7 @@ export function registerV1AgentAdministrationRoutes(
       }, 422);
     }
 
-    const needsInitialOwner = pairing ? false : await setupRequired(options.pool);
+    const needsInitialOwner = pairing ? false : await options.accounts.setupRequired();
     if (needsInitialOwner && !input.owner.password) {
       return c.json({
         error: "owner.password is required while creating the instance's first owner.",
@@ -145,7 +136,7 @@ export function registerV1AgentAdministrationRoutes(
       ? { id: pairing.createdByUserId, email: pairing.ownerEmail, name: pairing.ownerName }
       : null;
     if (!pairing && !needsInitialOwner) {
-      owner = await bootstrapOwnerUserByEmail(options.pool, input.owner.email);
+      owner = await options.accounts.bootstrapOwnerUserByEmail(input.owner.email);
       if (!owner) {
         return c.json({
           error: "No organization owner matches owner.email.",
@@ -280,7 +271,7 @@ export function registerV1AgentAdministrationRoutes(
         return c.json({ error: "The paired project no longer exists.", code: "project_not_found" }, 404);
       }
       if (pairedProject.importedTraceCount > 0) {
-        await invalidateAgentSetupPairing(options.pool, pairing.id);
+        await options.accounts.invalidateAgentSetupPairing(pairing.id);
         return c.json({
           error: "The paired project already has imported cases. Finish setup in the app instead.",
           code: "project_not_empty"
@@ -288,7 +279,7 @@ export function registerV1AgentAdministrationRoutes(
       }
       const pairedSkill = await repository.getLatestSkill(pairing.projectId);
       if (!pairedSkill.isStarter) {
-        await invalidateAgentSetupPairing(options.pool, pairing.id);
+        await options.accounts.invalidateAgentSetupPairing(pairing.id);
         return c.json({
           error: "This project's judging skill was configured while the connection was outstanding. Agent setup will not overwrite it.",
           code: "project_already_configured"
@@ -298,7 +289,7 @@ export function registerV1AgentAdministrationRoutes(
 
     let pairingClaimed = false;
     if (pairing) {
-      pairingClaimed = await claimAgentSetupPairing(options.pool, pairing.id);
+      pairingClaimed = await options.accounts.claimAgentSetupPairing(pairing.id);
       if (!pairingClaimed) {
         return c.json({
           error: "This setup connection is already being used by another agent.",
@@ -319,7 +310,7 @@ export function registerV1AgentAdministrationRoutes(
     const projectName = pairing?.projectName ?? input.project.name;
     try {
       if (!pairing) {
-        const created = await createProjectForUser(options.pool, {
+        const created = await options.accounts.createProjectForUser({
           userId: owner!.id,
           email: owner!.email,
           name: projectName,
@@ -439,7 +430,7 @@ export function registerV1AgentAdministrationRoutes(
 
       if (error instanceof AgentSetupEligibilityError && pairing) {
         try {
-          await invalidateAgentSetupPairing(options.pool, pairing.id);
+          await options.accounts.invalidateAgentSetupPairing(pairing.id);
         } catch (invalidateError) {
           console.error(`Failed to invalidate changed-project pairing ${pairing.id}`, invalidateError);
         }
@@ -452,13 +443,13 @@ export function registerV1AgentAdministrationRoutes(
           // the same token can NEVER replay setup and stack a second version
           // plus an orphan key on the human's project.
           try {
-            await completeAgentSetupPairing(options.pool, pairing.id);
+            await options.accounts.completeAgentSetupPairing(pairing.id);
           } catch (consumeError) {
             console.error(`Failed to consume agent setup pairing ${pairing.id} after partial bootstrap`, consumeError);
           }
         } else {
           try {
-            await releaseAgentSetupPairing(options.pool, pairing.id);
+            await options.accounts.releaseAgentSetupPairing(pairing.id);
           } catch (releaseError) {
             console.error(`Failed to release agent setup pairing ${pairing.id}`, releaseError);
           }

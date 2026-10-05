@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import { type Context, type Hono } from "hono";
 import { z } from "zod";
 import {
@@ -14,7 +14,6 @@ import {
   VerdictSourceSchema,
   payloadRationale
 } from "@rubrist/shared";
-import { userProjectRole } from "../lib/auth.js";
 import { buildTrustDigest, SPEND_WINDOW_RUNS } from "../lib/trust-digest.js";
 import {
   AmbiguousProjectSkillError,
@@ -41,7 +40,7 @@ type LegacyEvidenceAdministrationApp = Hono<{ Variables: AppVariables }>;
 
 export interface LegacyEvidenceAdministrationRouteOptions {
   repository: RubristRepository;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
 }
 
 // These CURRENT compatibility surfaces remain explicitly ungoverned legacy.
@@ -85,29 +84,19 @@ export function registerLegacyEvidenceAdministrationRoutes(
         ? c.json({ code: "case_evaluation_unavailable", error: "No recorded evaluator result is available for this case and criterion version." }, 404)
         : c.json({ error: "Case not found" }, 404);
     }
-    if (options.pool) {
-      await options.pool.query(
-        `insert into audit_logs (id, project_id, actor_user_id, action, target_type, target_id, metadata)
-         values ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          `audit_${randomUUID()}`,
-          projectId,
-          c.get("user")?.id ?? null,
-          "case.view",
-          "case",
-          caseId,
-          JSON.stringify({ traceId: detail.trace.id })
-        ]
-      );
+    if (options.accounts) {
+      await options.accounts.recordCaseView({
+        projectId, userId: c.get("user")?.id ?? null, caseId, traceId: detail.trace.id
+      });
     }
     return c.json(detail);
   });
 
   app.post("/api/cases/:caseId/promote", async (c) => {
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can promote golden-set cases" }, 403);
     }
 
@@ -142,10 +131,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
     // Verdict rows are append-only (PR #39); a reviewer who wants to "correct"
     // their verdict records a new row — historical disagreements are preserved
     // and contribute to κ history (PR #42).
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (!role) return c.json({ error: "No project access" }, 403);
     }
 
@@ -200,10 +189,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
     // ungoverned legacy evidence, but it is owner-only (matching golden-set promotion),
     // unlike a plain human verdict which any reviewer may record. Append-only:
     // re-adjudicating records a new row and latest-wins (see kappa.ts).
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can adjudicate cases" }, 403);
     }
 
@@ -580,10 +569,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
     // Owner-only: creating a queue is a curation act — owners pick which cases
     // get explicit reviewer attention. Project members consume queues via
     // GET endpoints + the existing /verdicts endpoint (PR #43).
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can create review queues" }, 403);
     }
     const body = await c.req.json().catch(() => null);
@@ -693,10 +682,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
     // Owner-only: adding items (especially with explicit reviewer assignment)
     // is curation. Reviewers consume items via GET .../next and verdict via
     // the existing /verdicts endpoint.
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can add items to review queues" }, 403);
     }
     const body = await c.req.json().catch(() => null);
@@ -731,10 +720,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
 
   app.post("/api/review-queues/:queueId/close", async (c) => {
     markUngovernedLegacy(c);
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can close review queues" }, 403);
     }
     const queue = await repository.closeReviewQueue(c.get("projectId"), c.req.param("queueId"));
@@ -744,10 +733,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
 
   app.post("/api/review-queues/:queueId/reopen", async (c) => {
     markUngovernedLegacy(c);
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can reopen review queues" }, 403);
     }
     const queue = await repository.reopenReviewQueue(c.get("projectId"), c.req.param("queueId"));
@@ -756,10 +745,10 @@ export function registerLegacyEvidenceAdministrationRoutes(
   });
 
   app.post("/api/golden-set/:entryId/retire", async (c) => {
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can retire golden-set cases" }, 403);
     }
 

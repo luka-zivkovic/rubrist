@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Hono } from "hono";
 import type { Queue } from "@rubrist/queue";
 import {
@@ -17,7 +17,6 @@ import { executionBindingInputProblem } from "../lib/execution-binding.js";
 import { evaluatorIdentityFor } from "../lib/evaluator-identity.js";
 import { buildSkillFormat } from "../lib/skill-format.js";
 import { sha256Digest } from "../lib/canonical-json.js";
-import { userProjectRole } from "../lib/auth.js";
 import { buildJudgeCard, renderJudgeCardMarkdown } from "../lib/judge-card.js";
 import { runnableInstead } from "../lib/judge-provider.js";
 import {
@@ -38,7 +37,7 @@ type SkillAdministrationApp = Hono<{ Variables: AppVariables }>;
 
 export interface SkillAdministrationRouteOptions {
   repository: RubristRepository;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   queue?: Queue | undefined;
   requestServices: RequestServices;
 }
@@ -279,10 +278,10 @@ export function registerSkillAdministrationRoutes(
   // re-judging. Exits the provisional journey stage. Owner-only; anything
   // that was ever approved must go through the gate (POST /versions) instead.
   app.post("/api/skills/:skillId/versions/:versionId/signoff", async (c) => {
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can sign off the rubric" }, 403);
     }
     try {
@@ -318,10 +317,10 @@ export function registerSkillAdministrationRoutes(
   // is appended as an immutable criterion definition and bound to the new
   // evaluator version in the same repository transaction.
   app.post("/api/skills/:skillId/onboarding-check", async (c) => {
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can create the first Check" }, 403);
     }
     const body = await c.req.json().catch(() => null);
@@ -329,7 +328,7 @@ export function registerSkillAdministrationRoutes(
     if (!parsed.success) {
       return c.json({ error: "Invalid onboarding Check input", details: z.treeifyError(parsed.error) }, 400);
     }
-    if (options.pool && parsed.data.evaluator.executionBinding.provider === "mock") {
+    if (options.accounts && parsed.data.evaluator.executionBinding.provider === "mock") {
       return c.json({ error: "The mock judge is only available in local demo mode. Configure a real judge provider first." }, 400);
     }
     const onboardingBindingProblem = executionBindingInputProblem(parsed.data.evaluator.executionBinding, {
@@ -412,10 +411,10 @@ export function registerSkillAdministrationRoutes(
   });
 
   app.post("/api/skills/:skillId/versions", async (c) => {
-    if (options.pool) {
+    if (options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can edit skills" }, 403);
     }
 
@@ -425,7 +424,7 @@ export function registerSkillAdministrationRoutes(
     if (!parsed.success) {
       return c.json({ error: "Invalid skill version input", details: z.treeifyError(parsed.error) }, 400);
     }
-    if (options.pool && parsed.data.executionBinding.provider === "mock") {
+    if (options.accounts && parsed.data.executionBinding.provider === "mock") {
       return c.json({ error: "The mock judge is only available in local demo mode. Configure a real judge provider first." }, 400);
     }
     const versionBindingProblem = executionBindingInputProblem(parsed.data.executionBinding, {

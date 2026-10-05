@@ -3,6 +3,7 @@ import { runMigrations } from "@rubrist/db";
 import { MinimumVerdictOutputSchema } from "@rubrist/shared";
 import { PgBossQueue, type Queue, type QueueJob, type QueueName, type QueueSendOptions } from "@rubrist/queue";
 import type { Pool } from "pg";
+import { createAuth } from "../src/lib/auth.js";
 import { createApp } from "../src/app.js";
 import { createStrictJudgeProvider } from "../src/lib/judge-provider.js";
 import { PgRepository } from "../src/repository.pg.js";
@@ -332,11 +333,15 @@ run("PostgreSQL convergence audit", () => {
         [routeCaseId, JSON.stringify({ kind: "binary", pass: true, rationale: "Uncovered route ruling." })]
       );
       const queue = new CapturingQueue();
-      const app = createApp(repository, { pool, queue });
+      const auth = createAuth(pool);
+      const signedUp = await auth.api.signUpEmail({returnHeaders:true,body:{email:'coverage-owner@example.com',password:'synthetic-coverage-password',name:'Coverage owner'}});
+      await pool.query(`insert into project_members(id,project_id,user_id,role) values('coverage_owner','proj_langsmith_support',$1,'owner')`,[signedUp.response.user.id]);
+      const headers = {cookie:signedUp.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')};
+      const app = createApp(repository, { pool, queue, auth });
       const path = "/api/skills/skill_langsmith_support/versions/skillv_langsmith_support_2/convergence/runs";
       const responses = await Promise.all([
-        app.request(path, { method: "POST" }),
-        app.request(path, { method: "POST" })
+        app.request(path, { method: "POST", headers }),
+        app.request(path, { method: "POST", headers })
       ]);
       const responseStatuses = responses.map((response) => response.status);
       expect(responseStatuses).toContain(202);
@@ -484,7 +489,7 @@ run("PostgreSQL convergence audit", () => {
         dispatchToken: "request_that_died_before_send"
       });
       expect(preSendClaim.state).toBe("claimed");
-      const busyResponse = await app.request(path, { method: "POST" });
+      const busyResponse = await app.request(path, { method: "POST", headers });
       expect(busyResponse.status).toBe(503);
       expect(busyResponse.headers.get("retry-after")).toBe("300");
       expect(queue.jobs).toHaveLength(1);
@@ -493,7 +498,7 @@ run("PostgreSQL convergence audit", () => {
          where id = $1`,
         [dispatchCrashRun.run.id]
       );
-      const recoveredResponse = await app.request(path, { method: "POST" });
+      const recoveredResponse = await app.request(path, { method: "POST", headers });
       expect(recoveredResponse.status).toBe(202);
       expect(queue.jobs).toHaveLength(2);
       expect(queue.jobs[1]!.options?.id).toBe(preSendClaim.jobId);

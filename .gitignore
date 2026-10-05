@@ -27,3 +27,6 @@ dist-ts/
 e2e/.auth/
 test-results/
 playwright-report/
+
+# Disposable SQLite development account database (including WAL/SHM).
+.sqlite-dev/

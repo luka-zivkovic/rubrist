@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import {
@@ -44,7 +44,7 @@ type TraceTestAdministrationApp = Hono<{ Variables: AppVariables }>;
 
 export interface TraceTestAdministrationRouteOptions {
   repository: RubristRepository;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   requestServices: RequestServices;
   traceTestDraftGenerator?: TraceTestDraftGenerator | undefined;
   traceTestValidationRunner?: TraceTestValidationRunner | undefined;
@@ -477,7 +477,7 @@ export function registerTraceTestAdministrationRoutes(
     const reviewerUserId = c.get("user")?.id;
     // Demo mode has no identities. A Postgres-backed app must never turn that
     // demo fallback into forged review provenance if auth was miswired.
-    if (options.pool && !reviewerUserId) return c.json({ error: "Unauthorized" }, 401);
+    if (options.accounts && !reviewerUserId) return c.json({ error: "Unauthorized" }, 401);
     const body = await c.req.json().catch(() => null);
     const parsed = EnableTraceTestInputSchema.safeParse(body);
     if (!parsed.success) {

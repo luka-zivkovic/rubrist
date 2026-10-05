@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -23,7 +23,6 @@ import {
 } from "@rubrist/shared";
 import type { Queue } from "@rubrist/queue";
 import type { RubristAuth } from "../lib/auth.js";
-import { userProjectRole } from "../lib/auth.js";
 import { IronsideClient, IronsideHttpError, type IronsideTraceSource } from "../lib/ironside.js";
 import { LangfuseClient, LangfuseHttpError, type LangfuseTraceFetcher } from "../lib/langfuse.js";
 import { LangSmithClient, LangSmithHttpError, type LangSmithTraceFetcher } from "../lib/langsmith.js";
@@ -48,7 +47,7 @@ export interface IntegrationAdministrationRouteOptions {
   repository: RubristRepository;
   requestServices: RequestServices;
   auth?: RubristAuth | undefined;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   queue?: Queue | undefined;
   langSmithClientFactory?: ((context: LangSmithImportContext) => LangSmithTraceFetcher) | undefined;
   langfuseClientFactory?: ((context: LangfuseImportContext) => LangfuseTraceFetcher) | undefined;
@@ -89,10 +88,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/langsmith", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can configure LangSmith integrations" }, 403);
     }
 
@@ -120,10 +119,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.patch("/api/integrations/langsmith/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can change LangSmith polling settings" }, 403);
     }
 
@@ -152,10 +151,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.delete("/api/integrations/langsmith/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can disconnect LangSmith integrations" }, 403);
     }
 
@@ -171,10 +170,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/langsmith/:integrationId/test", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can test LangSmith integrations" }, 403);
     }
 
@@ -299,10 +298,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/langfuse", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can configure Langfuse integrations" }, 403);
     }
 
@@ -330,10 +329,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.patch("/api/integrations/langfuse/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can change Langfuse polling settings" }, 403);
     }
 
@@ -362,10 +361,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.delete("/api/integrations/langfuse/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can disconnect Langfuse integrations" }, 403);
     }
 
@@ -381,10 +380,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/langfuse/:integrationId/test", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can test Langfuse integrations" }, 403);
     }
 
@@ -509,10 +508,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/ironside", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can configure Ironside integrations" }, 403);
     }
 
@@ -558,10 +557,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.patch("/api/integrations/ironside/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can change Ironside polling settings" }, 403);
     }
 
@@ -649,10 +648,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.delete("/api/integrations/ironside/:integrationId", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can disconnect Ironside integrations" }, 403);
     }
 
@@ -668,10 +667,10 @@ export function registerIntegrationAdministrationRoutes(
   });
 
   app.post("/api/integrations/ironside/:integrationId/test", async (c) => {
-    if (options.auth && options.pool) {
+    if (options.auth && options.accounts) {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, { userId: user.id, projectId: c.get("projectId") });
+      const role = await options.accounts.userProjectRole({ userId: user.id, projectId: c.get("projectId") });
       if (role !== "owner") return c.json({ error: "Only owners can test Ironside integrations" }, 403);
     }
 

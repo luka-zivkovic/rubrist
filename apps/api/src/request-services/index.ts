@@ -1,8 +1,8 @@
-import type { Pool } from "pg";
+import type { AccountServices } from "../accounts/ports.js";
 import type { Context } from "hono";
 import type { Queue } from "@rubrist/queue";
 import { judgeProviderAvailability } from "../lib/judge-provider.js";
-import { userProjectRole, type AgentSetupPairingRecord } from "../lib/auth.js";
+import { type AgentSetupPairingRecord } from "../lib/auth.js";
 import type { RubristRepository } from "../repository.js";
 import { createEvalRunRequestService, type EvalRunRequestService } from "./eval-runs.js";
 import { PRODUCTION_RECORD_APPEND_MAX_RECORDS } from "../production-calibration/repository.js";
@@ -32,7 +32,7 @@ export interface RequestServices extends EvalRunRequestService {
 
 export interface CreateRequestServicesOptions {
   repository: RubristRepository;
-  pool?: Pool | undefined;
+  accounts?: AccountServices | undefined;
   queue?: Queue | undefined;
   ownerAuthorizationEnabled: boolean;
   rateLimitPerMinute: number;
@@ -77,13 +77,14 @@ export function createRequestServices(options: CreateRequestServicesOptions): Re
       const configured = new Set(
         (await options.repository.listJudgeProviderKeys(projectId)).map((key) => key.provider)
       );
-      return judgeProviderAvailability(configured, !options.pool);
+      return judgeProviderAvailability(configured, !options.accounts);
     },
     async requireOwner(c, action) {
-      if (!options.ownerAuthorizationEnabled || !options.pool) return null;
+      if (!options.ownerAuthorizationEnabled) return null;
+      if (!options.accounts) throw new Error("Persistent authorization requires account services");
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
-      const role = await userProjectRole(options.pool, {
+      const role = await options.accounts.userProjectRole({
         userId: user.id,
         projectId: c.get("projectId")
       });

@@ -1,3 +1,4 @@
+import { createPgAccountServices } from "../src/accounts/postgres.js";
 import { Hono } from "hono";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
@@ -27,7 +28,7 @@ function checkApp(fetch: ExecutionFetch, options: { pool?: Pool; owner?: boolean
   const requestServices = createRequestServices({ repository, ownerAuthorizationEnabled: false, rateLimitPerMinute: 60, batchMaxItems: 100 });
   registerProjectAdministrationRoutes(app, {
     repository,
-    ...(options.pool ? { pool: options.pool } : {}),
+    ...(options.pool ? { accounts:createPgAccountServices(options.pool) } : {}),
     requestServices: options.owner === false
       ? { ...requestServices, requireOwner: async (c, action) => c.json({ error: `Only owners can ${action}` }, 403) }
       : requestServices,
