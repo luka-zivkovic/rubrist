@@ -1,4 +1,4 @@
-import { analysisStudyContentDigest, analysisStudyItemContentDigest, analysisStudyRequestDigest } from '../src/lib/analysis-study.js';
+import { analysisStudyEventDigest, analysisStudyEventRequestDigest, analysisStudyContentDigest, analysisStudyItemContentDigest, analysisStudyRequestDigest } from '../src/lib/analysis-study.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -241,4 +241,46 @@ it.each([
 it.each(['analysis_study_items','analysis_study_finalizations'])('rejects missing draft study bundle %s',async(table)=>{
  const f=await fixture();freeze(f);expect(()=>draftStudy(f,(name,row)=>name===table?null:row)).toThrow();
  expect(f.db.prepare('SELECT count(*) n FROM analysis_studies').get()?.n).toBe(0);
+});
+
+function studyEvent(f:Fixture,type:'coding_opened'|'study_abandoned'='coding_opened',options:{deadline?:string;now?:number;override?:RecordValue}={}){
+ return sqliteCommand(f.db,c=>{
+  const head=f.db.prepare('SELECT *,CAST(version AS TEXT) version_text FROM analysis_study_events ORDER BY version DESC LIMIT 1').get();
+  const version=BigInt(String(head?.version_text??'0'))+1n;
+  const stoppingRule=type==='coding_opened'?{kind:options.deadline?'server_deadline':'explicit_owner_close',closeAt:options.deadline??null}:null;
+  const request={studyId:'study',expectedVersion:String(version-1n),eventType:type,...(stoppingRule?{stoppingRule}:{reason:'Owner abandons study'})};
+  const requestDigest=analysisStudyEventRequestDigest(request as never);
+  const event={id:'event-'+version,projectId:f.projectId,studyId:'study',version:String(version),predecessorEventId:head?.id??null,predecessorEventDigest:head?.event_digest??null,
+   eventType:type,fromState:head?.to_state??'draft',toState:type==='coding_opened'?'coding_open':'abandoned',stoppingRule,closeCause:null,closureId:null,closureDigest:null,expectedClosureDigest:null,reason:stoppingRule?null:'Owner abandons study',actorSubjectId:'subject',actorUserId:f.userId,actorRole:'owner',idempotencyKey:'event-key-'+version,requestDigest,occurredAt:c.timestamp};
+  const row:RecordValue={id:event.id,project_id:f.projectId,study_id:'study',version,predecessor_event_id:event.predecessorEventId,predecessor_event_digest:event.predecessorEventDigest,event_type:type,from_state:event.fromState,to_state:event.toState,stopping_rule:stoppingRule?.kind??null,close_at:stoppingRule?.closeAt??null,close_cause:null,closure_id:null,closure_digest:null,expected_closure_digest:null,reason:event.reason,actor_subject_id:'subject',actor_user_id:f.userId,actor_role:'owner',idempotency_key:event.idempotencyKey,request_digest:requestDigest,event_digest:analysisStudyEventDigest(event as never),occurred_at:c.timestamp,...options.override};
+  const columns=Object.keys(row);c.db.prepare(`INSERT INTO analysis_study_events(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(row));
+  return row;
+ },()=>options.now??f.now+2);
+}
+it('appends exact open/abandon heads and retains immutable study history',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);studyEvent(f);studyEvent(f,'study_abandoned');
+ expect(f.db.prepare('SELECT event_type FROM analysis_study_events ORDER BY version').all().map(r=>r.event_type)).toEqual(['coding_opened','study_abandoned']);
+ expect(()=>studyEvent(f)).toThrow(/study open/);
+ expect(()=>f.db.exec('DELETE FROM analysis_study_events')).toThrow(/project erasure/);
+ expect(()=>f.db.exec("UPDATE analysis_study_events SET reason='rewrite'")).toThrow(/immutable/);
+ await f.runtime.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
+ expect(f.db.prepare('SELECT * FROM analysis_study_events').all()).toEqual([]);
+});
+it.each([
+ ['predecessor_event_id','forged'],['version',3],['from_state','coding_open'],['actor_user_id','other'],['actor_role','system'],
+ ['request_digest','sha256:'+'f'.repeat(64)],['event_digest','sha256:'+'f'.repeat(64)],['occurred_at','2020-01-01T00:00:00.000Z'],['idempotency_key','\t'],['to_state','completed']
+])('rejects forged study transition %s',async(column,value)=>{
+ const f=await fixture();freeze(f);draftStudy(f);expect(()=>studyEvent(f,'coding_opened',{override:{[column]:value}})).toThrow();
+ expect(f.db.prepare('SELECT * FROM analysis_study_events').all()).toEqual([]);
+});
+it('enforces the frozen deadline at exact command time and permits draft abandonment',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);
+ expect(()=>studyEvent(f,'coding_opened',{deadline:new Date(f.now+2).toISOString()})).toThrow(/deadline/);
+ expect(()=>studyEvent(f,'coding_opened',{deadline:new Date(f.now+2000).toISOString().replace('Z','1Z')})).toThrow(/deadline/);
+ studyEvent(f,'coding_opened',{deadline:new Date(f.now+1000).toISOString()});
+ expect(()=>studyEvent(f,'study_abandoned',{now:f.now+1000})).toThrow(/before deadline/);
+ expect(()=>studyEvent(f,'study_abandoned',{now:f.now+2000})).toThrow(/before deadline/);
+ studyEvent(f,'study_abandoned',{now:f.now+999});
+ const other=await fixture();freeze(other);draftStudy(other);studyEvent(other,'study_abandoned');
+ expect(other.db.prepare('SELECT to_state FROM analysis_study_events').get()?.to_state).toBe('abandoned');
 });

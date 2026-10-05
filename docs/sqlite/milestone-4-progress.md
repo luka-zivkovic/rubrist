@@ -158,3 +158,9 @@ observations, taxonomy and closures remain pending, so the study repository is
 not yet enabled.
 
 CURRENT: unpublished M4 migration names advance to 0026–0029 after the M2 correction-reason forward guard and unchanged M3 SQL.
+
+CURRENT: migration 0030 adds append-only study open/abandon transitions with
+exact CAS ancestry, owner binding, frozen stopping rules, canonical digests and
+database command-time deadline enforcement. Independent audit approved 12/12
+focused tests; combined population/context tests pass 58/58. Closure transitions
+remain staged until their complete materialized evidence guards are installed.

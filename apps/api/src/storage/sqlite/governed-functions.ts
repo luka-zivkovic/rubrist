@@ -33,5 +33,7 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
   db.function('analysis_timestamp_v1', { deterministic: true },
     value => normalizeAnalysisPopulationTimestamp(productionTimestamp(text(value))));
   db.function('analysis_payload_snapshot_v1', { deterministic: true }, value => analysisPayloadSnapshotText(text(value)));
+  db.function('analysis_trimmed_text_v1', { deterministic: true }, (value,limit) =>
+    typeof value==='string' && value.length>0 && value===value.trim() && [...value].length<=Number(limit) ? 1 : 0);
   initialized.add(db);
 }
