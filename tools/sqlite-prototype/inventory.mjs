@@ -45,7 +45,7 @@ export function inventory({ migrationDir = defaultMigrationDir } = {}) {
     }
     const expectedTriggers = [...sql.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\b/gi)].length;
     if (triggers.length - triggerStart !== expectedTriggers) throw new Error(`Unparsed triggers in ${file}`);
-    const expected = [...sql.matchAll(/^CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/gim)].length;
+    const expected = [...sql.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/gi)].length;
     if (definitions.filter(d => d.file === file).length !== expected) throw new Error(`Unparsed functions in ${file}`);
   }
   const deferred = new Set(triggers.filter(t => t.deferred).map(t => t.function));

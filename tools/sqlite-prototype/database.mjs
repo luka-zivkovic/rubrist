@@ -41,7 +41,6 @@ export function openPrototype(path, { initialize = false, clock = Date.now } = {
     if (!context || !db.isTransaction) throw new Error('managed transaction required');
     return context.time;
   });
-  db.function('clock_ms', () => clock());
   if (initialize) db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
   return {
     db,
@@ -49,9 +48,9 @@ export function openPrototype(path, { initialize = false, clock = Date.now } = {
       if (context || db.isTransaction) throw new Error('nested transaction forbidden');
       // Reject async callbacks before they can open a transaction or dispatch work.
       if (fn.constructor.name === 'AsyncFunction') throw new Error('synchronous commands only');
-      db.exec('BEGIN IMMEDIATE');
-      context = { token: randomUUID(), time: clock() };
       try {
+        db.exec('BEGIN IMMEDIATE');
+        context = { token: randomUUID(), time: clock() };
         // Resetting the authorizer also invalidates statements prepared before
         // the managed command, so a cached COMMIT cannot escape this boundary.
         db.setAuthorizer(authorize);

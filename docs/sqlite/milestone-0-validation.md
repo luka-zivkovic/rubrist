@@ -9,7 +9,7 @@ Application runtime, PostgreSQL migration bytes and public contracts are unchang
 | Check | Result |
 | --- | --- |
 | Node 24.15.0 / SQLite 3.51.3, macOS arm64 | Runtime identity verified |
-| `node --test tools/sqlite-prototype.test.mjs tools/sqlite-inventory.test.mjs` | 13 passed, zero skipped; rerun after audit fixes |
+| `node --test tools/sqlite-prototype.test.mjs tools/sqlite-inventory.test.mjs` | 19 passed, zero skipped; rerun after all Copilot follow-up corrections |
 | All root Node test globs (`tools/*.test.mjs tools/ci/*.test.mjs tools/mcp/*.test.mjs`) | 47 passed, zero skipped; focused SQLite tests rerun after final cascade fix |
 | `pnpm typecheck` | Passed |
 | `pnpm build` | Passed; existing web bundle-size advisory |
@@ -91,4 +91,16 @@ and prepared statements now check the current command's ownership before every
 execution; source counting no longer depends on line starts. Regressions cover
 both cases and stale command/statement reuse. Both focused suites pass all 16
 tests, also independently rerun by the reviewer with no remaining blockers.
-These corrections still require fresh Copilot review and CI before merge.
+The next Copilot round found initialization cleanup and function-count gaps.
+Transaction initialization now sits inside the rollback boundary, with a clock
+failure regression proving connection and competing-writer recovery. Function
+declaration counting also ignores line position and rejects unsupported quoted
+names. The current focused total is 18 passing tests (15 prototype, three
+inventory). Earlier counts above identify the historical runs they describe.
+The independent reviewer reran all 18 tests and approved this correction with no
+remaining blockers. A further review found inconsistent lease clock sampling:
+ownership UPDATEs and their triggers now use the same captured command time.
+An advancing-clock regression covers short TTLs, exact expiry, replacement,
+completion and recovery. The latest independent audit reran and approved all
+19 focused tests (16 prototype, three inventory). Fresh Copilot review and CI
+are still required before merge.

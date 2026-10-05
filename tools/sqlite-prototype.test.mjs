@@ -156,6 +156,21 @@ test('implicit rollback and stale command statements cannot escape managed owner
   assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 1);
 });
 
+test('clock initialization failure rolls back and releases the writer for subsequent commands', t => {
+  const { path, store } = fixture(t);
+  let fail = true;
+  const failing = openPrototype(path, { clock() { if (fail) throw new Error('clock unavailable'); return 100; } });
+  try {
+    assert.throws(() => failing.transaction(() => assert.fail('callback must not run')), /clock unavailable/);
+    assert.equal(failing.db.isTransaction, false);
+    assert.throws(() => failing.db.prepare('SELECT command_token()').get(), /managed transaction/);
+    store.transaction(db => db.exec("INSERT INTO attempts(id) VALUES('other-writer')"));
+    fail = false;
+    failing.transaction(db => db.exec("INSERT INTO attempts(id) VALUES('recovered')"));
+    assert.equal(store.db.prepare('SELECT count(*) n FROM attempts').get().n, 3);
+  } finally { failing.close(); }
+});
+
 test('unregistered direct SQL connection fails closed on byte and transaction functions', t => {
   const { path } = fixture(t);
   const raw = new DatabaseSync(path);
@@ -202,6 +217,29 @@ test('ownership: competing claims fence stale workers before dispatch and after 
   assert.equal(finish(competitor, replacement, Buffer.from('result')), true);
   assert.equal(finish(competitor, replacement, Buffer.from('duplicate')), false);
   assert.equal(claim(store, 'job', 'third', 100), undefined);
+});
+
+test('lease predicates use one command timestamp even when the clock advances on each read', t => {
+  const { store, path } = fixture(t);
+  store.db.exec("INSERT INTO attempts(id) VALUES('recover-clock')");
+  let now = 100;
+  const advancing = openPrototype(path, { clock: () => now++ });
+  try {
+    const short = claim(advancing, 'job', 'short', 1); // time 100
+    assert.ok(short);
+    assert.equal(now, 101);
+    assert.equal(start(advancing, short), false); // exactly expires, time 101
+    const replacement = claim(advancing, 'job', 'replacement', 3); // time 102
+    assert.ok(replacement);
+    assert.equal(start(advancing, replacement), true); // time 103
+    assert.equal(finish(advancing, replacement, Buffer.from('done')), true); // time 104
+    assert.equal(finish(advancing, replacement, Buffer.from('duplicate')), false); // time 105
+    const interrupted = claim(advancing, 'recover-clock', 'interrupted', 2); // time 106
+    assert.equal(start(advancing, interrupted), true); // time 107
+    assert.equal(finish(advancing, interrupted, Buffer.from('late')), false); // time 108
+    assert.equal(recover(advancing), 1); // time 109
+    assert.equal(now, 110);
+  } finally { advancing.close(); }
 });
 
 test('model boundary: unrelated writes progress during overlapping calls and expiry records permanent uncertainty', async t => {
