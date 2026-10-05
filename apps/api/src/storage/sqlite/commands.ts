@@ -1,3 +1,4 @@
+import { initializeSqliteCommandContext, sqliteCommand } from './command-context.js';
 import { seedSqliteStarterEvaluator } from './starter-evaluator.js';
 import { sqliteProductionCommands } from './production-commands.js';
 import { sqliteRegressionCommands } from './regression-commands.js';
@@ -39,6 +40,7 @@ const future = (ms: number) => new Date(Date.now()+ms).toISOString();
 const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 
 export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
+  initializeSqliteCommandContext(db);
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
   const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);
@@ -183,7 +185,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
       });
     },
     deleteProject(projectId: string, input: Parameters<RubristRepository['deleteProject']>[1]) {
-      transaction(() => {
+      sqliteCommand(db,() => {
         if (settings(projectId).name !== input.confirmProjectName) throw new Error('Project name confirmation did not match');
         run("UPDATE audit_logs SET metadata=json_set(metadata,'$.deletedProjectId',?),project_id=NULL WHERE project_id=?",projectId,projectId);
         audit(projectId,input.actorUserId ?? null,'project.delete','project',projectId,{deletedProjectId:projectId,projectName:input.confirmProjectName});

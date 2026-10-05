@@ -1,4 +1,4 @@
-import { canonicalGovernedJsonText, governedJsonTextDigest, analysisJsonTextDigest } from './governed-json-text.js';
+import { canonicalGovernedJsonText, analysisPayloadSnapshotText, governedJsonTextDigest, analysisJsonTextDigest } from './governed-json-text.js';
 import { productionTimestamp } from './production-time.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { normalizeAnalysisPopulationTimestamp } from '../../lib/analysis-population.js';
@@ -32,5 +32,6 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
     value => analysisJsonTextDigest(text(value)));
   db.function('analysis_timestamp_v1', { deterministic: true },
     value => normalizeAnalysisPopulationTimestamp(productionTimestamp(text(value))));
+  db.function('analysis_payload_snapshot_v1', { deterministic: true }, value => analysisPayloadSnapshotText(text(value)));
   initialized.add(db);
 }

@@ -107,3 +107,21 @@ CURRENT follow-up validation: independent audit approved 14/14 focused tests
 with PostgreSQL enabled. All 128 SQLite tests pass in 22 files; typecheck and
 shared-contract guards pass. The contract fixtures add only the two explicitly
 named provenance variants approved by ADR-0016.
+
+## Population database checkpoint
+
+CURRENT: migration 0026 ports population, member, exclusion, draw, selection and
+request persistence. Reciprocal deferred finalizers require complete ordered
+frames, exact source identities and revision references, original digest bases
+and a complete deterministic draw. Source changes are forbidden throughout the
+creating command; committed ordinary retention still preserves frozen evidence.
+The analysis revision remains barred from ordinary evaluation.
+
+Population source projection and revision-bound payload equality preserve exact
+SQL numeric values, including binary64-colliding integers. Startup registers
+command functions eagerly, and project erasure owns a managed command even as
+the first domain write after restart. Older direct-mutation test fixtures now
+use the managed command path. Independent audit approved the migration and
+precision changes; 30 population tests pass, and all 159 SQLite tests pass in
+23 files. Repository/API wiring is still in progress; these checks do not claim
+that the full population feature or Milestone 4 is complete.

@@ -1,3 +1,4 @@
+import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
 import { MockJudgeProvider } from '@rubrist/audit/runtime';
@@ -51,7 +52,7 @@ describe('SQLite immutable dataset foundation',()=>{
     const next=await f.r.createDatasetRevision({...input,idempotencyKey:undefined,expectedParentRevisionId:revision.id});expect(next.revisionNumber).toBe(2);expect(next.parentRevisionId).toBe(revision.id);
     expect((await f.r.listDatasetRevisions(f.projectId,f.dataset.id)).map(row=>row.id)).toEqual([next.id,revision.id]);
     expect(await f.r.listDatasetRevisions('other',f.dataset.id)).toEqual([]);
-    f.db.prepare('DELETE FROM cases WHERE id=?').run(imported.items[0]!.caseId);
+    sqliteCommand(f.db,c=>c.db.prepare('DELETE FROM cases WHERE id=?').run(imported.items[0]!.caseId));
     await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
     expect(await restarted.repository.getDatasetRevisionDetail(f.projectId,revision.id)).toEqual(revision);
     await restarted.repository.recordDatasetRevisionContentView({projectId:f.projectId,revisionId:revision.id});
@@ -68,7 +69,7 @@ describe('SQLite immutable dataset foundation',()=>{
     await expect(f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'analysis_authoring'})).rejects.toThrow(/empty/);
     await f.r.importDatasetExamples({projectId:f.projectId,datasetId:f.dataset.id,ingestionPurpose:'dataset_example',items:[{sourceTraceId:'one',input:'x',output:'y',metadata:{}}]});
     const revision=await f.r.createDatasetRevision({projectId:f.projectId,datasetId:f.dataset.id,role:'analysis_authoring'});
-    expect(()=>f.db.exec("UPDATE cases SET normalized_payload=json_set(normalized_payload,'$.output','changed')")).toThrow(/immutable/);
+    expect(()=>sqliteCommand(f.db,c=>c.db.exec("UPDATE cases SET normalized_payload=json_set(normalized_payload,'$.output','changed')"))).toThrow(/immutable/);
     expect(()=>f.db.exec("UPDATE dataset_revision_items SET note='changed'")).toThrow(/immutable/);
     expect(()=>f.db.prepare('INSERT INTO criterion_regression_revisions VALUES(?,?,?,?)').run(f.projectId,'unbound',revision.id,new Date().toISOString())).toThrow(/regression revision mismatch/);
     expect(()=>f.db.exec('DELETE FROM dataset_revisions')).toThrow(/erasure/);

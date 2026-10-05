@@ -31,7 +31,7 @@ it('keeps one durable input class across concurrent imports, restart, retention 
  await expect(runtime.repository.importTrace(projectId,'manual',protectedPayload,{ingestionPurpose:'analysis_eligible_manual'})).rejects.toThrow(/opposite evidence/);
  expect(db.prepare('SELECT count(*) n FROM cases').get()!.n).toBe(count);
  // Retain claims even after raw traffic has gone; this is not a case FK.
- db.prepare('DELETE FROM cases WHERE id IN (?,?)').run(one.caseId,two.caseId);
+ sqliteCommand(db,c=>c.db.prepare('DELETE FROM cases WHERE id IN (?,?)').run(one.caseId,two.caseId));
  const reopened=openSqlite(path);cleanup.push(()=>reopened.close());
  expect(reopened.prepare('SELECT count(*) n FROM governed_input_identity_claims WHERE project_id=?').get(projectId)?.n).toBe(2);
  expect(()=>reopened.prepare('INSERT INTO governed_input_identity_claims VALUES(?,?,?,?)').run(projectId,'sha256:'+'a'.repeat(64),'nonsealed',new Date().toISOString())).toThrow(/function/);

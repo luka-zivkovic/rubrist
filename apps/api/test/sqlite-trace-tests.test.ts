@@ -1,3 +1,4 @@
+import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
 import { CreateTraceTestInputSchema } from '@rubrist/shared';
@@ -45,7 +46,7 @@ it('retains redacted source and append-only validated revisions through races, r
  expect(()=>f.db.exec("UPDATE trace_test_revisions SET scenario='changed'")).toThrow(/immutable/);
  expect(()=>f.db.exec("UPDATE trace_test_validations SET status='failed'")).toThrow(/immutable/);
  expect(()=>f.db.exec('DELETE FROM trace_test_validations')).toThrow(/erasure/);
- f.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId);
+ sqliteCommand(f.db,c=>c.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId));
  const retained=(await f.r.getTraceTest(f.projectId,test.id))!;expect(retained).toMatchObject({sourceCaseId:null,sourceCaseRef:trace.caseId,hasUnpublishedChanges:true});expect(retained.sourceSnapshot).toEqual(test.sourceSnapshot);
  f.db.prepare('DELETE FROM "user" WHERE id=?').run(f.user.id);
  expect((await f.r.getTraceTest(f.projectId,test.id))?.revisions[1]).toMatchObject({lifecycle:'enabled',reviewedByUserId:null,validationId:valid.id});
@@ -84,7 +85,7 @@ it('pins an enabled trace test and its validation into runs and execution author
  await f.r.loadJudgeRunContext({projectId:f.projectId,caseId:item.caseId,skillVersionId:versionId,evalRunId:run.id,evalRunItemId:run.items[0]!.id});
  expect(f.db.prepare('SELECT execution_context FROM evaluator_execution_authorizations WHERE resource_id=?').get(run.items[0]!.id)?.execution_context).toBe('trace_test');
  expect(()=>f.db.prepare('UPDATE eval_runs SET source_trace_test_revision=1 WHERE id=?').run(run.id)).toThrow(/immutable/);
- f.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId);
+ sqliteCommand(f.db,c=>c.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId));
  expect((await f.r.getEvalRun(f.projectId,run.id))?.sourceTraceTest).toEqual(sourceTraceTest);
  await f.r.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
 });

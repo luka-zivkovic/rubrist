@@ -41,7 +41,7 @@ function canonical(value: unknown): string {
 }
 
 /** Node 24 reviver source text retains decimals JSON.parse otherwise rounds. */
-export function canonicalGovernedJsonText(source: string): string {
+function parseExactJson(source: string): unknown {
   // A reviver sees only the surviving duplicate key. Validate every literal,
   // including overwritten values, as PostgreSQL does when reading JSONB.
   for (const match of source.matchAll(/"(?:\\[\s\S]|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g)) {
@@ -49,11 +49,21 @@ export function canonicalGovernedJsonText(source: string): string {
     if (literal.startsWith('"')) canonicalGovernedJsonV1(JSON.parse(literal));
     else decimal(literal);
   }
-  return canonical(JSON.parse(source, (_key, value: unknown, context?: { source?: string }) => {
+  return JSON.parse(source, (_key, value: unknown, context?: { source?: string }) => {
     if (typeof value !== 'number') return value;
     if (context?.source === undefined) throw new Error('Exact JSON numeric source unavailable');
     return new DecimalToken(decimal(context.source));
-  }));
+  });
+}
+export function canonicalGovernedJsonText(source: string): string {
+  return canonical(parseExactJson(source));
+}
+/** Exact PostgreSQL source projection; absent metadata defaults, JSON null does not. */
+export function analysisPayloadSnapshotText(source: string): string {
+  const value=parseExactJson(source);
+  if(value===null||typeof value!=='object'||Array.isArray(value)||value instanceof DecimalToken)throw new Error('Invalid source payload');
+  const row=value as Record<string,unknown>;
+  return canonical({input:row.input??null,output:row.output??null,metadata:Object.hasOwn(row,'metadata')?row.metadata:{},...(Array.isArray(row.steps)?{steps:row.steps}:{})});
 }
 export function analysisJsonTextDigest(source: string): string {
   return `sha256:${createHash('sha256').update(canonicalGovernedJsonText(source), 'utf8').digest('hex')}`;

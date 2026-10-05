@@ -1,10 +1,10 @@
+import { canonicalGovernedJsonText, analysisPayloadSnapshotText } from './governed-json-text.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision } from '@rubrist/shared';
 import type { RubristRepository } from '../../repository.js';
 import { DatasetNotFoundError, DatasetRevisionConflictError, DatasetRevisionNotFoundError, SealedValidationUnavailableError } from '../../repository/errors.js';
 import { datasetRevisionContentDigest, datasetRevisionDigest, datasetRevisionItemDigest, decidePublicDatasetRevisionCreation } from '../../lib/dataset-revision.js';
-import { canonicalJson } from '../../lib/canonical-json.js';
 import { evaluationDatabase, camel, json, parse, verdict, type Row } from './evaluation-values.js';
 type Args<K extends keyof RubristRepository> = Parameters<RubristRepository[K]>;
 function snapshot(raw:unknown) {
@@ -17,8 +17,8 @@ function item(row:Row) { return DatasetRevisionItemSchema.parse({...camel(row),p
 function exposure(row:Row) { return DatasetExposureEventSchema.parse({...camel(row),details:parse(row.details)}); }
 export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db);
-  db.function('sqlite_json_equal',{deterministic:true},(left,right)=>{try{return canonicalJson(parse(left))===canonicalJson(parse(right))?1:0;}catch{return 0;}});
-  db.function('sqlite_dataset_payload_equal',{deterministic:true},(left,right)=>{try{return canonicalJson(snapshot(left))===canonicalJson(snapshot(right))?1:0;}catch{return 0;}});
+  db.function('sqlite_json_equal',{deterministic:true},(left,right)=>{try{return canonicalGovernedJsonText(String(left))===canonicalGovernedJsonText(String(right))?1:0;}catch{return 0;}});
+  db.function('sqlite_dataset_payload_equal',{deterministic:true},(left,right)=>{try{return analysisPayloadSnapshotText(String(left))===canonicalGovernedJsonText(String(right))?1:0;}catch{return 0;}});
   db.function('sqlite_dataset_item_valid',{deterministic:true},(inputDigest,digest,payload,label,step,provenance,note)=> {
     try {return datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:String(inputDigest)},redactedPayload:snapshot(payload),referenceLabel:label,expectedFailStep:step as number|null,reviewProvenance:DatasetReferenceProvenanceSchema.parse(parse(provenance)),note})===digest?1:0;}catch{return 0;}
   });
