@@ -227,3 +227,8 @@ exact exposure and deduplicated view commit. Migration 0038 adds PostgreSQL's
 per-person/per-item and study-request uniqueness independently of command keys.
 Independent audit approved; strengthened tests cover a valid-domain missing
 anchor and late view failure rolling back its exposure (4/4 pass).
+
+CURRENT: taxonomy creation/revision and observation assignment commands preserve
+stable code history, owner/member roles, exact CAS and historical replay. The
+independent audit verified typed assignment conflicts and rejection of unknown
+existing codes before writes. All 5 focused taxonomy/assignment tests pass.

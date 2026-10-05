@@ -19,6 +19,7 @@ export function studyWrite<T>(db:DatabaseSync,work:(c:SqliteCommandContext)=>T,c
   if(error instanceof AnalysisStudyRepositoryError)throw error;
   if((error as {code?:unknown})?.code==='ERR_SQLITE_ERROR'){
    const message=error instanceof Error?error.message:'';
+   if(/assignment/i.test(message))throw studyError('analysis_assignment_conflict','Assignment command conflicts with retained observation or taxonomy history');
    if(/deadline/i.test(message))throw studyError('analysis_study_deadline_invalid','The frozen study deadline does not permit this command');
    if(/predecessor|version|CAS/i.test(message))throw studyError('analysis_study_version_conflict','Study compare-and-swap version does not match');
    if(/anchor/i.test(message))throw studyError('analysis_study_anchor_invalid','Evidence anchor does not exist in the frozen item');
