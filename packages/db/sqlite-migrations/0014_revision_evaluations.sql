@@ -99,7 +99,8 @@ CREATE TRIGGER eval_item_dataset_owner BEFORE INSERT ON eval_run_items WHEN NEW.
   SELECT 1 FROM dataset_items d JOIN eval_runs r ON r.project_id=d.project_id AND r.dataset_id=d.dataset_id
   WHERE d.id=NEW.dataset_item_id AND d.project_id=NEW.project_id AND d.case_id=NEW.case_id AND r.id=NEW.eval_run_id)
 BEGIN SELECT RAISE(ABORT,'eval dataset item ownership mismatch'); END;
-CREATE TRIGGER eval_item_dataset_update BEFORE UPDATE OF dataset_item_id ON eval_run_items WHEN NEW.dataset_item_id IS NOT NULL AND NEW.dataset_item_id IS NOT OLD.dataset_item_id
+CREATE TRIGGER eval_item_dataset_update BEFORE UPDATE OF dataset_item_id ON eval_run_items WHEN NEW.dataset_item_id IS NOT OLD.dataset_item_id AND
+ (NEW.dataset_item_id IS NOT NULL OR EXISTS(SELECT 1 FROM dataset_items WHERE id=OLD.dataset_item_id))
 BEGIN SELECT RAISE(ABORT,'immutable eval dataset item'); END;
 CREATE TRIGGER eval_item_identity_immutable BEFORE UPDATE ON eval_run_items WHEN
   NEW.id<>OLD.id OR NEW.project_id<>OLD.project_id OR NEW.eval_run_id<>OLD.eval_run_id OR NEW.case_id<>OLD.case_id OR
