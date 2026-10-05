@@ -57,6 +57,33 @@ describe('SQLite authenticated durable batch workflow',()=>{
     expect(await (await app.request(url,{headers:f.headers})).text()).toBe(bytes);
     expect((await app.request(url)).status).toBe(401);
   });
+  it('submits a labeled collection through the session route and durably executes its snapshotted items',async()=> {
+    const f=await fixture(),headers={cookie:f.cookie,'content-type':'application/json'};
+    const projects=await f.app.request('/api/projects',{headers});
+    const {projects:rows}=await projects.json() as any,projectId=rows[0].id;
+    const cases=await Promise.all(['first','second'].map(input=>f.runtime.repository.importTrace(projectId,'manual',{input,output:'answer',metadata:{}},{ingestionPurpose:'dataset_example'})));
+    const created=await f.app.request('/api/datasets',{method:'POST',headers,body:JSON.stringify({name:'Labeled collection'})});
+    expect(created.status).toBe(201);const {dataset}=await created.json() as any;
+    const added=await f.app.request(`/api/datasets/${dataset.id}/items`,{method:'POST',headers,body:JSON.stringify({items:[{caseId:cases[0]!.caseId,expectedLabel:'pass'},{caseId:cases[1]!.caseId,expectedLabel:'fail'}]})});
+    expect(added.status).toBe(201);const {items}=await added.json() as any;
+    const accepted=await f.app.request('/api/eval-runs',{method:'POST',headers,body:JSON.stringify({datasetId:dataset.id,skillVersionId:f.versionId})});
+    expect(accepted.status).toBe(202);const {run}=await accepted.json() as any;
+    // Mutating the collection after submission must not change the run's labels.
+    const changed=await f.app.request(`/api/datasets/${dataset.id}/items`,{method:'POST',headers,body:JSON.stringify({items:[{caseId:cases[1]!.caseId,expectedLabel:'pass'}]})});
+    expect(changed.status).toBe(201);
+    expect((await changed.json() as any).items.find((item:any)=>item.caseId===cases[1]!.caseId).expectedLabel).toBe('pass');
+    const {provider,calls}=observedProvider();await f.runtime.queue.start();
+    const worker=await registerEvalRunWorkers(f.runtime.queue,f.runtime.repository,provider);cleanup.push(()=>worker.stop());
+    await waitTerminal(f.app,f.headers,run.id);
+    const response=await f.app.request(`/api/eval-runs/${run.id}`,{headers});expect(response.status).toBe(200);
+    const detail=await response.json() as any;
+    expect(detail).toMatchObject({id:run.id,datasetId:dataset.id,status:'completed',totalItems:2,completedItems:2,failedItems:0,agreedItems:1});
+    expect(detail.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({caseId:cases[0]!.caseId,datasetItemId:items.find((item:any)=>item.caseId===cases[0]!.caseId).id,expectedLabel:'pass',resultLabel:'pass',agreement:true,status:'completed'}),
+      expect.objectContaining({caseId:cases[1]!.caseId,datasetItemId:items.find((item:any)=>item.caseId===cases[1]!.caseId).id,expectedLabel:'fail',resultLabel:'pass',agreement:false,status:'completed'})
+    ]));
+    expect(detail.items).toHaveLength(2);expect(calls).toHaveBeenCalledTimes(2);
+  });
   it('recovers committed run creation before queue send without calling the evaluator twice',async()=> {
     const f=await fixture(),r=f.runtime.repository;
     const projects=await f.app.request('/api/projects',{headers:{cookie:f.cookie}}),{projects:rows}=await projects.json() as any;

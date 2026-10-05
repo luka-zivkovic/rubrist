@@ -102,3 +102,14 @@ blank correction reasons, and skipped predecessors. Plain-connection integrity
 and foreign-key checks succeed without application functions.
 
 CI and a completed Copilot review remain required before merging the milestone.
+
+## Copilot follow-up
+
+CURRENT 2026-10-05: the first PR #194 CI run passed. Copilot requested
+session-authenticated collection-run integration coverage. Added a synthetic
+HTTP test that creates and populates a collection, submits `/api/eval-runs`,
+changes a collection label before starting the durable worker, and verifies
+terminal item identities, retained labels, agreement counters and two mock
+provider calls. It asserts the collection mutation took effect. All three
+SQLite HTTP workflow tests pass; independent review found no remaining issues
+in this follow-up. The updated PR still requires fresh CI and Copilot review.
