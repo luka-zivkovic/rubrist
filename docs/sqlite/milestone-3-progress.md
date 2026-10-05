@@ -2,7 +2,7 @@
 
 CURRENT 2026-10-05. This branch is an incomplete Milestone 3 implementation.
 No Milestone 3 PR or deployment is qualified by this checkpoint. Milestone 2
-PR #194 is awaiting fresh CI and Copilot review after its coverage follow-up.
+PR #194 is awaiting fresh CI and Copilot review after its collection, queue-validation and error-transport follow-ups.
 
 ## Independently reviewed foundation
 
@@ -22,6 +22,20 @@ PR #194 is awaiting fresh CI and Copilot review after its coverage follow-up.
 - Visible golden promotion and retirement atomically maintain canonical
   regression revisions. Label conflicts, criterion binding, pre-redaction
   identity, exposure history and historical snapshots are retained.
+
+- Revision-bound evaluations and exposure records, cached/empty completion,
+  automatic-import/convergence/backfill deduplication and run comparisons.
+  First-assessment listing includes backfills; provider authorization records
+  retain the correct execution context.
+- Trace-derived test drafts, append-only revisions and validations, enablement,
+  retained redacted sources, source-pinned runs, reviewer anonymization and
+  deduplicated journey events.
+- LangSmith/Langfuse/Ironside configuration with encrypted credentials, exact
+  version selection, serialized poll claims, failure records, Ironside cursor
+  CAS, quarantine and connection-revision revalidation. Import-job lifecycle,
+  tenant-scoped remote trace/version identities and pointer cleanup match PG.
+- Feedback jobs and contexts for all three providers, durable blocked/retry/
+  terminal states and atomic coverage updates. Tests use no external sends.
 
 ## Migration ownership
 
@@ -46,7 +60,7 @@ recreated explicitly; no historical evidence is recanonicalized.
 
 ## Validation at this checkpoint
 
-CURRENT: Node 24.15.0, SQLite 3.51.3. API typecheck passed. All **81 tests in
+CURRENT: Node 24.15.0, SQLite 3.51.3. API typecheck passed. The earlier foundation **81 tests in
 12 SQLite files passed** with two workers. Focused independent audits reviewed
 all foundation groups listed above; their actionable findings were fixed and
 rechecked. Synthetic migration tests cover rollback and SIGKILL after copy,
@@ -58,9 +72,15 @@ parity inventory, independent whole-milestone audit, CI and Copilot review.
 
 ## Remaining Milestone 3 work
 
-Revision-backed and automatic evaluation paths; trace-derived tests; evaluator
-version editing and regression ownership; integration configuration/imports,
-quarantine and feedback; production monitoring storage/retention; dashboard,
+Evaluator version editing and regression ownership; production monitoring storage/retention; dashboard,
 onboarding and trace retention; historical gate compatibility; remaining job
 registration and scheduled recovery. Advanced governed repositories remain
 Milestone 4. Ordinary HTTP staging is not lifted by this partial checkpoint.
+
+
+The expanded ordinary-workflow slice has independent approval after correcting
+first-assessment filtering, backfill authorization context, retained reviewer
+anonymization and the import-job live integration pointer. API typecheck passes.
+All **91 tests in 14 SQLite files passed** before this checkpoint. A source
+inventory currently counts 152/165 main repository methods wired; wiring alone
+is not end-to-end parity, and specialist/worker coverage remains outstanding.

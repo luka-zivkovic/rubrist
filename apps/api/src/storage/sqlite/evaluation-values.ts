@@ -6,7 +6,7 @@ export const parse = (value: unknown) => value == null ? null : JSON.parse(Strin
 export function camel(row: Row): Row {
   return Object.fromEntries(Object.entries(row).map(([key,value]) => [key.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),value]));
 }
-export function evalRun(row: Row) { return EvalRunSchema.parse({...camel(row),blocking:Boolean(row.blocking)}); }
+export function evalRun(row: Row) { return EvalRunSchema.parse({...camel(row),blocking:Boolean(row.blocking),sourceTraceTest:row.source_trace_test_id?{traceTestId:row.source_trace_test_id,revision:row.source_trace_test_revision,validationId:row.source_trace_test_validation_id,validationRevision:row.source_trace_test_validation_revision,sourceCaseRef:row.source_trace_test_case_ref,caseId:row.source_trace_test_case_id,datasetItemId:row.source_trace_test_dataset_item_id}:null}); }
 export function evalItem(row: Row) {
   return EvalRunItemSchema.parse({...camel(row),cached:Boolean(row.cached),notAttempted:Boolean(row.not_attempted),
     agreement:row.agreement == null ? null : Boolean(row.agreement),

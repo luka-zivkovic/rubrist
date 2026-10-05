@@ -1,3 +1,4 @@
+import { recordSqliteEvalExposure } from './eval-exposure.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { RubristRepository } from '../../repository.js';
@@ -30,7 +31,10 @@ export function sqliteEvalExecution(db:DatabaseSync) {
     }); },
     releaseEvalRunDispatch(input:Args<'releaseEvalRunDispatch'>[0]) { transaction(()=>run('UPDATE eval_runs SET queue_dispatch_token=NULL,queue_dispatch_claimed_at=NULL WHERE project_id=? AND id=? AND queue_dispatch_token=? AND queue_dispatched_at IS NULL',input.projectId,input.evalRunId,input.dispatchToken)); },
     armEvalRunItemDeliveryDeadline(projectId:string,evalRunId:string) { transaction(now=>arm(projectId,evalRunId,now)); },
-    markEvalRunRunning(projectId:string,evalRunId:string) { transaction(now=>run("UPDATE eval_runs SET status='running',started_at=? WHERE project_id=? AND id=? AND status='pending'",new Date(now).toISOString(),projectId,evalRunId)); },
+    markEvalRunRunning(projectId:string,evalRunId:string) { transaction(now=> {
+      const row=one("UPDATE eval_runs SET status='running',started_at=? WHERE project_id=? AND id=? AND status='pending' RETURNING *",new Date(now).toISOString(),projectId,evalRunId);
+      if(row)recordSqliteEvalExposure(db,row,now);
+    }); },
     listPendingEvalRunItems(projectId:string,evalRunId:string) { return all(`SELECT * FROM eval_run_items WHERE ${pending} ORDER BY created_at,id`,projectId,evalRunId).map(evalItem); },
     listPendingEvalRunItemDispatches(projectId:string,evalRunId:string) { return transaction(()=>all(`SELECT * FROM eval_run_items WHERE ${pending} ORDER BY created_at,id`,projectId,evalRunId).map(row=> {
       const jobId=row.queue_job_id??randomUUID(); run('UPDATE eval_run_items SET queue_job_id=? WHERE id=?',jobId,row.id);

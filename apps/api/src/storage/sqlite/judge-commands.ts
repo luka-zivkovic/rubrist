@@ -21,7 +21,7 @@ export function sqliteJudgeCommands(db:DatabaseSync) {
       if(job.evalRunId) {
         const owner=one('SELECT * FROM eval_runs WHERE project_id=? AND id=? AND skill_version_id=?',job.projectId,job.evalRunId,skillVersion.id);
         if(!owner || (job.evalRunItemId&&!one('SELECT 1 FROM eval_run_items WHERE project_id=? AND eval_run_id=? AND id=? AND case_id=?',job.projectId,job.evalRunId,job.evalRunItemId,job.caseId))) throw new Error('Eval run item does not match judge job');
-        context=owner.trigger==='release_evidence'?'release_gate':owner.trigger==='manual'?'explicit_nonproduction_dataset':'manual_import';resourceKind='eval_run_item';resourceId=job.evalRunItemId??job.evalRunId;
+        context=owner.trigger==='release_evidence'?'release_gate':owner.source_trace_test_id?'trace_test':owner.trigger==='backfill'?'implicit_production':owner.trigger==='manual'?'explicit_nonproduction_dataset':'manual_import';resourceKind='eval_run_item';resourceId=job.evalRunItemId??job.evalRunId;
       } else {
         context=row.ingestion_purpose==='release_evidence'?'release_gate':row.ingestion_purpose==='judge_api'?'implicit_production':row.ingestion_purpose==='trace_test_synthetic'?'trace_test':'manual_import';resourceKind='case';resourceId=job.caseId;
       }
@@ -62,10 +62,5 @@ export function sqliteJudgeCommands(db:DatabaseSync) {
       if(input.evidenceScope==='customer') filters.push("c.case_type<>'release_evidence'");
       return all(`SELECT v.*,coalesce(u.name,u.email) actor_name FROM verdicts v LEFT JOIN "user" u ON u.id=v.actor_user_id JOIN cases c ON c.id=v.case_id AND c.project_id=v.project_id LEFT JOIN skill_versions sv ON sv.id=v.skill_version_id LEFT JOIN skills s ON s.id=sv.skill_id WHERE ${filters.join(' AND ')} ORDER BY v.created_at DESC,v.id DESC LIMIT ?`,...params,sqliteLimit(input.limit)).map(verdict);
     },
-    createFeedbackSyncJob(_input:Args<'createFeedbackSyncJob'>[0]) {
-      // No integration-backed trace can exist under the current migration's
-      // source_integration_id IS NULL constraint. There is no upstream target.
-      return null;
-    }
   };
 }

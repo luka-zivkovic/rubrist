@@ -102,6 +102,12 @@ describe('SQLite ungoverned review queues',()=>{
         await f.r.recordVerdict({projectId:f.projectId,caseId:trace.caseId,skillVersionId:String(skillVersionId),source,actorUserId:source==='adjudicated'?f.user.id:undefined,payload:{kind:'binary',pass:Boolean(pass),rationale:'Synthetic'}});
       }
     }
+    // Put the snapshot watermark after every case's existing truth, regardless
+    // of how many worker commands happened to share a clock millisecond.
+    const {sequence:anchorSequence,...anchorRow}=f.db.prepare('SELECT * FROM verdicts ORDER BY created_at DESC,id DESC LIMIT 1').get()!;
+    const anchor={...anchorRow,id:'zzzz-watermark',case_id:cases[4]!,skill_version_id:next.id,source:'adjudicated',actor_user_id:f.user.id,
+      created_at:new Date(Date.parse(String(anchorRow.created_at))+1).toISOString(),payload:JSON.stringify({kind:'binary',pass:true,rationale:'Watermark'})};
+    f.db.prepare(`INSERT INTO verdicts(${Object.keys(anchor).join(',')}) VALUES(${Object.keys(anchor).map(()=>'?').join(',')})`).run(...Object.values(anchor));
     const first=await f.r.getConvergenceAudit(f.projectId,String(original.skill_id),next.id,{limit:2});
     expect(first.audit).toMatchObject({adjudicatedTotal:5,comparedCases:4,afterAgreed:2,beforeKnown:4,beforeAgreed:2,improved:1,regressed:1});
     expect(first.audit.cases.map(c=>c.change)).toEqual(['regressed','improved']);expect(first.nextUncoveredCaseId).toBe(cases[4]);expect(first.nextCursor).not.toBeNull();
@@ -141,7 +147,13 @@ it('upgrades M2 verdicts without changing any existing row, receipt BLOB, or mig
   const {projectId}=c.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
   const created=c.createCriterion(projectId,definition,{}),version=created.evaluator.currentVersion.id;
   const trace=c.importTrace(projectId,'release_evidence',{input:'Unicode 😀',output:'Evidence',metadata:{}},{ingestionPurpose:'release_evidence'});
-  const run=c.createEvalRun({projectId,skillVersionId:version,trigger:'release_evidence',items:[{caseId:trace.caseId,clientItemId:'one',contentDigest:'sha256:'+'a'.repeat(64)}]});
+  // Seed using the applied M2 schema, independently of newer command columns.
+  const stamp=new Date().toISOString(),runId='upgrade-run',itemId='upgrade-item';
+  db.prepare(`INSERT INTO eval_runs(id,project_id,skill_version_id,trigger,status,total_items,created_at)
+    VALUES(?,?,?,'release_evidence','pending',1,?)`).run(runId,projectId,version,stamp);
+  db.prepare(`INSERT INTO eval_run_items(id,project_id,eval_run_id,case_id,client_item_id,content_digest,status,created_at)
+    VALUES(?,?,?,?,?,?,'pending',?)`).run(itemId,projectId,runId,trace.caseId,'one','sha256:'+'a'.repeat(64),stamp);
+  const run=c.getEvalRunDetail(projectId,runId)!;
   const v=c.recordVerdict({projectId,caseId:trace.caseId,skillVersionId:version,source:'llm_judge',payload:{kind:'binary',pass:true,rationale:'Unicode 😀'},observed:{model:'mock',requestId:null,responseId:null,systemFingerprint:null,upstreamProvider:null,thinkingReturned:null,reasoningTokens:null}});
   const execution={projectId,evalRunId:run.id,evalRunItemId:run.items[0]!.id,executionToken:'one'};c.claimEvalRunItemExecution(execution);c.beginEvalRunItemProviderCall(execution);c.markEvalRunItemProviderCallReturned(execution);c.completeEvalRunItem({...execution,verdictId:v.id,resultLabel:'pass'});
   const tables=db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT GLOB 'sqlite_*'").all().map(row=>String(row.name));
@@ -150,8 +162,7 @@ it('upgrades M2 verdicts without changing any existing row, receipt BLOB, or mig
   for(const {table,rows} of snapshots) {
     const after=db.prepare(`SELECT rowid AS retained_rowid,* FROM "${table}" ORDER BY rowid`).all();
     if(table==='rubrist_sqlite_migrations')expect(after.slice(0,rows.length)).toEqual(rows);
-    else if(table==='verdicts')expect(after.map(({sequence,review_queue_item_id,reviewed_judge_run_id,review_submission_id,...old})=>old)).toEqual(rows);
-    else expect(after).toEqual(rows);
+    else expect(after.map(row=>Object.fromEntries(Object.keys(rows[0]??{}).map(key=>[key,row[key]])))).toEqual(rows);
   }
   expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);expect(db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
 });

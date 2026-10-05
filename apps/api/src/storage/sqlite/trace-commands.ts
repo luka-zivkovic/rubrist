@@ -48,9 +48,6 @@ export function importTraceInTransaction(db:DatabaseSync,projectId:string,source
   const run=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).run(...args);
       assertTraceIngestionPurpose(source,context.ingestionPurpose);
       if(isInternalTraceMetadata(input.metadata)) throw new RecursiveTraceSkippedError(input.sourceTraceId);
-      if(!['manual','release_evidence'].includes(source) || context.sourceIntegrationId || context.importJobId) {
-        throw new Error('Integration import storage is not yet available in SQLite');
-      }
         const sourceTraceId=input.sourceTraceId?.trim() || `${source}_${randomUUID()}`;
         const existing=one(`SELECT rt.id raw_trace_id,c.id case_id FROM raw_traces rt JOIN cases c ON c.raw_trace_id=rt.id AND c.project_id=rt.project_id
           WHERE rt.project_id=? AND rt.source=? AND rt.source_trace_id=? AND rt.source_trace_version IS ? AND rt.source_remote_project_id IS ?`,
@@ -60,8 +57,8 @@ export function importTraceInTransaction(db:DatabaseSync,projectId:string,source
         else {
           const rawTraceId=`raw_${randomUUID()}`, caseId=`case_${randomUUID()}`;
           const raw=normalizeTracePayload(input), normalized=redactNormalizedTracePayload(raw,context.redactionConfig);
-          run('INSERT INTO raw_traces VALUES(?,?,?,?,?,?,?,?,?,?,?)',rawTraceId,projectId,source,null,context.sourceRemoteProjectId??null,
-            sourceTraceId,context.sourceTraceVersion??null,null,JSON.stringify(raw),context.normalizationVersion??`${source}-v1`,now);
+          run('INSERT INTO raw_traces VALUES(?,?,?,?,?,?,?,?,?,?,?)',rawTraceId,projectId,source,context.sourceIntegrationId??null,context.sourceRemoteProjectId??null,
+            sourceTraceId,context.sourceTraceVersion??null,context.importJobId??null,JSON.stringify(raw),context.normalizationVersion??`${source}-v1`,now);
           run('INSERT INTO cases VALUES(?,?,?,?,?,?,?)',caseId,projectId,rawTraceId,source,JSON.stringify(normalized),now,context.ingestionPurpose);
           const identity=datasetInputIdentity({input:input.input});
           run('INSERT INTO case_input_identity_records VALUES(?,?,?,?,?,?,?)',`ciir_${randomUUID()}`,projectId,caseId,'authoring_import',identity.basis,identity.digest,now);

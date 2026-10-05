@@ -69,7 +69,7 @@ describe('SQLite authenticated durable batch workflow',()=>{
   });
   it('signs up, authors a native evaluator, survives restart before delivery and serves exact receipt bytes',async()=> {
     const f=await fixture();
-    expect((await f.app.request('/api/eval-runs?purpose=backfill',{headers:{cookie:f.cookie}})).status).toBe(503);
+    expect((await f.app.request('/api/eval-runs?purpose=backfill',{headers:{cookie:f.cookie}})).status).toBe(200);
     const body={purpose:'release_evidence',skillVersionId:f.versionId,items:[{clientItemId:'case-one',input:'Question',output:'Grounded answer',metadata:{}}]};
     const accepted=await f.app.request('/api/v1/judge/batch',{method:'POST',headers:f.headers,body:JSON.stringify(body)});
     expect(accepted.status).toBe(202);const {evalRunId}=await accepted.json() as {evalRunId:string};

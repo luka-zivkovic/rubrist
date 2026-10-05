@@ -1,3 +1,7 @@
+import { sqliteFeedbackCommands } from './feedback-commands.js';
+import { sqliteImportJobCommands } from './import-job-commands.js';
+import { sqliteIntegrationCommands } from './integration-commands.js';
+import { sqliteTraceTestCommands } from './trace-test-commands.js';
 import { sqliteGoldenCommands } from './golden-commands.js';
 import { sqliteConvergenceCommands } from './convergence-commands.js';
 import { sqliteEvidenceCommands } from './evidence-commands.js';
@@ -200,6 +204,9 @@ export function sqliteCommands(db: DatabaseSync) {
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};
+  return {...commands, ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+    ...sqliteIntegrationCommands(db),
+    ...sqliteTraceTestCommands(db),
+    ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};
 }
 export type SqliteCommands = ReturnType<typeof sqliteCommands>;
