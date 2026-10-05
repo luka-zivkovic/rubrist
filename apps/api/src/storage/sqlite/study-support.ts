@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { ANALYSIS_POPULATION_API_PAGE_MAX } from '@rubrist/shared';
 import { AnalysisStudyRepositoryError,type AnalysisStudyAccess } from '../../analysis-study/repository.js';
 import { sqliteCommand,type SqliteCommandContext } from './command-context.js';
 import { closeStudyIfDue } from './study-closure.js';
@@ -48,4 +49,4 @@ export function decodeStudyCursor(value:string|null,kind:StudyCursor['kind']):St
   return {kind,primary:parsed.primary};
  }catch{throw studyError('analysis_study_invalid_cursor','Invalid study page cursor');}
 }
-export function studyPageLimit(value:number){if(!Number.isSafeInteger(value)||value<1||value>1000)throw studyError('analysis_study_invalid_cursor','Invalid study page limit');return value;}
+export function studyPageLimit(value:number){if(!Number.isSafeInteger(value)||value<1||value>ANALYSIS_POPULATION_API_PAGE_MAX)throw studyError('analysis_study_invalid_cursor','Invalid study page limit');return value;}

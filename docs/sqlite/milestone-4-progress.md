@@ -214,3 +214,9 @@ study conflict details and deadline failure retry after final-write rollback;
 all 9 command/closure-builder tests pass. Full SQLite suite passes 282 tests in
 29 files before the latest command regressions. Remaining item, taxonomy and
 repository/runtime wiring is still incomplete.
+
+CURRENT: study/taxonomy/assignment reads and the bounded deadline batch now
+preserve tenant checks, exact-count keyset pages, historical coverage and durable
+per-study failure isolation. The final read transaction rechecks a newly reached
+deadline before returning projections. Independent read audit approved 4/4 tests,
+including pagination across tied timestamps and healthy deadline continuation.
