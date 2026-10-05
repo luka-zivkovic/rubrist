@@ -220,3 +220,10 @@ preserve tenant checks, exact-count keyset pages, historical coverage and durabl
 per-study failure isolation. The final read transaction rechecks a newly reached
 deadline before returning projections. Independent read audit approved 4/4 tests,
 including pagination across tied timestamps and healthy deadline continuation.
+
+CURRENT: member coding and content-read commands now preserve exact replay,
+current role checks and deadline-first behavior. Content returns only after its
+exact exposure and deduplicated view commit. Migration 0038 adds PostgreSQL's
+per-person/per-item and study-request uniqueness independently of command keys.
+Independent audit approved; strengthened tests cover a valid-domain missing
+anchor and late view failure rolling back its exposure (4/4 pass).
