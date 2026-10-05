@@ -89,7 +89,7 @@ canonical digest UDFs. Finalizers must also prohibit relevant source changes
 later in the same command; an immediate finalizer alone does not implement a
 commit-time check. Population finalization works on compact IDs/digests.
 
-For payload-heavy study-open frame re-derivation, a versioned read-only validator
+For payload-heavy study-closure frame re-derivation, a versioned read-only validator
 UDF is permitted within ADR-0016. It must be called only by a trigger, require
 managed context, forbid reentry and mutations, prepare queries inside a
 read-only authorizer window, stream with iterator cleanup, keep no caches, and
@@ -138,3 +138,13 @@ approved the implementation and authenticated HTTP fixes; all 32 population
 tests and API typecheck pass. Other specialist domains remain incomplete.
 
 CURRENT: M4 migrations 0025–0027 follow M2 terminal metadata and M3 rebuild fixes. M4 filenames were advanced only in unpublished development history.
+
+CURRENT: a versioned trigger-only validator facility now provides scoped,
+read-only streaming queries under the command's existing authorizer. It rejects
+mutations, reentry, expired readers/cursors and asynchronous verdicts; abandoned
+iterators close before the guard returns. The first validator independently
+recomputes retained population frames using PostgreSQL's whole-normalized-
+payload digest basis and exact identity-count/source-binding rules. It returns
+an assessment verdict checked by a trigger's RAISE(ABORT). Independent validator,
+evaluation and population tests pass 52/52. Actual study-closure wiring and
+same-command closure source guards are still pending.

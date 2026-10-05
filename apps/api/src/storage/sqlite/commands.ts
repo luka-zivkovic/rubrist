@@ -1,3 +1,4 @@
+import { initializePopulationFrameValidator } from './population-validator.js';
 import { sqlitePopulationCommands } from './population-commands.js';
 import { initializeSqliteCommandContext, sqliteCommand } from './command-context.js';
 import { seedSqliteStarterEvaluator } from './starter-evaluator.js';
@@ -42,6 +43,7 @@ const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 
 export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
   initializeSqliteCommandContext(db);
+  initializePopulationFrameValidator(db);
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
   const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);

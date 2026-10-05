@@ -191,3 +191,15 @@ it('serves authenticated population HTTP routes and maps invalid retained payloa
  const invalid=await app.request('/api/analysis-populations',{method:'POST',body:JSON.stringify({...input,windowEnd:new Date(f.now+60000).toISOString(),idempotencyKey:'malformed'}),headers});expect(invalid.status).toBe(409);expect(await invalid.json()).toMatchObject({code:'analysis_population_revision_conflict'});
  expect(f.db.prepare('SELECT count(*) n FROM analysis_populations').get()?.n).toBe(1);
 });
+
+it('independently re-derives retained population frames through a streaming trigger validator',async()=>{
+ const f=await fixture();freeze(f);
+ f.db.exec(`CREATE TABLE study_frame_checks(id INTEGER PRIMARY KEY,population_id TEXT,expected_digest TEXT);
+ CREATE TRIGGER analysis_study_closure_insert BEFORE INSERT ON study_frame_checks BEGIN SELECT CASE WHEN analysis_population_frame_valid_v1(NEW.population_id,NEW.expected_digest) IS NOT 1 THEN RAISE(ABORT,'frame assessment mismatch') END; END;`);
+ const digest=String(f.db.prepare('SELECT frame_digest FROM analysis_populations').get()!.frame_digest);
+ const check=(id:number,expected:string|null)=>sqliteCommand(f.db,c=>c.db.prepare('INSERT INTO study_frame_checks VALUES(?,?,?)').run(id,'ap',expected),()=>f.now+1);
+ check(1,digest);expect(()=>check(2,'sha256:'+'b'.repeat(64))).toThrow(/frame assessment/);
+ sqliteCommand(f.db,c=>c.db.exec("DELETE FROM cases WHERE id=(SELECT case_id FROM analysis_population_members WHERE position=0)"),()=>f.now+1);
+ expect(()=>check(3,digest)).toThrow(/frame assessment/);check(4,null);
+ expect(f.db.prepare('SELECT count(*) n FROM study_frame_checks').get()?.n).toBe(2);
+});
