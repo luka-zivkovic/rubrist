@@ -140,6 +140,39 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
     } finally { sqlite.close(); }
   });
 
+  it("matches PostgreSQL JSONB byte bounds including spaces and decimal scale", async () => {
+    const sqlite=new DatabaseSync(":memory:");
+    try {
+      initializeGovernedSqliteFunctions(sqlite);
+      for(const source of ['null','{}','[]','1.23000','-0.000','1.2300e3','1e999','1e-400','9007199254740993','{"a":1.2300,"a":-0.00,"z":[true,false,null,"😀\\n",{"v":"中"}]}','{"text":"'+ '😀'.repeat(65536)+'"}']) {
+        const expected=(await pool.query('SELECT octet_length(($1::jsonb)::text) n',[source])).rows[0].n;
+        expect(sqlite.prepare('SELECT governed_jsonb_octets_v1(?) n').get(source)?.n).toBe(expected);
+      }
+      const bytes=Buffer.from([0,255,128,10,34]);
+      const expected=(await pool.query('SELECT governed_bytes_v1_digest($1::bytea) digest',[bytes])).rows[0].digest;
+      expect(sqlite.prepare('SELECT governed_bytes_v1_digest(?) digest').get(bytes)?.digest).toBe(expected);
+      expect(()=>sqlite.prepare('SELECT governed_bytes_v1_digest(?)').get('not a BLOB')).toThrow();
+    } finally { sqlite.close(); }
+  });
+
+  it("preserves PostgreSQL UTC JSON timestamp text for governed digests", async () => {
+    const sqlite=new DatabaseSync(":memory:");
+    const client=await pool.connect();
+    try {
+      await client.query("SET TIME ZONE 'UTC'");
+      initializeGovernedSqliteFunctions(sqlite);
+      for(const value of ['2026-08-01T00:00:00Z','2026-08-01T00:00:00.1Z','2026-08-01T00:00:00.123Z','2026-08-01T00:00:00.123456Z','2026-08-01T00:00:00.1234565Z','2026-08-01T00:00:00.9999996Z','2000-02-29T03:10:00.1200+03:00','1969-12-31T23:59:59.000001Z',...['00000050000000000000001','12345650000000000000001','12345749999999999999999','99999949999999999999999'].map(f=>'2026-08-01T00:00:00.'+f+'Z')]) {
+        const expected=(await client.query('SELECT to_jsonb($1::timestamptz) stamp',[value])).rows[0].stamp;
+        expect(sqlite.prepare('SELECT governed_timestamp_v1(?) stamp').get(value)?.stamp).toBe(expected);
+      }
+      for(const value of ['2026-02-30T00:00:00Z','2025-02-29T00:00:00Z','0000-01-01T00:00:00Z','2026-01-01T00:00:00+16:00','2026-01-01T00:00:00-23:59']) {
+        await expect(client.query('SELECT to_jsonb($1::timestamptz)',[value])).rejects.toThrow();
+        expect(()=>sqlite.prepare('SELECT governed_timestamp_v1(?)').get(value)).toThrow();
+      }
+      for(const value of ['9999-12-31T23:59:59.9999996Z','0001-01-01T00:00:00+01:00'])expect(()=>sqlite.prepare('SELECT governed_timestamp_v1(?)').get(value)).toThrow(/supported years/);
+    } finally { client.release();sqlite.close(); }
+  });
+
   it("normalizes SQLite and PostgreSQL evidence timestamps to identical milliseconds", async () => {
     const sqlite = new DatabaseSync(":memory:");
     try {

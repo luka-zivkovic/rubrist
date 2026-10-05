@@ -253,3 +253,30 @@ independent audit caught and verified the correction of an initial shorter
 SQLite identity. Eight focused tests pass, including a fixed Unicode identity
 and digest vector; API typechecking passes. The remaining governed repository
 is not yet wired or complete.
+
+## Imported human truth and governed timestamps
+
+CURRENT: migration 0040 and typed create/list commands retain the existing
+canonicalJson(parsed sourceArtifact) bytes in STRICT BLOB storage, with exact
+source-byte, provenance and content digests. Importing complete caller claims
+can produce only self-attested evidence; trusted verification remains unavailable.
+The database enforces byte limits, classifications, digest binding, immutability
+and project-only erasure. Repository checks use current owner membership.
+
+CURRENT: the independent audit approved the port and 29 focused tests passed
+with the disposable PostgreSQL oracle enabled. Additional independent JSONB
+byte-size vectors matched PostgreSQL. Bounds count PostgreSQL JSON separator
+spaces and retained numeric scale, without rounding precise SQL JSON numbers.
+
+CURRENT: the governed timestamp helper emits PostgreSQL's UTC JSON form with
+microsecond precision, including binary64 fractional parsing and ties-to-even
+rounding. It validates calendar dates and offset limits, and fails closed if
+normalization crosses its supported AD years 0001–9999. PostgreSQL's configured
+session time zone remains unchanged; the helper's parity vectors explicitly use
+UTC. This helper is distinct from Analyze's existing millisecond representation.
+
+TARGET: the remaining governed review paths must retain exact blind-view bytes
+as BLOB, deriving the unchanged canonical base64 digest/wire field from those
+bytes. Claude Code's follow-up consultation confirmed this fits ADR-0016, as
+does retaining the imported artifact's existing canonical byte format. No new
+ADR decision was required. Backup custody documentation remains part of M5.

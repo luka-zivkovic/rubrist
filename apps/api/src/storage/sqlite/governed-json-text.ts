@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { canonicalGovernedJsonV1 } from '../../lib/governed-content-digest.js';
 
 class DecimalToken {
-  constructor(readonly canonical: string) {}
+  constructor(readonly canonical: string, readonly scale: number) {}
 }
 
 /** Match PostgreSQL numeric/trim_scale without a binary64 conversion. */
@@ -52,7 +52,7 @@ function parseExactJson(source: string): unknown {
   return JSON.parse(source, (_key, value: unknown, context?: { source?: string }) => {
     if (typeof value !== 'number') return value;
     if (context?.source === undefined) throw new Error('Exact JSON numeric source unavailable');
-    return new DecimalToken(decimal(context.source));
+    return new DecimalToken(decimal(context.source), Math.max(0,(context.source.match(/\.(\d+)/)?.[1]?.length??0)-Number(context.source.match(/[eE]([+-]?\d+)/)?.[1]??0)));
   });
 }
 export function canonicalGovernedJsonText(source: string): string {
@@ -71,4 +71,21 @@ export function analysisJsonTextDigest(source: string): string {
 export function governedJsonTextDigest(kind: string, source: string): string {
   const bytes = `{"content":${canonicalGovernedJsonText(source)},"kind":${canonicalGovernedJsonV1(kind)}}`;
   return `sha256:${createHash('sha256').update(bytes, 'utf8').digest('hex')}`;
+}
+
+/** PostgreSQL jsonb::text byte size, including numeric scale and separator spaces. */
+export function postgresJsonTextOctets(source: string): number {
+  function size(value: unknown): number {
+    if(value instanceof DecimalToken) {
+      const point=value.canonical.indexOf('.');
+      return value.canonical.length + (value.scale > 0 ? (point < 0 ? 1+value.scale : value.scale-(value.canonical.length-point-1)) : 0);
+    }
+    if(Array.isArray(value))return 2+Math.max(0,value.length-1)*2+value.reduce((n,v)=>n+size(v),0);
+    if(value!==null&&typeof value==='object') {
+      const entries=Object.entries(value);
+      return 2+Math.max(0,entries.length-1)*2+entries.reduce((n,[k,v])=>n+Buffer.byteLength(canonicalGovernedJsonV1(k),'utf8')+2+size(v),0);
+    }
+    return Buffer.byteLength(canonicalGovernedJsonV1(value),'utf8');
+  }
+  return size(parseExactJson(source));
 }

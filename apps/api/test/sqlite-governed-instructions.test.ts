@@ -1,17 +1,11 @@
-import { CreateCriterionInputSchema } from '@rubrist/shared';
 import { stableId } from '../src/governed-review/storage-values.js';
 import { governedContentV1Digest } from '../src/lib/governed-content-digest.js';
 import { expect,it } from 'vitest';
-import { fixture } from './helpers/sqlite-analysis.js';
+import { governedFixture as instructionFixture } from './helpers/sqlite-governed.js';
 import { sqliteGovernedInstructionCommands } from '../src/storage/sqlite/governed-instruction-commands.js';
 import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { governedJsonTextDigest } from '../src/storage/sqlite/governed-json-text.js';
-import { MOCK_BINDING,bindingInput } from './fixtures/execution-binding.js';
 
-async function instructionFixture(){
- const f=await fixture(),created=await f.runtime.repository.createCriterion(f.projectId,CreateCriterionInputSchema.parse({stableKey:'review',name:'Evidence',definition:'Answers follow the evidence.',evaluator:{rubricMarkdown:'Pass supported answers',prompt:'Evaluate the answer.',executionBinding:bindingInput(MOCK_BINDING)}}),{actorUserId:f.userId});
- return {...f,criterionVersionId:created.versions[0]!.id,actor:{projectId:f.projectId,userId:f.userId,projectRole:'owner' as const}};
-}
 it('stores immutable exact instruction lineages with idempotent replay and live owner checks',async()=>{
  const f=await instructionFixture(),commands=sqliteGovernedInstructionCommands(f.db),input={criterionVersionId:f.criterionVersionId,title:'Review evidence',instructions:'Read independently. 😀',failureCodeGuidance:'Preserve authored strings',idempotencyKey:'first'};
  const first=commands.governedInstructionCreate(f.actor,input);expect(first.instructionVersionId).toBe(stableId('griv',f.projectId,input.idempotencyKey));expect(first.instructionDigest).toBe(governedContentV1Digest('review-instruction/v1',{allowedLabels:['pass','fail','cannot_determine'],criterionVersionId:input.criterionVersionId,failureCodeGuidance:input.failureCodeGuidance,id:first.instructionVersionId,instructions:input.instructions,predecessorInstructionVersionId:null,revision:1,title:input.title}));expect(first.revision).toBe(1);expect(commands.governedInstructionCreate(f.actor,input)).toEqual(first);
