@@ -182,7 +182,7 @@ Milestone 4 specialist/invariant inventory.
 
 | Surface | Implementation | Backend evidence |
 | --- | --- | --- |
-| Production records: append/load, snapshot save/list/get, retention get/set/apply, decision erasure, revoked-key purge, snapshot deletion | `production-commands.ts`, migration 0023 | `sqlite-production.test.ts`: exact bytes, ordering, tenant scope, rollback, tombstones, orphan windows, counters and audits; authenticated ingestion in `sqlite-onboarding.test.ts` |
+| Production records: append/load, snapshot save/list/get, retention get/set/apply, decision erasure, revoked-key purge, snapshot deletion | `production-commands.ts`, migration 0025 | `sqlite-production.test.ts`: exact bytes, ordering, tenant scope, rollback, tombstones, orphan windows, counters and audits; authenticated ingestion in `sqlite-onboarding.test.ts` |
 | Capability checks and provider resolution | `resolution-commands.ts` | `sqlite-resolution.test.ts`: expiry, credential scope, exact binding, failed-record durability |
 | `eval.run`, `eval.item`, stale claim and outbox recovery | `workers/eval-run.ts`, `eval-execution.ts`, durable SQLite queue | `sqlite-workflow.test.ts`, `sqlite-evaluation.test.ts`, `sqlite-queue.test.ts`: provider dispatch crashes, restart, lease fencing, terminal receipt; `scheduled-shutdown.test.ts` drains recovery |
 | `judge.run` | `workers/judge.ts` | `sqlite-integrations.test.ts`: durable delivery, persisted exact-version verdict |

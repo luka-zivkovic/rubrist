@@ -46,7 +46,7 @@ rebuilds preserve columns, rowids and retained BLOBs, check copy equality, recre
 dependent triggers, verify foreign keys and reject unfinished replacement tables
 before commit. Runtime connections separately enable FK enforcement. Migration
 SQL cannot issue transaction/savepoint commands behind the runner's ownership.
-Applied migrations 0001–0009 remain unchanged; this milestone adds 0010–0024.
+Applied migrations 0001–0010 remain unchanged; this milestone adds 0011–0025.
 The unpublished M3 filenames were advanced after M2 added its forward
 membership and terminal metadata guards; only disposable qualification
 databases existed.
@@ -95,3 +95,5 @@ CI/Copilot results are recorded after opening the milestone PR.
 CURRENT: M3 migrations now follow M2 terminal metadata guard 0009. Both evaluation-table rebuilds preserve immutable terminal start time and blocking metadata.
 
 CURRENT rebase validation: independent audit verifies unchanged M2 migration bytes and preserved terminal metadata guards in both M3 rebuilds. Evaluation and interrupted-rebuild tests pass 26/26.
+
+CURRENT: M3 now follows correction-reason guard 0010; its migrations do not rebuild receipt tables or remove that guard.
