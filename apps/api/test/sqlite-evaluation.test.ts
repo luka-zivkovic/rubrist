@@ -34,6 +34,36 @@ async function fixture() {
   return {path,runtime,projectId,r,definition,versionId,trace,owner,execution,db,record,start};
 }
 describe('SQLite durable evaluation and receipt ownership',()=>{
+  it('preserves collection item identity under terminal evaluations while allowing label edits and removal',async()=> {
+    const f=await fixture();
+    const trace=await f.r.importTrace(f.projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'dataset_example'});
+    const dataset=await f.r.createDataset({projectId:f.projectId,name:'Identity'});
+    const [item]=await f.r.addDatasetItems({projectId:f.projectId,datasetId:dataset.id,items:[{caseId:trace.caseId}]});
+    const run=await f.r.createEvalRun({projectId:f.projectId,datasetId:dataset.id,skillVersionId:f.versionId,trigger:'manual',items:[{caseId:trace.caseId,datasetItemId:item!.id,status:'skipped'}]});
+    expect(run.status).toBe('completed');
+    const {user}=await f.runtime.auth.api.signUpEmail({body:{email:'second@example.test',password:'synthetic-long-password',name:'Second'}});
+    const other=await f.runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+    const otherTrace=await f.r.importTrace(other.projectId,'manual',{input:'other',output:'other',metadata:{}},{ingestionPurpose:'dataset_example'});
+    const otherDataset=await f.r.createDataset({projectId:other.projectId,name:'Other'});
+    expect(()=>f.db.prepare('UPDATE dataset_items SET project_id=?,dataset_id=?,case_id=?,trace_id=? WHERE id=?').run(other.projectId,otherDataset.id,otherTrace.caseId,otherTrace.rawTraceId,item!.id)).toThrow(/immutable dataset item identity/);
+    for(const column of ['id','trace_id','added_at']) expect(()=>f.db.prepare(`UPDATE dataset_items SET ${column}=? WHERE id=?`).run('changed',item!.id)).toThrow(/immutable dataset item identity/);
+    await f.r.addDatasetItems({projectId:f.projectId,datasetId:dataset.id,items:[{caseId:trace.caseId,expectedLabel:'fail',expectedFailStep:0,note:'Editable'}]});
+    expect(await f.r.removeDatasetItem(f.projectId,dataset.id,item!.id)).toBe(true);
+    expect((await f.r.getEvalRunDetail(f.projectId,run.id))?.items[0]?.datasetItemId).toBeNull();
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  });
+  it('protects terminal run creator attribution and permits account erasure',async()=> {
+    const f=await fixture();
+    const author=f.db.prepare('SELECT id FROM "user"').get()!.id as string;
+    const {user}=await f.runtime.auth.api.signUpEmail({body:{email:'replacement@example.test',password:'synthetic-long-password',name:'Replacement'}});
+    const run=await f.r.createEvalRun({projectId:f.projectId,skillVersionId:f.versionId,trigger:'manual',createdByUserId:author,items:[]});
+    expect(run.status).toBe('completed');
+    for(const replacement of [user.id,null]) expect(()=>f.db.prepare('UPDATE eval_runs SET created_by_user_id=? WHERE id=?').run(replacement,run.id)).toThrow(/immutable eval run creator/);
+    f.db.prepare('DELETE FROM "user" WHERE id=?').run(author);
+    expect(f.db.prepare('SELECT created_by_user_id FROM eval_runs WHERE id=?').get(run.id)?.created_by_user_id).toBeNull();
+    expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  });
+
   it('retains uncertainty after SIGKILL during the provider call, then mints one failure receipt on restart',async()=> {
     const f=await fixture();
     const child=fork(fileURLToPath(new URL('./fixtures/sqlite-interrupted-evaluation.ts',import.meta.url)),[f.path,JSON.stringify({...f.execution,caseId:f.trace.caseId,skillVersionId:f.versionId})],{execArgv:['--import','tsx'],stdio:['ignore','pipe','pipe','ipc']});
