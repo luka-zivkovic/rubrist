@@ -193,3 +193,9 @@ are rejected; later retention and non-counting content views preserve history.
 Deadline effective time and exact owner completion acknowledgment are retained.
 Independent closure audit approved 22/22 tests and inspected scoped query plans;
 API typecheck passes. The study repository is still not wired.
+
+CURRENT: migration 0037 and deadline helpers persist exact overdue-study retries
+with bounded exponential backoff, command-time comparisons and atomic clearing.
+Independent audit approved 11/11 focused tests, including restart, due boundaries,
+closed/foreign-study isolation and failed-closure rollback. API typecheck passes.
+Study repository and scheduler wiring remain pending.
