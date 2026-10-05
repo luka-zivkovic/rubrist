@@ -4,7 +4,7 @@ import { analysisJsonTextDigest } from './governed-json-text.js';
 import { analysisPopulationFrameDigest, analysisPopulationFrameMemberDigest, analysisPopulationReferenceProvenance, compareCodeUnits } from '../../lib/analysis-population.js';
 
 /** Independent streaming equivalent of PG analysis_recomputed_population_frame_digest_v1. */
-function recomputedFrame(reader:SqliteValidatorReader,populationId:string):string|null {
+export function recomputedPopulationFrame(reader:SqliteValidatorReader,populationId:string):string|null {
  const population=reader.get('SELECT * FROM analysis_populations WHERE id=?',populationId);if(!population)return null;
  const frozen=reader.iterate('SELECT case_id,raw_trace_id,source_trace_id,input_digest,ingestion_time FROM analysis_population_members WHERE population_id=? ORDER BY ingestion_time,governed_utf16_sort_key_v1(case_id)',populationId);
  const current=reader.iterate(`SELECT c.id,c.created_at,c.normalized_payload,c.raw_trace_id,r.id retained_raw_trace_id,r.source_trace_id,
@@ -37,7 +37,7 @@ export function initializePopulationFrameValidator(db:DatabaseSync):void {
  if(initialized.has(db))return;
  registerSqliteValidator(db,'analysis_population_frame_valid_v1',['analysis_study_closure_insert'],(reader,populationId,expected)=>{
   if(typeof populationId!=='string'||(expected!==null&&typeof expected!=='string'))return false;
-  return recomputedFrame(reader,populationId)===expected;
+  return recomputedPopulationFrame(reader,populationId)===expected;
  });
  initialized.add(db);
 }

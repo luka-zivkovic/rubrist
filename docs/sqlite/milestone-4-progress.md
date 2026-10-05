@@ -205,3 +205,12 @@ mappers with PostgreSQL. Independent audit approved history, tenant scoping and
 coverage semantics after correcting native SQLite bigint decoding. A focused
 regression verifies the signed-bigint maximum; projection, shared model and API
 checks pass. Public repository wiring remains incomplete.
+
+CURRENT: the production closure builder independently derives frame/draw/item
+artifacts and writes the complete database-verified bundle. Create/open/close/
+complete/abandon commands preserve exact replay, current owner checks and
+permanent draw ownership. Independent audit verified corrections for existing-
+study conflict details and deadline failure retry after final-write rollback;
+all 9 command/closure-builder tests pass. Full SQLite suite passes 282 tests in
+29 files before the latest command regressions. Remaining item, taxonomy and
+repository/runtime wiring is still incomplete.
