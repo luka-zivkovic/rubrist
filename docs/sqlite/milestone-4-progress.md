@@ -178,3 +178,9 @@ retirement and reciprocal deferred finalization. Independent audit found and
 verified a fix for owner membership changing inside the code-creation command.
 All 18 taxonomy tests pass. Combined population/study/taxonomy tests pass 93/93,
 including positive member-authored coding, step anchors and member exposures.
+
+CURRENT: migration 0034 adds immutable observation-assignment histories pinned
+to the current finalized taxonomy head. Writes require an active observation,
+exact actor role and predecessor, an active code for assignments, and an open
+study before its deadline. Withdrawals preserve retired-code history. Independent
+audit approved 12/12 focused tests; combined domain tests pass 105/105.

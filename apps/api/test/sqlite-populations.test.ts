@@ -1,4 +1,5 @@
-import { analysisStudyItemViewContentDigest, analysisStudyItemViewRequestDigest, analysisStudyItemEventDigest, analysisStudyItemEventRequestDigest, analysisStudyEventDigest, analysisStudyEventRequestDigest, analysisStudyContentDigest, analysisStudyItemContentDigest, analysisStudyRequestDigest } from '../src/lib/analysis-study.js';
+import { revision as taxonomyRevision, existing as taxonomyExisting } from './helpers/sqlite-taxonomy.js';
+import { analysisAssignmentRequestDigest, analysisAssignmentEventDigest, analysisStudyItemViewContentDigest, analysisStudyItemViewRequestDigest, analysisStudyItemEventDigest, analysisStudyItemEventRequestDigest, analysisStudyEventDigest, analysisStudyEventRequestDigest, analysisStudyContentDigest, analysisStudyItemContentDigest, analysisStudyRequestDigest } from '../src/lib/analysis-study.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -351,7 +352,7 @@ function itemView(f:Fixture,override:RecordValue={},now=f.now+4,actor={userId:f.
   const columns=Object.keys(exposure);c.db.prepare(`INSERT INTO dataset_exposure_events(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(exposure));
   const basis={projectId:f.projectId,studyId:'study',studyItemId:'study-item-0',viewerUserId:actor.userId,viewerSubjectId:actor.subjectId,datasetRevisionId:'rev'};
   const requestDigest=analysisStudyItemViewRequestDigest(basis);
-  const view={...basis,id:'view',datasetExposureEventId:exposure.id,countsTowardClosure:true,requestDigest,viewedAt:c.timestamp};
+  const view={...basis,id:'view',idempotencyKey:'view',datasetExposureEventId:exposure.id,countsTowardClosure:true,requestDigest,viewedAt:c.timestamp};
   const row:RecordValue={id:'view',project_id:f.projectId,study_id:'study',study_item_id:'study-item-0',dataset_exposure_event_id:exposure.id,viewer_user_id:actor.userId,viewer_subject_id:actor.subjectId,idempotency_key:'view',request_digest:requestDigest,content_digest:analysisStudyItemViewContentDigest(view),counts_toward_closure:1,viewed_at:c.timestamp,...override};
   const keys=Object.keys(row);c.db.prepare(`INSERT INTO analysis_study_item_views(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).run(...Object.values(row));
  },()=>now);
@@ -391,4 +392,51 @@ it('accepts member-authored coding, retained step anchors and member content exp
  itemEvent(f,'failure_observed',{actor,anchor:{kind:'step',stepIndex:0}});itemView(f,{},f.now+4,actor);
  expect(f.db.prepare('SELECT actor_role,anchor_step_index FROM analysis_study_item_events').get()).toMatchObject({actor_role:'member',anchor_step_index:0});
  expect(f.db.prepare("SELECT subject_id FROM dataset_exposure_events WHERE id='view-exposure'").get()?.subject_id).toBe('member-subject');
+});
+function assignment(f:Fixture,observation:RecordValue,type:'assigned'|'withdrawn'='assigned',options:{now?:number;revisionId?:string;override?:RecordValue}={}){
+ return sqliteCommand(f.db,c=>{
+  const head=f.db.prepare('SELECT *,CAST(version AS TEXT) version_text FROM analysis_observation_assignment_events WHERE observation_event_id=? ORDER BY version DESC LIMIT 1').get(observation.id!);
+  const revision=f.db.prepare('SELECT * FROM analysis_failure_taxonomy_revisions WHERE id=coalesce(?,(SELECT id FROM analysis_failure_taxonomy_revisions ORDER BY sequence DESC LIMIT 1))').get(options.revisionId??null)!;
+  const version=BigInt(String(head?.version_text??'0'))+1n;
+  const request={eventType:type,observationEventId:String(observation.id),taxonomyRevisionId:String(revision.id),expectedVersion:String(version-1n),expectedPredecessorEventId:head?.id??null,expectedPredecessorEventDigest:head?.event_digest??null,codeId:type==='assigned'?'revision-1-first':null,rationale:'Human categorization',idempotencyKey:'assignment-'+version};
+  const requestDigest=analysisAssignmentRequestDigest(request as never);
+  const event={id:'assignment-'+version,projectId:f.projectId,studyId:'study',studyItemId:String(observation.study_item_id),observationEventId:request.observationEventId,version:String(version),predecessorEventId:request.expectedPredecessorEventId,predecessorEventDigest:request.expectedPredecessorEventDigest,eventType:type,taxonomyId:'taxonomy',taxonomyRevisionId:request.taxonomyRevisionId,taxonomyRevisionSequence:Number(revision.sequence),codeId:request.codeId,rationale:request.rationale,actorSubjectId:'subject',actorUserId:f.userId,actorRole:'owner',idempotencyKey:request.idempotencyKey,requestDigest,occurredAt:c.timestamp};
+  const row:RecordValue={id:event.id,project_id:f.projectId,study_id:'study',study_item_id:event.studyItemId,observation_event_id:event.observationEventId,version,predecessor_event_id:event.predecessorEventId,predecessor_event_digest:event.predecessorEventDigest,event_type:type,taxonomy_id:'taxonomy',taxonomy_revision_id:event.taxonomyRevisionId,taxonomy_revision_sequence:event.taxonomyRevisionSequence,code_id:event.codeId,rationale:event.rationale,actor_subject_id:'subject',actor_user_id:f.userId,actor_role:'owner',idempotency_key:event.idempotencyKey,request_digest:requestDigest,event_digest:analysisAssignmentEventDigest(event as never),occurred_at:c.timestamp,...options.override};
+  const columns=Object.keys(row);c.db.prepare(`INSERT INTO analysis_observation_assignment_events(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(row));return row;
+ },()=>options.now??f.now+5);
+}
+it('preserves assignment successors and allows withdrawal against a retired current code',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);studyEvent(f);taxonomyRevision(f);
+ const failure=itemEvent(f,'failure_observed');
+ expect(()=>assignment(f,failure,'withdrawn')).toThrow(/ancestry/);
+ assignment(f,failure);itemEvent(f,'coding_completed');
+ assignment(f,failure,'withdrawn'); // Categorization can continue on completed coding while the study is open, matching PG.
+ assignment(f,failure);
+ taxonomyRevision(f,[taxonomyExisting('retired')]);
+ expect(()=>assignment(f,failure,'assigned',{revisionId:'revision-1'})).toThrow(/current taxonomy head/);
+ expect(()=>assignment(f,failure)).toThrow(/must be active/);
+ assignment(f,failure,'withdrawn');
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_observation_assignment_events').get()?.n).toBe(4);
+ expect(()=>f.db.exec('DELETE FROM analysis_observation_assignment_events')).toThrow(/project erasure/);
+ expect(()=>f.db.exec("UPDATE analysis_observation_assignment_events SET rationale='rewritten'")).toThrow(/immutable/);
+ await f.runtime.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
+ expect(f.db.prepare('SELECT * FROM analysis_observation_assignment_events').all()).toEqual([]);
+});
+it.each([
+ ['version',3],['predecessor_event_id','foreign'],['study_item_id','study-item-1'],['actor_user_id','foreign'],['actor_role','member'],['taxonomy_revision_sequence',2],
+ ['request_digest','sha256:'+'a'.repeat(64)],['event_digest','sha256:'+'a'.repeat(64)],['rationale','\t'],['occurred_at','2020-01-01T00:00:00.000Z']
+])('rejects forged observation assignment %s',async(column,value)=>{
+ const f=await fixture();freeze(f);draftStudy(f);studyEvent(f);taxonomyRevision(f);const failure=itemEvent(f,'failure_observed');
+ expect(()=>assignment(f,failure,'assigned',{override:{[column]:value}})).toThrow();
+ expect(f.db.prepare('SELECT * FROM analysis_observation_assignment_events').all()).toEqual([]);
+});
+it('rejects assignments after withdrawal, abandonment or the exact study deadline',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);studyEvent(f,'coding_opened',{deadline:new Date(f.now+1000).toISOString()});taxonomyRevision(f);
+ const failure=itemEvent(f,'failure_observed');
+ expect(()=>assignment(f,failure,'assigned',{now:f.now+1000})).toThrow(/deadline/);
+ assignment(f,failure,'assigned',{now:f.now+999});
+ itemEvent(f,'failure_withdrawn',{target:failure,now:f.now+999});
+ expect(()=>assignment(f,failure,'withdrawn',{now:f.now+999})).toThrow(/active failure/);
+ const other=await fixture();freeze(other);draftStudy(other);studyEvent(other);taxonomyRevision(other);const otherFailure=itemEvent(other,'failure_observed');studyEvent(other,'study_abandoned');
+ expect(()=>assignment(other,otherFailure)).toThrow(/closed by state/);
 });
