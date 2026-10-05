@@ -1,3 +1,4 @@
+import { SqliteQueue } from '@rubrist/queue/sqlite';
 import type { AccountServices } from '../../accounts/ports.js';
 import type { RubristRepository } from '../../repository.js';
 import { SqliteStorage } from './client.js';
@@ -8,6 +9,13 @@ export class SqliteFeatureUnavailableError extends Error {
 export async function createSqliteRuntime(path: string) {
   const storage = new SqliteStorage(path);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const queue = new SqliteQueue({
+    send: (...args) => storage.command('queueSend', ...args),
+    state: (...args) => storage.command('queueState', ...args),
+    recover: (...args) => storage.command('queueRecover', ...args),
+    claim: (...args) => storage.command('queueClaim', ...args),
+    settle: (...args) => storage.command('queueSettle', ...args)
+  });
   let setup = Promise.resolve();
   const accounts: AccountServices = {
     countUsers: () => storage.command('countUsers'),
@@ -37,6 +45,19 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    listCriteria: (...args) => storage.command('listCriteria',...args),
+    getCriterion: (...args) => storage.command('getCriterion',...args),
+    createCriterion: (...args) => storage.command('createCriterion',...args),
+    createCriterionVersion: (...args) => storage.command('createCriterionVersion',...args),
+    getSkillVersion: (...args) => storage.command('getSkillVersion',...args),
+    getCriterionVersionForSkillVersion: (...args) => storage.command('getCriterionVersionForSkillVersion',...args),
+    getCurrentSkill: (...args) => storage.command('getCurrentSkill',...args),
+    getCurrentSkillForCriterion: (...args) => storage.command('getCurrentSkillForCriterion',...args),
+    getLatestSkill: (...args) => storage.command('getLatestSkill',...args),
+    getLatestSkillForCriterion: (...args) => storage.command('getLatestSkillForCriterion',...args),
+    listSkillVersions: (...args) => storage.command('listSkillVersions',...args),
+    authorizeSkillVersionExecution: (...args) => storage.command('authorizeSkillVersionExecution',...args),
+
     listProjects: (...args) => storage.command('listProjects',...args),
     getProjectSettings: (...args) => storage.command('getProjectSettings',...args),
     updateProjectSettings: (...args) => storage.command('updateProjectSettings',...args),
@@ -59,5 +80,5 @@ export async function createSqliteRuntime(path: string) {
       return async () => { throw new SqliteFeatureUnavailableError(); };
     }
   }) as RubristRepository;
-  return {storage,accounts,repository,auth:storage.auth(),close:() => storage.close()};
+  return {storage,accounts,repository,queue,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

@@ -41,7 +41,7 @@ port.on('message', (message) => {
       port.postMessage({id:message.id,result});
     } catch(error) {
       const value = error as Error & {statusCode?:number;body?:unknown};
-      port.postMessage({id:message.id,error:{name:value.name,message:value.message,statusCode:value.statusCode,body:value.body}});
+      port.postMessage({id:message.id,error:{...value,name:value.name,message:value.message,statusCode:value.statusCode,body:value.body}});
     }
   });
 });

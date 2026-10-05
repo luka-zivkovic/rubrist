@@ -1,3 +1,5 @@
+import { sqliteDefinitionCommands } from './definition-commands.js';
+import { sqliteQueueCommands } from './queue-commands.js';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { AccountServices } from '../../accounts/ports.js';
@@ -187,6 +189,6 @@ export function sqliteCommands(db: DatabaseSync) {
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return commands;
+  return {...commands, ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db)};
 }
 export type SqliteCommands = ReturnType<typeof sqliteCommands>;

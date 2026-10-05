@@ -1,3 +1,4 @@
+import * as repositoryErrors from '../../repository/errors.js';
 import { Worker } from 'node:worker_threads';
 import type { RubristAuth } from '../../lib/auth.js';
 import { AgentSetupPairingInProgressError } from '../../lib/auth.js';
@@ -23,6 +24,9 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          const domainError = Object.hasOwn(repositoryErrors,message.error.name)
+            ? repositoryErrors[message.error.name as keyof typeof repositoryErrors] : undefined;
+          if (typeof domainError === 'function' && domainError.prototype instanceof Error) Object.setPrototypeOf(error,domainError.prototype);
           caller.reject(error);
         } else caller.resolve(message.result);
       });
