@@ -35,6 +35,7 @@ export function sqliteEvalCommands(db:DatabaseSync) {
       const runId=`eval_${randomUUID()}`,stamp=new Date(now).toISOString();
       let completed=0,agreed=0,total=0;
       for(const item of input.items) {
+        if(!['pending','completed','skipped'].includes(item.status??'pending')) throw new Error('Invalid evaluation item status at creation');
         if(item.datasetRevisionItemId) throw new SqliteFeatureUnavailableError('SQLite dataset revision unavailable at this stage');
         if(item.status!=='skipped') total++;
         if(item.status==='completed') {

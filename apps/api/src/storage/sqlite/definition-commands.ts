@@ -39,6 +39,7 @@ function definition(row: Row) {
     createdByUserId:row.created_by_user_id,createdAt:row.created_at});
 }
 
+const initializedConnections=new WeakSet<DatabaseSync>();
 export function sqliteDefinitionCommands(db: DatabaseSync) {
   const one = (sql: string, ...args: SQLInputValue[]) => db.prepare(sql).get(...args) as Row | undefined;
   const all = (sql: string, ...args: SQLInputValue[]) => db.prepare(sql).all(...args) as Row[];
@@ -49,27 +50,30 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
     try { const result=work(new Date().toISOString()); db.exec('COMMIT'); return result; }
     catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
   }
-  db.function('sqlite_subject_digest',{deterministic:true},(projectId,subjectId)=>
-    governedContentV1Digest('governed-reviewer-subject/v1',{projectId:String(projectId),subjectId:String(subjectId)}));
-  db.function('sqlite_criterion_digest',{deterministic:true},(criterionId,criterionVersionId,criterionName,criterionDefinition)=>
-    criterionVersionDigest({criterionId:String(criterionId),criterionVersionId:String(criterionVersionId),criterionName:String(criterionName),criterionDefinition:String(criterionDefinition)}));
-  db.function('sqlite_execution_authorization_digest',{deterministic:true},(projectId,skillVersionId,context,resourceKind,resourceId)=>
-    evaluatorExecutionAuthorizationDigest({projectId:String(projectId),skillVersionId:String(skillVersionId),context:String(context) as EvaluatorExecutionContext,
-      resourceKind:String(resourceKind),resourceId:String(resourceId),lifecycleEventId:null,calibrationArtifactId:null}));
-  db.function('sqlite_skill_version_valid',{deterministic:true},(id,skillId,criterionVersionId,revision,status,rubric,prompt,typed,threshold,output,binding,url,kind,range,scores)=> {
-    try {
-      const result=SkillVersionSchema.safeParse({id,skillId,criterionVersionId,version:revision,status,rubricMarkdown:rubric,prompt,
-        typedQuestion:parse(typed),decisionThreshold:threshold,outputSchema:parse(output),executionBinding:parse(binding),customEndpointUrl:url,
-        verdictKind:kind,scalarRange:parse(range),categoricalChoiceScores:parse(scores),goldenSetAgreement:null,tooStrictCount:0,
-        tooLenientCount:0,ambiguousCount:0,knownLimitations:[],rubricProvenance:'unspecified',rubricProvenanceDeclared:false,
-        regressionDatasetRevisionId:null,createdAt:'2000-01-01T00:00:00.000Z',approvedAt:null});
-      if(!result.success) return 0;
-      const value=result.data;
-      if(value.executionBinding.provider==='custom') return value.customEndpointUrl!==null && value.executionBinding.endpoint.kind==='custom' &&
-        endpointBaseUrlDigest(value.customEndpointUrl)===value.executionBinding.endpoint.baseUrlDigest ? 1 : 0;
-      return value.customEndpointUrl===null ? 1 : 0;
-    } catch { return 0; }
-  });
+  if(!initializedConnections.has(db)) {
+    db.function('sqlite_subject_digest',{deterministic:true},(projectId,subjectId)=>
+      governedContentV1Digest('governed-reviewer-subject/v1',{projectId:String(projectId),subjectId:String(subjectId)}));
+    db.function('sqlite_criterion_digest',{deterministic:true},(criterionId,criterionVersionId,criterionName,criterionDefinition)=>
+      criterionVersionDigest({criterionId:String(criterionId),criterionVersionId:String(criterionVersionId),criterionName:String(criterionName),criterionDefinition:String(criterionDefinition)}));
+    db.function('sqlite_execution_authorization_digest',{deterministic:true},(projectId,skillVersionId,context,resourceKind,resourceId)=>
+      evaluatorExecutionAuthorizationDigest({projectId:String(projectId),skillVersionId:String(skillVersionId),context:String(context) as EvaluatorExecutionContext,
+        resourceKind:String(resourceKind),resourceId:String(resourceId),lifecycleEventId:null,calibrationArtifactId:null}));
+    db.function('sqlite_skill_version_valid',{deterministic:true},(id,skillId,criterionVersionId,revision,status,rubric,prompt,typed,threshold,output,binding,url,kind,range,scores)=> {
+      try {
+        const result=SkillVersionSchema.safeParse({id,skillId,criterionVersionId,version:revision,status,rubricMarkdown:rubric,prompt,
+          typedQuestion:parse(typed),decisionThreshold:threshold,outputSchema:parse(output),executionBinding:parse(binding),customEndpointUrl:url,
+          verdictKind:kind,scalarRange:parse(range),categoricalChoiceScores:parse(scores),goldenSetAgreement:null,tooStrictCount:0,
+          tooLenientCount:0,ambiguousCount:0,knownLimitations:[],rubricProvenance:'unspecified',rubricProvenanceDeclared:false,
+          regressionDatasetRevisionId:null,createdAt:'2000-01-01T00:00:00.000Z',approvedAt:null});
+        if(!result.success) return 0;
+        const value=result.data;
+        if(value.executionBinding.provider==='custom') return value.customEndpointUrl!==null && value.executionBinding.endpoint.kind==='custom' &&
+          endpointBaseUrlDigest(value.customEndpointUrl)===value.executionBinding.endpoint.baseUrlDigest ? 1 : 0;
+        return value.customEndpointUrl===null ? 1 : 0;
+      } catch { return 0; }
+    });
+    initializedConnections.add(db);
+  }
   function subject(projectId: string, actor: string | undefined, now: string): string | null {
     if(!actor || !one('SELECT 1 FROM project_members WHERE project_id=? AND user_id=?',projectId,actor)) return null;
     const existing=one('SELECT id FROM governed_reviewer_subjects WHERE project_id=? AND account_user_id=?',projectId,actor);

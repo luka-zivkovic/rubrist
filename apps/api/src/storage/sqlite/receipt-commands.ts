@@ -20,21 +20,25 @@ function artifact(row:Row):AssessmentReceiptArtifact {
     throw new AssessmentReceiptIntegrityError('Persisted assessment receipt columns do not match canonical bytes');
   return {...camel(row),canonicalBytes} as AssessmentReceiptArtifact;
 }
+const initializedConnections=new WeakSet<DatabaseSync>();
 export function sqliteReceiptCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db);
   const definitions=sqliteDefinitionCommands(db);
-  db.function('sqlite_receipt_valid',{deterministic:true},(bytes,projectId,evalRunId,receiptId,contractVersion,digest,evidenceDigest)=> {
-    try { artifact({canonical_bytes:bytes,project_id:projectId,eval_run_id:evalRunId,receipt_id:receiptId,contract_version:contractVersion,artifact_digest:digest,evidence_digest:evidenceDigest}); return 1; }
-    catch { return 0; }
-  });
-  db.function('sqlite_comparison_valid',{deterministic:true},(bytes,rootBytes,projectId,evalRunId,receiptId,digest,status)=> {
-    try {
-      const value=Buffer.from(bytes as Uint8Array),root=Buffer.from(rootBytes as Uint8Array),receipt=parseCanonicalReceiptBytes(value);
-      return receipt.projectId===projectId && receipt.evalRunId===evalRunId && receipt.receiptId===receiptId &&
-        receipt.receiptId===parseCanonicalReceiptBytes(root).receiptId && receiptArtifactDigest(value)===digest &&
-        status===(value.equals(root)?'match':'diverged') ? 1 : 0;
-    } catch { return 0; }
-  });
+  if(!initializedConnections.has(db)) {
+    db.function('sqlite_receipt_valid',{deterministic:true},(bytes,projectId,evalRunId,receiptId,contractVersion,digest,evidenceDigest)=> {
+      try { artifact({canonical_bytes:bytes,project_id:projectId,eval_run_id:evalRunId,receipt_id:receiptId,contract_version:contractVersion,artifact_digest:digest,evidence_digest:evidenceDigest}); return 1; }
+      catch { return 0; }
+    });
+    db.function('sqlite_comparison_valid',{deterministic:true},(bytes,rootBytes,projectId,evalRunId,receiptId,digest,status)=> {
+      try {
+        const value=Buffer.from(bytes as Uint8Array),root=Buffer.from(rootBytes as Uint8Array),receipt=parseCanonicalReceiptBytes(value);
+        return receipt.projectId===projectId && receipt.evalRunId===evalRunId && receipt.receiptId===receiptId &&
+          receipt.receiptId===parseCanonicalReceiptBytes(root).receiptId && receiptArtifactDigest(value)===digest &&
+          status===(value.equals(root)?'match':'diverged') ? 1 : 0;
+      } catch { return 0; }
+    });
+    initializedConnections.add(db);
+  }
   function insert(projectId:string,evalRunId:string,receipt:ReturnType<typeof buildAssessmentReceipt>,sourceKind:AssessmentReceiptArtifact['sourceKind'],sourceDigest:string,now:number,predecessor?:AssessmentReceiptArtifact,reason?:string,actor?:string) {
     const bytes=canonicalReceiptBytes(receipt),revision=(predecessor?.artifactRevision??0)+1;
     const row=one(`INSERT INTO assessment_receipt_artifacts(id,project_id,eval_run_id,receipt_id,contract_version,artifact_revision,canonical_bytes,artifact_digest,evidence_digest,source_snapshot_digest,source_kind,predecessor_artifact_id,correction_reason,created_by_user_id,created_at)

@@ -27,11 +27,12 @@ export function sqliteQueueCommands(db: DatabaseSync, clock = Date.now) {
     const expired = db.prepare("SELECT * FROM queue_jobs WHERE name=? AND state='active' AND lease_until<=? ORDER BY lease_until,id LIMIT 100").all(name,now);
     for (const row of expired) fail(row,now,'Queue delivery lease expired');
   }
+  const activeToken=db.prepare("SELECT 1 FROM queue_jobs WHERE name=? AND token=? AND state='active' AND lease_until>?");
   return {
     queueRecover(name: QueueName, localTokens: string[]): string[] {
       return transaction(now => {
         recover(name,now);
-        return localTokens.filter(token => !db.prepare("SELECT 1 FROM queue_jobs WHERE name=? AND token=? AND state='active' AND lease_until>?").get(name,token,now));
+        return localTokens.filter(token => !activeToken.get(name,token,now));
       });
     },
     queueSend(name: QueueName, data: object, options: QueueSendOptions = {}): string | null {

@@ -34,6 +34,17 @@ async function fixture() {
   return {path,runtime,projectId,r,definition,versionId,trace,owner,execution,db,record,start};
 }
 describe('SQLite durable evaluation and receipt ownership',()=>{
+  it('rejects prefailed items atomically and initializes connection validators only once',async()=> {
+    const f=await fixture();
+    const before=await f.r.listEvalRuns(f.projectId);
+    await expect(f.r.createEvalRun({projectId:f.projectId,skillVersionId:f.versionId,trigger:'release_evidence',items:[{caseId:f.trace.caseId,status:'failed' as 'pending'}]})).rejects.toThrow(/Invalid evaluation item status at creation/);
+    expect(await f.r.listEvalRuns(f.projectId)).toEqual(before);
+    const register=vi.spyOn(f.db,'function');
+    sqliteCommands(f.db);sqliteCommands(f.db);
+    expect(register).not.toHaveBeenCalled();
+    register.mockRestore();
+    expect(f.db.prepare("SELECT sqlite_subject_digest('project','subject') digest").get()?.digest).toMatch(/^sha256:/);
+  });
   it('preserves collection item identity under terminal evaluations while allowing label edits and removal',async()=> {
     const f=await fixture();
     const trace=await f.r.importTrace(f.projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'dataset_example'});
