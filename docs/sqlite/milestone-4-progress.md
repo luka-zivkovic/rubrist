@@ -242,3 +242,14 @@ coverage. Qualification passed 326 SQLite/shared tests; the 12 PostgreSQL study
 tests were run separately with PG_SMOKE_DATABASE_URL and all passed. This
 completes the study port, not M4: governed review, promotion/measurement,
 calibration and evaluator lifecycle remain incomplete.
+
+## Governed review instructions
+
+CURRENT: migration 0039 and typed instruction commands preserve project-scoped
+criterion lineage, exact allowed labels and digest basis, byte limits,
+immutability, replay, live owner checks and project-only erasure. PostgreSQL
+and SQLite share the original 48-hex stable artifact identity helper. The
+independent audit caught and verified the correction of an initial shorter
+SQLite identity. Eight focused tests pass, including a fixed Unicode identity
+and digest vector; API typechecking passes. The remaining governed repository
+is not yet wired or complete.

@@ -1,3 +1,5 @@
+import { stableId } from "./storage-values.js";
+export { stableId } from "./storage-values.js";
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
@@ -239,9 +241,6 @@ export function sealedItemId(intakeId: string, clientItemId: string): string {
   return stableId("gri", intakeId, "sealed-client-item", clientItemId);
 }
 
-export function stableId(prefix: string, ...parts: string[]): string {
-  return `${prefix}_${createHash("sha256").update(parts.join("\u0000"), "utf8").digest("hex").slice(0, 48)}`;
-}
 
 export async function dbDigest(db: Db, kind: string, content: unknown): Promise<string> {
   const applicationDigest = governedContentV1Digest(kind, content);
