@@ -115,9 +115,24 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     const verdict=await f.record();f.db.prepare('UPDATE eval_run_items SET execution_claimed_at=? WHERE id=?').run(Date.now()-EXECUTION_LEASE_MS-100,f.execution.evalRunItemId);
     expect(await f.r.completeEvalRunItem({...next,verdictId:verdict.id,resultLabel:'pass'})).toEqual({runFinished:false});
     expect(await f.r.claimEvalRunItemExecution(f.execution)).toEqual({state:'outcome_unknown',executionToken:'next',providerCallReturned:true});
-    await f.r.failEvalRunItem({...next,error:'Lost result',failure:{state:'failure',failureKind:'outcome_unknown',observed:verdict.observed!}});
+    await f.r.failEvalRunItem({...next,recoverExpiredClaim:true,error:'Lost result',failure:{state:'failure',failureKind:'outcome_unknown',observed:verdict.observed!}});
     const receipt=parseCanonicalReceiptBytes((await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id))!.canonicalBytes);
     expect(receipt.items[0]?.result).toMatchObject({state:'failure',failureKind:'outcome_unknown'});
+  });
+  it('fences expired handler failures and admits only expiry-checked recovery classifications',async()=> {
+    const f=await fixture();await f.start();const verdict=await f.record();
+    const unknown={state:'failure' as const,failureKind:'outcome_unknown' as const,observed:verdict.observed!};
+    expect(await f.r.failEvalRunItem({...f.execution,recoverExpiredClaim:true,error:'premature',failure:unknown})).toEqual({runFinished:false});
+    f.db.prepare('UPDATE eval_run_items SET execution_claimed_at=? WHERE id=?').run(Date.now()-EXECUTION_LEASE_MS-1,f.execution.evalRunItemId);
+    expect(await f.r.failEvalRunItem({...f.execution,error:'late callback',failure:{...unknown,failureKind:'provider_protocol'}})).toEqual({runFinished:false});
+    expect(await f.r.failEvalRunItem({...f.execution,error:'late refusal',failure:{state:'not_attempted',executorRefused:true}})).toEqual({runFinished:false});
+    expect(await f.r.failEvalRunItem({...f.execution,recoverExpiredClaim:true,error:'wrong classification',failure:{state:'not_attempted'}})).toEqual({runFinished:false});
+    expect(await f.r.failEvalRunItem({...f.execution,recoverExpiredClaim:true,executionToken:'replaced',error:'wrong token',failure:unknown})).toEqual({runFinished:false});
+    await recoverStaleEvalRunItemExecutions(f.r);
+    const receipt=(await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id))!;
+    expect(parseCanonicalReceiptBytes(receipt.canonicalBytes).items[0]?.result).toMatchObject({state:'failure',failureKind:'outcome_unknown'});
+    expect(await f.r.failEvalRunItem({...f.execution,error:'late callback',failure:{...unknown,failureKind:'provider_protocol'}})).toEqual({runFinished:true});
+    expect(await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id)).toEqual(receipt);
   });
   it('rolls back item/counter updates if receipt minting fails and rejects wrong-version or misleading result projections',async()=> {
     const f=await fixture();await f.start();

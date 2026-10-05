@@ -80,6 +80,12 @@ export function sqliteEvalCommands(db:DatabaseSync) {
       const row=one("SELECT * FROM eval_run_items WHERE project_id=? AND eval_run_id=? AND id=? AND status='pending' AND execution_token=?",input.projectId,input.evalRunId,input.evalRunItemId,input.executionToken??null);
       if(!row||!owner||finished(owner)) return {runFinished:finished(owner)};
       const failure=input.failure;
+      const expired=row.execution_claimed_at<=now-EXECUTION_LEASE_MS;
+      if(input.recoverExpiredClaim) {
+        if(!expired) return {runFinished:false};
+        const dispatched=row.provider_call_started_at!==null||row.provider_call_returned_at!==null;
+        if(dispatched ? !(failure.state==='failure'&&failure.failureKind==='outcome_unknown') : failure.state!=='not_attempted') return {runFinished:false};
+      } else if(expired) return {runFinished:false};
       if(failure.state==='not_attempted'&&row.provider_call_started_at!==null&&failure.executorRefused!==true) return {runFinished:false};
       if(failure.state==='failure') { ObservedCallSchema.parse(failure.observed);EvaluatorFailureKindSchema.parse(failure.failureKind); }
       run(`UPDATE eval_run_items SET status='failed',error=?,failure_kind=?,not_attempted=?,observed=?,finished_at=?,${clearExecution} WHERE id=?`,input.error,failure.state==='failure'?failure.failureKind:null,Number(failure.state==='not_attempted'),failure.state==='failure'?json(failure.observed):null,new Date(now).toISOString(),row.id);

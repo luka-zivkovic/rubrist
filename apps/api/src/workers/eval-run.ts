@@ -247,6 +247,7 @@ export async function recoverStaleEvalRunItemExecutions(
       evalRunId: execution.evalRunId,
       evalRunItemId: execution.evalRunItemId,
       executionToken: execution.executionToken,
+      recoverExpiredClaim: true,
       error: execution.providerCallReturned
         ? "Provider returned, but durable item completion was interrupted; the evaluator was not called again."
         : execution.providerCallStarted
@@ -325,6 +326,7 @@ export async function processEvalItemJob(
       evalRunId: parsed.evalRunId,
       evalRunItemId: parsed.evalRunItemId,
       executionToken: claimed.executionToken,
+      recoverExpiredClaim: true,
       error: claimed.providerCallReturned
         ? "Provider returned, but durable item completion was interrupted; the evaluator was not called again."
         : "Provider outcome unknown after worker interruption; the evaluator was not called again.",

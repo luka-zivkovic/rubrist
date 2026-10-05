@@ -258,6 +258,8 @@ export interface FailEvalRunItemInputDb {
   evalRunId: string;
   evalRunItemId: string;
   executionToken?: string | undefined;
+  /** Expiry-checked recovery of the exact stored claim; never a handler failure. */
+  recoverExpiredClaim?: boolean | undefined;
   error: string;
   failure: EvalRunItemFailure;
 }
