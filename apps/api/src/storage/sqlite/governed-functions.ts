@@ -1,5 +1,8 @@
+import { canonicalGovernedJsonText, governedJsonTextDigest, analysisJsonTextDigest } from './governed-json-text.js';
+import { productionTimestamp } from './production-time.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { canonicalGovernedJsonV1, governedContentV1Digest } from '../../lib/governed-content-digest.js';
+import { normalizeAnalysisPopulationTimestamp } from '../../lib/analysis-population.js';
+import { canonicalGovernedJsonV1 } from '../../lib/governed-content-digest.js';
 
 const initialized = new WeakSet<DatabaseSync>();
 
@@ -20,10 +23,14 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
     return value;
   };
   db.function('governed_canonical_json_v1', { deterministic: true },
-    value => canonicalGovernedJsonV1(JSON.parse(text(value))));
+    value => canonicalGovernedJsonText(text(value)));
   db.function('governed_content_v1_digest', { deterministic: true },
-    (kind, content) => governedContentV1Digest(text(kind), JSON.parse(text(content))));
+    (kind, content) => governedJsonTextDigest(text(kind), text(content)));
   db.function('governed_utf16_sort_key_v1', { deterministic: true },
     value => governedUtf16SortKey(text(value)));
+  db.function('analysis_sha256_v1', { deterministic: true },
+    value => analysisJsonTextDigest(text(value)));
+  db.function('analysis_timestamp_v1', { deterministic: true },
+    value => normalizeAnalysisPopulationTimestamp(productionTimestamp(text(value))));
   initialized.add(db);
 }

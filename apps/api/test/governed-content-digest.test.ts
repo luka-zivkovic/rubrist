@@ -107,15 +107,48 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
       const kind = `governed-golden-${index}/v1`;
       const row = (await pool.query(
         `select governed_canonical_json_v1(jsonb_build_object('content',$1::jsonb,'kind',$2::text)) as canonical,
-                governed_content_v1_digest($2::text,$1::jsonb) as digest`,
+                governed_content_v1_digest($2::text,$1::jsonb) as digest,
+                analysis_sha256_v1($1::jsonb) as analysis_digest`,
         [JSON.stringify(content), kind]
       )).rows[0];
       expect(String(row.canonical)).toBe(governedContentV1CanonicalBytes(kind, content).toString("utf8"));
       expect(String(row.digest)).toBe(governedContentV1Digest(kind, content));
-      const actual = sqlite.prepare("SELECT governed_canonical_json_v1(?) canonical, governed_content_v1_digest(?,?) digest").get(JSON.stringify({ content, kind }), kind, JSON.stringify(content));
+      const actual = sqlite.prepare("SELECT governed_canonical_json_v1(?) canonical, governed_content_v1_digest(?,?) digest, analysis_sha256_v1(?) analysis_digest").get(JSON.stringify({ content, kind }), kind, JSON.stringify(content), JSON.stringify(content));
       expect(actual?.canonical).toBe(row.canonical);
       expect(actual?.digest).toBe(row.digest);
+      expect(actual?.analysis_digest).toBe(row.analysis_digest);
     }
+    } finally { sqlite.close(); }
+  });
+
+  it("preserves raw SQL decimal precision rather than rounding before hashing", async () => {
+    const sqlite = new DatabaseSync(":memory:");
+    try {
+      initializeGovernedSqliteFunctions(sqlite);
+      for (const source of ["9007199254740993", "0.123456789012345678901", "-1e-400", "1e999", "1.23000", "-0.000", '{"x":9007199254740993,"x":0.123456789012345678901,"nested":[1e-400,1.2300,1e21]}']) {
+        const expected = (await pool.query("SELECT governed_canonical_json_v1($1::jsonb) canonical, governed_content_v1_digest('raw/v1',$1::jsonb) digest, analysis_sha256_v1($1::jsonb) analysis_digest", [source])).rows[0];
+        const actual = sqlite.prepare("SELECT governed_canonical_json_v1(?) canonical, governed_content_v1_digest('raw/v1',?) digest, analysis_sha256_v1(?) analysis_digest").get(source,source,source);
+        expect(actual).toEqual(expected);
+      }
+      for (const source of ['0e99999999999', '1.0000e-16383', '{"x":"\\u0000","x":"valid"}', '{"x":"\\ud800","x":"valid"}']) {
+        await expect(pool.query('SELECT governed_canonical_json_v1($1::jsonb)', [source])).rejects.toThrow();
+        expect(() => sqlite.prepare('SELECT governed_canonical_json_v1(?)').get(source)).toThrow();
+      }
+      const exact = sqlite.prepare("SELECT analysis_sha256_v1(?) digest");
+      expect(exact.get('9007199254740993')?.digest).not.toBe(exact.get('9007199254740992')?.digest);
+      expect(exact.get('-1e-400')?.digest).not.toBe(exact.get('0')?.digest);
+    } finally { sqlite.close(); }
+  });
+
+  it("normalizes SQLite and PostgreSQL evidence timestamps to identical milliseconds", async () => {
+    const sqlite = new DatabaseSync(":memory:");
+    try {
+      initializeGovernedSqliteFunctions(sqlite);
+      for (const value of ["2026-08-01T00:00:00.123456Z", "2026-08-01T00:00:00.9999996Z", "2026-08-01T03:00:00.1239+03:00", "1969-12-31T23:59:59.999999Z", "2000-02-29T00:00:00Z"]) {
+        const row = (await pool.query("SELECT analysis_timestamp_v1($1::timestamptz) stamp", [value])).rows[0];
+        expect(sqlite.prepare("SELECT analysis_timestamp_v1(?) stamp").get(value)?.stamp).toBe(row.stamp);
+      }
+      expect(() => sqlite.prepare("SELECT analysis_timestamp_v1(?)").get("not a timestamp")).toThrow();
     } finally { sqlite.close(); }
   });
 
@@ -129,7 +162,7 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
       initializeGovernedSqliteFunctions(sqlite);
       const row = sqlite.prepare("SELECT json_group_array(value ORDER BY governed_utf16_sort_key_v1(value)) ordered FROM json_each(?)").get(JSON.stringify(values));
       expect(JSON.parse(String(row?.ordered))).toEqual(expected);
-      for (const invalid of [null, 7, '{', '"\\u0000"', '"\\ud800"', '1e999']) {
+      for (const invalid of [null, 7, '{', '"\\u0000"', '"\\ud800"']) {
         expect(() => sqlite.prepare('SELECT governed_canonical_json_v1(?)').get(invalid)).toThrow();
       }
     } finally { sqlite.close(); }

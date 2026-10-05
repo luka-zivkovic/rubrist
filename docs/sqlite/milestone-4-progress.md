@@ -67,3 +67,43 @@ The foundation does not implement those specialist repositories or establish
 complete coverage of the 54 digest functions / 388 inventory entries. Remove a
 staging guard only alongside its complete replacement. Commit audited domain
 chunks within the single Milestone 4 PR requested by the user.
+
+## Follow-up foundation and validator design
+
+CURRENT: migration 0025 seeds durable sealed/nonsealed input ownership from
+retained case identities and dataset revision items, then claims automatically
+on new evidence. Conflicting classes fail inside the same transaction; claims
+survive traffic retention and can disappear only with project erasure. Tests
+cover concurrent imports, direct case/revision claims, rollback and migration.
+
+CURRENT: raw SQL canonicalization preserves exact numeric literals using the
+Node 24 JSON reviver source; it does not round them through JavaScript numbers.
+All literals, including overwritten duplicate values, are validated. Tests
+compare PostgreSQL on long decimals, integers above binary64's exact range,
+very small/large exponents, trailing zeros, invalid strings/numeric bounds and
+sub-microsecond timestamp rounding. The application JSON helpers are unchanged.
+
+TARGET engineering design, independently consulted through agent-bridge on
+2026-10-06: population/draw guards use SQL joins, exact set comparisons and pure
+canonical digest UDFs. Finalizers must also prohibit relevant source changes
+later in the same command; an immediate finalizer alone does not implement a
+commit-time check. Population finalization works on compact IDs/digests.
+
+For payload-heavy study-open frame re-derivation, a versioned read-only validator
+UDF is permitted within ADR-0016. It must be called only by a trigger, require
+managed context, forbid reentry and mutations, prepare queries inside a
+read-only authorizer window, stream with iterator cleanup, keep no caches, and
+return a verdict checked by RAISE(ABORT). It must never change connection state
+or appear in a CHECK, index, generated expression or view. These are conditions
+for the future implementation, not a claim that such a validator exists yet.
+
+Claude's isolated Node 24.15 / SQLite 3.51.3 probes found that one SQL statement
+retains UDF arguments until completion: hashing 100,000 synthetic 2 KB payloads
+used roughly 405–645 MB RSS, while a streaming reader used roughly 69–73 MB.
+These consultation probes motivate bounded streaming; they are not the
+Milestone 6 application benchmark or operating guidance.
+
+CURRENT follow-up validation: independent audit approved 14/14 focused tests
+with PostgreSQL enabled. All 128 SQLite tests pass in 22 files; typecheck and
+shared-contract guards pass. The contract fixtures add only the two explicitly
+named provenance variants approved by ADR-0016.

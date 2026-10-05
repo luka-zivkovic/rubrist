@@ -84,6 +84,8 @@ it('seeds the command clock from retained M3 times and enforces real ingestion/e
  insertRow(db,'raw_traces',raw);
  const retainedCase={id:'case',project_id:'project',raw_trace_id:'raw',case_type:'manual',normalized_payload:'{}',created_at:caseStamp,ingestion_purpose:'analysis_eligible_manual'};
  insertRow(db,'cases',retainedCase);
+ const retainedIdentity={id:'identity',project_id:'project',source_case_id:'case',record_kind:'authoring_import',identity_basis:'input-identity/v1',input_digest:'sha256:'+'a'.repeat(64),created_at:caseStamp};
+ insertRow(db,'case_input_identity_records',retainedIdentity);
  db.exec('BEGIN IMMEDIATE');
  insertRow(db,'dataset_revisions',{id:'revision',project_id:'project',series_id:'series',revision_number:1,role:'analysis_authoring',source_kind:'collection_snapshot',identity_basis:'input-identity/v1',content_digest:datasetRevisionContentDigest([]),revision_digest:datasetRevisionDigest({role:'analysis_authoring',itemDigests:[]}),item_count:0,provenance_level:'unverified',created_at:caseStamp});
  const retainedExposure={id:'exposure',project_id:'project',revision_id:'revision',kind:'created',exposure_class:'lineage',activity:'revision_create',subject_kind:'system',details:'{}',idempotency_key:'created',occurred_at:exposureStamp};
@@ -93,6 +95,8 @@ it('seeds the command clock from retained M3 times and enforces real ingestion/e
  migrateSqlite(db);migrateSqlite(db);
  expect(db.prepare('SELECT * FROM rubrist_sqlite_migrations ORDER BY id').all().slice(0,previousMigrations.length)).toEqual(previousMigrations);
  expect(db.prepare('SELECT * FROM cases WHERE id=?').get('case')).toEqual(retainedCase);
+ expect(db.prepare('SELECT * FROM case_input_identity_records WHERE id=?').get('identity')).toEqual(retainedIdentity);
+ expect(db.prepare('SELECT * FROM governed_input_identity_claims').all()).toEqual([{project_id:'project',input_digest:retainedIdentity.input_digest,usage_class:'nonsealed',created_at:caseStamp}]);
  expect(db.prepare('SELECT occurred_at FROM dataset_exposure_events WHERE id=?').get('exposure')?.occurred_at).toBe(exposureStamp);
  sqliteCommand(db,context=>expect(context.timestamp).toBe(exposureStamp),()=>Date.parse(caseStamp));
  insertRow(db,'raw_traces',{...raw,id:'raw-next',source_trace_id:'next'});
