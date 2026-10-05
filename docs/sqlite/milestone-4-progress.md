@@ -52,7 +52,7 @@ with command context tests (10/10, PostgreSQL enabled). The full SQLite suite
 initially passed 124/125; the historical fixture was then adapted to supply a
 TEMP clock while generating old-schema data, removed before migration. The
 focused rerun passed. After rebasing onto the M2 membership fix and updated M3,
-the full SQLite suite passed 126/126 tests in 21 files. Migration 0024 adds the
+the full SQLite suite passed 126/126 tests in 21 files. Migration 0025 adds the
 command clock after the preserved M2/M3 migration history.
 
 ## Remaining work
@@ -70,7 +70,7 @@ chunks within the single Milestone 4 PR requested by the user.
 
 ## Follow-up foundation and validator design
 
-CURRENT: migration 0025 seeds durable sealed/nonsealed input ownership from
+CURRENT: migration 0026 seeds durable sealed/nonsealed input ownership from
 retained case identities and dataset revision items, then claims automatically
 on new evidence. Conflicting classes fail inside the same transaction; claims
 survive traffic retention and can disappear only with project erasure. Tests
@@ -110,7 +110,7 @@ named provenance variants approved by ADR-0016.
 
 ## Population database checkpoint
 
-CURRENT: migration 0026 ports population, member, exclusion, draw, selection and
+CURRENT: migration 0027 ports population, member, exclusion, draw, selection and
 request persistence. Reciprocal deferred finalizers require complete ordered
 frames, exact source identities and revision references, original digest bases
 and a complete deterministic draw. Source changes are forbidden throughout the
@@ -136,3 +136,5 @@ Typed domain errors survive RPC. Invalid retained payloads return conflict
 responses rather than unhandled validation errors. Independent repository audit
 approved the implementation and authenticated HTTP fixes; all 32 population
 tests and API typecheck pass. Other specialist domains remain incomplete.
+
+CURRENT: M4 migrations 0025–0027 follow M2 terminal metadata and M3 rebuild fixes. M4 filenames were advanced only in unpublished development history.
