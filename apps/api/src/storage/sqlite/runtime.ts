@@ -54,6 +54,12 @@ export async function createSqliteRuntime(path: string) {
     }
   };
   const methods = {
+    createGateCheck: (...args) => storage.command('createGateCheck',...args),
+    getGateCheckDetail: (...args) => storage.command('getGateCheckDetail',...args),
+    listGateChecks: (...args) => storage.command('listGateChecks',...args),
+    getDashboardSummary: (...args) => storage.command('getDashboardSummary',...args),
+    getOnboardingEvidenceInventory: (...args) => storage.command('getOnboardingEvidenceInventory',...args),
+    pruneExpiredTraces: (...args) => storage.command('pruneExpiredTraces',...args),
     loadFeedbackSyncContext: (...args) => storage.command('loadFeedbackSyncContext',...args),
     listFeedbackSyncJobs: (...args) => storage.command('listFeedbackSyncJobs',...args),
     markFeedbackSyncSucceeded: (...args) => storage.command('markFeedbackSyncSucceeded',...args),
