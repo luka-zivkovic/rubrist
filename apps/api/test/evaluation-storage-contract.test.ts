@@ -52,6 +52,29 @@ async function fixture(kind:'sqlite'|'postgres'){
 }
 for(const kind of ['sqlite','postgres']as const){
  describe.skipIf(kind==='postgres'&&!process.env.PG_SMOKE_DATABASE_URL)(`${kind} shared evaluation storage contract`,()=>{
+  it.each([false,true])('rejects invalid recovery with provider dispatched=%s',async dispatched=>{
+   const f=await fixture(kind),owner={...f.job,executionToken:'recovery-owner'};
+   const unknown={state:'failure' as const,failureKind:'outcome_unknown' as const,observed:{model:null,requestId:null,responseId:null,systemFingerprint:null,upstreamProvider:null,thinkingReturned:null,reasoningTokens:null}};
+   const expected=dispatched?unknown:{state:'not_attempted' as const};
+   expect(await f.repository.claimEvalRunItemExecution(owner)).toEqual({state:'claimed'});
+   if(dispatched)expect(await f.repository.beginEvalRunItemProviderCall(owner)).toBe(true);
+   expect(await f.repository.failEvalRunItem({...owner,recoverExpiredClaim:true,error:'premature recovery',failure:expected})).toEqual({runFinished:false});
+   await f.expire(f.job.evalRunItemId);
+   const invalid=[
+    {...owner,error:'late provider failure',failure:{...unknown,failureKind:'provider_protocol' as const}},
+    {...owner,error:'late executor refusal',failure:{state:'not_attempted' as const,executorRefused:true as const}},
+    {...owner,recoverExpiredClaim:true,error:'wrong classification',failure:dispatched?{state:'not_attempted' as const}:unknown},
+    {...owner,recoverExpiredClaim:true,error:'non-recovery failure kind',failure:{...unknown,failureKind:'provider_protocol' as const}},
+    {...owner,recoverExpiredClaim:true,executionToken:'wrong-owner',error:'wrong token',failure:expected}
+   ];
+   for(const input of invalid)expect(await f.repository.failEvalRunItem(input)).toEqual({runFinished:false});
+   expect((await f.repository.getEvalRunDetail(f.job.projectId,f.job.evalRunId))?.items[0]?.status).toBe('pending');
+   expect(await f.repository.listAssessmentReceiptArtifacts(f.job.projectId,f.job.evalRunId)).toEqual([]);
+   expect(await f.repository.failEvalRunItem({...owner,recoverExpiredClaim:true,error:'expired recovery',failure:expected})).toEqual({runFinished:true});
+   const receipt=(await f.repository.getOrFreezeAssessmentReceipt(f.job.projectId,f.job.evalRunId))!;
+   expect(JSON.parse(receipt.canonicalBytes.toString()).items[0].result).toEqual(dispatched?{state:'failure',failureKind:'outcome_unknown'}:{state:'not_attempted'});
+   expect(await f.repository.getEvalRun(f.job.projectId,f.job.evalRunId)).toMatchObject({status:'failed',completedItems:0,failedItems:1});
+  });
   it('fences overlapping deliveries and keeps one terminal artifact on replay',async()=>{
    const f=await fixture(kind),provider=createStrictJudgeProvider(runtimeVersion(MOCK_BINDING)),base=provider.judgeStructured.bind(provider),entered=deferred(),release=deferred();
    const calls=vi.spyOn(provider,'judgeStructured').mockImplementation(async input=>{entered.resolve();await release.promise;return base(input);});

@@ -166,6 +166,7 @@ jobs:
           version="${RELEASE_TAG#v}"
           api="ghcr.io/${IMAGE_OWNER}/rubrist-api:${version}"
           web="ghcr.io/${IMAGE_OWNER}/rubrist-web:${version}"
+          node tools/ci/release-template-images.mjs
           docker pull "$api"
           docker pull "$web"
           node tools/ci/postgres-deployment.mjs "$api" "$web"

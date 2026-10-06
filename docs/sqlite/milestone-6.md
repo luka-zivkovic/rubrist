@@ -2,7 +2,8 @@
 
 **CURRENT (2026-10-06):** all seven milestones are implemented and locally
 qualified. The stacked PR review/merge workflow remains pending: only Milestones
-0–1 have merged. Fresh Copilot reviews have not started despite accepted requests.
+0–1 have merged. The user replaced Copilot with Claude Code through agent-bridge
+for the remaining PR reviews on 2026-10-06.
 This record does not authorize a release or an upgrade of an existing installation.
 
 ## Behavioral and recovery checklist
@@ -12,10 +13,10 @@ This record does not authorize a release or an upgrade of an existing installati
 | PostgreSQL and SQLite evaluation contract | `evaluation-storage-contract.test.ts` runs both real backends: overlapping deliveries, stale owners, terminal replay, one verdict/receipt/counter and foreign-project denial. Database tests require explicit disposable PostgreSQL configuration; skips are not parity evidence. |
 | Lease expiry while waiting for a lock | Four PostgreSQL regressions hold an unchanged tuple lock across expiry before dispatch, return, completion or failure. Each operation is rejected. The independent reproducer also passes. |
 | Job creation and delivery | Existing SQLite workflow tests interrupt after durable run creation before queue send, recover stable dispatch IDs and reject duplicate submissions. Queue tests cover claim/retry/recovery and stale acknowledgements. |
-| Pre-dispatch crash | Production worker child is SIGKILLed after its committed claim. Replacement may dispatch once after expiry. |
-| Dispatch and post-result crash | Production child is SIGKILLed during dispatch or after durable verdict insertion. Recovery records `outcome_unknown`, never guesses an outcome and never repeats the physical call. |
+| Pre-dispatch crash | A child executing the production `processEvalItemJob` path is SIGKILLed after its committed claim. Replacement may dispatch once after expiry. |
+| Dispatch and post-result crash | A child executing `processEvalItemJob` is SIGKILLed during dispatch or after durable verdict insertion. Recovery records `outcome_unknown`, never guesses an outcome and never repeats the physical call. |
 | Receipt transaction | Injected mint failure rolls back terminal item/counter state. Retried completion mints one immutable receipt; invalid direct writes fail closed. |
-| Terminal commit before acknowledgement | Real queue handler commits its receipt, acknowledgement fails, process runtime closes/reopens, lease expires and delivery repeats. One physical call, verdict, artifact and counter remain; queue reaches completed. |
+| Terminal commit before acknowledgement | The real queue calls `processEvalItemJob` through a test handler, commits its receipt, acknowledgement fails, process runtime closes/reopens, lease expires and delivery repeats. One physical call, verdict, artifact and counter remain; queue reaches completed. This fixture does not exercise the production handler registration wrapper. |
 | Ordinary and specialist workflows | Milestones 3–4 inventory and negative boundary suites retain coverage for integrations, review, analysis, governed truth, calibration, lifecycle, monitoring and measurement. |
 | Operator recovery | Milestone 5 container drills exercise both backends, SQLite backup/fresh-volume restore, synthetic predecessor upgrade and old-backup rollback. Restored encrypted credentials and governed artifact bytes are independently tested. |
 
@@ -44,7 +45,9 @@ minimum is Node 24.15.0. No public evidence schema or package export changes are
 introduced in this milestone.
 
 Release verification checks both Compose/checksum pairs. After publication, the
-release workflow pulls the exact tags and performs the same account, harness,
+release workflow renders all four attached templates without image overrides and
+checks their API/web image references against the published tags. It then pulls
+those tags and uses explicit image/port overrides for the same account, harness,
 mock-evaluation, byte-preserving restart/replacement and SQLite restore drills.
 Only passing smoke checks create the operator-reviewed draft with both Compose
 pairs and both Coolify recipes. No release tag was pushed during qualification.
@@ -76,6 +79,11 @@ the overlapping-work duration below.
 | Durable completed jobs / mock calls | 100 / 100 | 100 / 100 |
 | Sampled database peak | 90.69 MB | 91.87 MB |
 | Sampled WAL peak | 36.39 MB | 36.09 MB |
+
+The pre-index column is a historical development observation with incomplete
+schema metadata, as disclosed in the benchmark README. Overlap time includes
+post-run integrity checks and queue shutdown. Event-loop percentiles include
+the 10 ms sampling interval rather than measuring delay above that baseline.
 
 Both runs had no recorded operation errors and preserved every frozen member
 through all three retention sweeps. A separate 100 ms maintenance-writer lock
@@ -117,9 +125,22 @@ throughput is inferred from local mock calls.
   These are unreleased qualification images, not a historical published release.
 - Both exact-final-script workload sizes independently approved: 100 durable
   jobs and 100 mock calls in each; no recorded operation errors. Standalone strict
-  benchmark typecheck passes. Four raw result files preserve before/after evidence.
+  benchmark typecheck passes. The indexed records use the final harness; the two
+  pre-index records are historical development observations with incomplete
+  schema metadata. See `benchmarks/README.md` for provenance and reproduction.
 - Independent packaging audit approved CI/release gates and six release assets.
   YAML parsing, checksum/render checks, shared contracts, repository boundaries,
   large-file classification and diff checks pass.
-- PR CI and Copilot reviews remain required before bottom-up merging. Copilot
-  availability is an external merge gate, not approval. No release/deployment ran.
+- PR CI and resolved Claude Code reviews are required before bottom-up merging,
+  per the user's reviewer substitution. No release/deployment ran.
+
+## Claude review follow-up (2026-10-06)
+
+Claude identified three actionable qualification gaps, now resolved: release
+template image references are verified for all four shipped files before image
+pulls/drills; the recovery rejection matrix runs against both databases; and
+benchmark provenance is explicit. Claude's follow-up found no unresolved
+actionable findings. The shared contract passes **12/12 with no skips** against
+disposable PostgreSQL and SQLite, independently repeated by Claude. The new
+release-image rejection test, all four actual Compose renders, API typecheck,
+YAML parsing and whitespace checks pass. Updated PR CI is still required.

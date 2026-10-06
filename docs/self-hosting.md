@@ -88,8 +88,10 @@ boundaries, then publishes amd64 and arm64 API/web images with:
 - OCI source, revision, and version metadata; and
 - build provenance and an SBOM.
 
-After every image publishes, the workflow pulls those exact tags into the
-PostgreSQL and SQLite bundles, boots disposable installations, creates an owner
+After every image publishes, the workflow renders all four shipped Compose and
+Coolify templates and verifies that their API/web image references match those
+exact release tags. It then pulls the tags and runs the PostgreSQL and SQLite
+drills with explicit image and disposable-port overrides, creates an owner
 and harness key, runs a local mock evaluation, and verifies exact receipt bytes
 after restart and container replacement. SQLite also verifies backup and fresh
 volume restore. Only then does it create a **draft** GitHub release with both
