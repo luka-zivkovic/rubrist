@@ -46,7 +46,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: pnpm
 
       - name: Install dependencies
@@ -66,6 +66,25 @@ jobs:
 
       - name: Build web
         run: pnpm --filter @rubrist/web build
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Build local installation images
+        run: |
+          docker build -f apps/api/Dockerfile -t rubrist-api:ci .
+          docker build -f apps/web/Dockerfile -t rubrist-web:ci .
+      - name: Verify PostgreSQL installation and durable evaluation
+        run: node tools/ci/postgres-deployment.mjs rubrist-api:ci rubrist-web:ci
+      - name: Verify SQLite installation, restart and restore
+        run: node tools/ci/sqlite-deployment.mjs rubrist-api:ci rubrist-web:ci
 
   # Dogfood the judge gate when a hosted Rubrist endpoint is configured.
   # Secrets are not readable in a job-level `if`, so a small check job exposes
@@ -89,7 +108,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
 
       - name: Judge gate
         run: node tools/ci/gate.mjs tools/ci/examples.jsonl --min-agreement 1.0

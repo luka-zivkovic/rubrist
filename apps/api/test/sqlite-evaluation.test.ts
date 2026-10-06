@@ -1,3 +1,7 @@
+import {createStrictJudgeProvider} from '../src/lib/judge-provider.js';
+
+import {SqliteQueue} from '@rubrist/queue/sqlite';
+import {processEvalItemJob} from '../src/workers/eval-run.js';
 import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
@@ -13,7 +17,7 @@ import { CreateCriterionInputSchema } from '@rubrist/shared';
 import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { EXECUTION_LEASE_MS } from '../src/storage/sqlite/eval-execution.js';
-import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
+import { MOCK_BINDING, bindingInput, runtimeVersion } from './fixtures/execution-binding.js';
 import { parseCanonicalReceiptBytes, canonicalReceiptBytes, evidenceDigestForReceipt, receiptArtifactDigest } from '../src/lib/assessment-receipt.js';
 const cleanup:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const close of cleanup.splice(0).reverse()) await close();vi.unstubAllEnvs();});
@@ -219,4 +223,47 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     const plain=openSqlite(f.path);cleanup.push(()=>plain.close());expect(plain.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
     expect(plain.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
+});
+
+it.each(['claimed','verdict']as const)('recovers a production SIGKILL after %s without guessing a provider result',async phase=>{
+ const f=await fixture(),job={...f.execution,caseId:f.trace.caseId,skillVersionId:f.versionId};
+ const child=fork(fileURLToPath(new URL('./fixtures/sqlite-interrupted-evaluation.ts',import.meta.url)),[f.path,JSON.stringify(job),phase],{execArgv:['--import','tsx'],stdio:['ignore','pipe','pipe','ipc']});
+ cleanup.push(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
+ let errors='';child.stderr?.on('data',data=>{errors+=String(data);});
+ const started=await Promise.race([once(child,'message'),once(child,'exit').then(()=>{throw Error(errors);})]);
+ expect(started[0]).toEqual({phase,physicalCalls:phase==='claimed'?0:1});
+ const exited=once(child,'exit');child.kill('SIGKILL');await exited;
+ await f.runtime.close();const next=await createSqliteRuntime(f.path);cleanup.push(()=>next.close());
+ f.db.prepare('UPDATE eval_run_items SET execution_claimed_at=? WHERE id=?').run(Date.now()-EXECUTION_LEASE_MS-100,f.execution.evalRunItemId);
+ const provider=createStrictJudgeProvider(runtimeVersion(MOCK_BINDING)),calls=vi.spyOn(provider,'judgeStructured');
+ await processEvalItemJob(next.repository,job,provider,'restarted');
+ expect(calls).toHaveBeenCalledTimes(phase==='claimed'?1:0);
+ const receipt=(await next.repository.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id))!;
+ expect(parseCanonicalReceiptBytes(receipt.canonicalBytes).items[0]?.result).toMatchObject(phase==='claimed'?{state:'outcome'}:{state:'failure',failureKind:'outcome_unknown'});
+ expect(await next.repository.listVerdicts({projectId:f.projectId,limit:10})).toHaveLength(1);
+ await processEvalItemJob(next.repository,job,provider,'replay');
+ expect(await next.repository.listAssessmentReceiptArtifacts(f.projectId,f.owner.id)).toEqual([receipt]);
+ expect(calls).toHaveBeenCalledTimes(phase==='claimed'?1:0);
+});
+it('redelivers a terminal evaluation after failed acknowledgement without repeating the model call',async()=>{
+ const f=await fixture(),storage=f.runtime.storage,provider=createStrictJudgeProvider(runtimeVersion(MOCK_BINDING)),calls=vi.spyOn(provider,'judgeStructured');
+ const failed=vi.spyOn(console,'error').mockImplementation(()=>{});cleanup.push(()=>{failed.mockRestore();});
+ const queue=new SqliteQueue({
+  send:(...args)=>storage.command('queueSend',...args),state:(...args)=>storage.command('queueState',...args),
+  claim:(...args)=>storage.command('queueClaim',...args),recover:(...args)=>storage.command('queueRecover',...args),
+  settle:async()=>{throw Error('synthetic acknowledgement connection loss');}
+ },{pollMs:5});cleanup.push(()=>queue.stop());
+ const job={projectId:f.projectId,evalRunId:f.owner.id,evalRunItemId:f.execution.evalRunItemId,caseId:f.trace.caseId,skillVersionId:f.versionId};
+ await queue.work<typeof job>('eval.item',delivery=>processEvalItemJob(f.r,delivery.data,provider,delivery.id));
+ await queue.send('eval.item',job,{id:'ack-after-receipt',expireInSeconds:1,retryLimit:2});await queue.start();
+ await vi.waitFor(()=>expect(failed).toHaveBeenCalled(),{timeout:5000});await queue.stop();
+ expect(calls).toHaveBeenCalledOnce();expect(await queue.getJobState('eval.item','ack-after-receipt')).toBe('active');
+ const receipt=(await f.r.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id))!;
+ const counts=await f.r.getEvalRun(f.projectId,f.owner.id);
+ await f.runtime.close();const next=await createSqliteRuntime(f.path);cleanup.push(()=>next.close());
+ await next.queue.work<typeof job>('eval.item',delivery=>processEvalItemJob(next.repository,delivery.data,provider,delivery.id));await next.queue.start();
+ await vi.waitFor(async()=>expect(await next.queue.getJobState('eval.item','ack-after-receipt')).toBe('completed'),{timeout:5000});
+ expect(calls).toHaveBeenCalledOnce();expect(await next.repository.listVerdicts({projectId:f.projectId,limit:10})).toHaveLength(1);
+ expect(await next.repository.listAssessmentReceiptArtifacts(f.projectId,f.owner.id)).toEqual([receipt]);
+ expect(await next.repository.getEvalRun(f.projectId,f.owner.id)).toEqual(counts);
 });

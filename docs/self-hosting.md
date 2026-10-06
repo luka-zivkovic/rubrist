@@ -27,8 +27,9 @@
 
 ## SQLite installation
 
-**CURRENT:** SQLite installation and recovery tooling is under Milestone 5
-qualification; it has not been released by this work. See
+**CURRENT:** SQLite installation and recovery tooling is implemented;
+[release qualification](sqlite/milestone-6.md) records its pending review and
+release status. It has not been released by this work. See
 [SQLite installation and recovery](sqlite-operations.md) for the separate
 SQLite template, installer, readiness, backup/restore and forward-only upgrade
 contract. The existing trustctl distribution remains PostgreSQL-only. The
@@ -88,16 +89,22 @@ same Compose definition as a user-defined Service.
 Bump the root `package.json` version, merge it, and push the matching exact
 `vX.Y.Z` tag. A mismatch fails the release before publishing. The workflow
 runs the full build, typecheck, and test suite, verifies the generic Compose
-checksum and render, then publishes amd64 and arm64 API/web images with:
+checksums and renders for both backends, guards shared contracts and repository
+boundaries, then publishes amd64 and arm64 API/web images with:
 
 - the immutable `X.Y.Z` tag used by operators;
 - a `sha-<full commit>` traceability tag;
 - OCI source, revision, and version metadata; and
 - build provenance and an SBOM.
 
-After every image publishes, the workflow pulls those exact tags into the
-generic Compose bundle, boots a disposable stack, and verifies the public
-health route. Only then does it create a **draft** GitHub release. After the
+After every image publishes, the workflow renders all four shipped Compose and
+Coolify templates and verifies that their API/web image references match those
+exact release tags. It then pulls the tags and runs the PostgreSQL and SQLite
+drills with explicit image and disposable-port overrides, creates an owner
+and harness key, runs a local mock evaluation, and verifies exact receipt bytes
+after restart and container replacement. SQLite also verifies backup and fresh
+volume restore. Only then does it create a **draft** GitHub release with both
+Compose/checksum pairs and both Coolify recipes attached. After the
 first workflow run, an owner must make both GHCR packages public; package
 visibility persists for later versions. Verify an anonymous pull of both exact
 tags, declare whether the current baseline changed, and publish the draft. Default

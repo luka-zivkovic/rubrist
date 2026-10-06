@@ -1,0 +1,107 @@
+{
+  "recordedAt": "2026-10-06T04:05:52.151Z",
+  "runtime": {
+    "node": "v24.15.0",
+    "sqlite": "3.51.3",
+    "lastMigration": "0066_retention_indexes.sql",
+    "platform": "darwin",
+    "release": "27.0.0",
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryBytes": 17179869184
+  },
+  "workload": {
+    "initialImports": 5000,
+    "maturationWaitMs": 65000,
+    "overlapImports": 100,
+    "payloadCharacters": 4096,
+    "importConcurrency": 8,
+    "evaluations": 100,
+    "humanReviews": 50,
+    "populationMembers": 5000,
+    "retentionProtectedRows": 15000
+  },
+  "elapsedMs": 77630.041042,
+  "overlapMs": 9729.618417000005,
+  "jobs": {
+    "handlerCompletions": 100,
+    "durablyCompleted": 100,
+    "physicalCalls": 100
+  },
+  "mainThreadEventLoop": {
+    "p50Ms": 11.984895,
+    "p95Ms": 12.320767,
+    "maxMs": 12.632063
+  },
+  "operations": {
+    "import": {
+      "count": 5000,
+      "p50Ms": 2.723833999999897,
+      "p95Ms": 7.619000000000142,
+      "maxMs": 20.878375000000005
+    },
+    "controlledWriterWait": {
+      "count": 1,
+      "p50Ms": 128.20670899999095,
+      "p95Ms": 128.20670899999095,
+      "maxMs": 128.20670899999095
+    },
+    "analysisFreeze": {
+      "count": 1,
+      "p50Ms": 3397.300125000009,
+      "p95Ms": 3397.300125000009,
+      "maxMs": 3397.300125000009
+    },
+    "humanReview": {
+      "count": 50,
+      "p50Ms": 1.5289999999949941,
+      "p95Ms": 18.653542000000016,
+      "maxMs": 3398.507165999996
+    },
+    "dashboardRead": {
+      "count": 30,
+      "p50Ms": 1.7019999999902211,
+      "p95Ms": 19.563999999998487,
+      "maxMs": 3399.835791999998
+    },
+    "overlapImport": {
+      "count": 100,
+      "p50Ms": 0.7606250000098953,
+      "p95Ms": 5.636457999993581,
+      "maxMs": 3400.337458000009
+    },
+    "analysisRead": {
+      "count": 30,
+      "p50Ms": 0.8596249999973224,
+      "p95Ms": 4.932165999998688,
+      "maxMs": 19.10312499999418
+    },
+    "retention": {
+      "count": 3,
+      "p50Ms": 18.617041999998037,
+      "p95Ms": 20.157749999998487,
+      "maxMs": 20.157749999998487
+    },
+    "evaluation": {
+      "count": 100,
+      "p50Ms": 8.871500000008382,
+      "p95Ms": 14.370083999994677,
+      "maxMs": 69.52062500000466
+    }
+  },
+  "errors": {},
+  "disk": {
+    "sampledPeakDatabaseBytes": 91873280,
+    "sampledPeakWalBytes": 36091232,
+    "last": {
+      "elapsedMs": 77488.158167,
+      "database": 91873280,
+      "wal": 36091232
+    }
+  },
+  "limitations": [
+    "Single-host synthetic observation, not a capacity guarantee.",
+    "Local mock latency 5ms; excludes network/provider costs.",
+    "RPC queueing included; no competing unsupported application instance."
+  ]
+}

@@ -633,6 +633,10 @@ run("PostgreSQL convergence audit", () => {
         source: "llm_judge",
         payload: { kind: "binary", pass: true, rationale: "Provider returned before the worker died." }
       });
+      await pool.query(
+        "update eval_run_items set execution_claimed_at = clock_timestamp() - interval '16 minutes' where id = $1",
+        [uncertainItemId]
+      );
       let recoveryProviderCalls = 0;
       const forbiddenRecoveryProvider = {
         name: base.name,

@@ -427,7 +427,7 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
     if (!row || row.status !== "pending" || !["pending", "running"].includes(String(row.run_status))) {
       return { state: "terminal" };
     }
-    if (row.provider_call_returned_at && row.execution_token) {
+    if (row.claim_stale === true && row.provider_call_returned_at && row.execution_token) {
       return { state: "outcome_unknown", executionToken: String(row.execution_token), providerCallReturned: true };
     }
     if (row.claim_stale === true && row.provider_call_started_at && row.execution_token) {
@@ -482,10 +482,20 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
   }
 
   async beginEvalRunItemProviderCall(input: EvalRunItemExecutionInputDb): Promise<boolean> {
-    const started = await this.pool.query(
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      // Acquire ownership before sampling the lease clock: UPDATE predicates
+      // can otherwise be evaluated before an unchanged tuple lock is released.
+      await client.query(
+        'select id from eval_run_items where id=$1 and eval_run_id=$2 and project_id=$3 for update',
+        [input.evalRunItemId, input.evalRunId, input.projectId]
+      );
+      const started = await client.query(
       `update eval_run_items set provider_call_started_at = clock_timestamp()
        where id = $1 and eval_run_id = $2 and project_id = $3
          and status = 'pending' and execution_token = $4
+         and execution_claimed_at > clock_timestamp() - interval '15 minutes'
          and provider_call_started_at is null
          and exists (
            select 1 from eval_runs run
@@ -496,19 +506,43 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
        returning id`,
       [input.evalRunItemId, input.evalRunId, input.projectId, input.executionToken]
     );
-    return started.rowCount === 1;
+      await client.query("commit");
+      return started.rowCount === 1;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async markEvalRunItemProviderCallReturned(input: EvalRunItemExecutionInputDb): Promise<boolean> {
-    const returned = await this.pool.query(
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      // Acquire ownership before sampling the lease clock: UPDATE predicates
+      // can otherwise be evaluated before an unchanged tuple lock is released.
+      await client.query(
+        'select id from eval_run_items where id=$1 and eval_run_id=$2 and project_id=$3 for update',
+        [input.evalRunItemId, input.evalRunId, input.projectId]
+      );
+      const returned = await client.query(
       `update eval_run_items set provider_call_returned_at = clock_timestamp()
        where id = $1 and eval_run_id = $2 and project_id = $3
          and status = 'pending' and execution_token = $4
+         and execution_claimed_at > clock_timestamp() - interval '15 minutes'
          and provider_call_started_at is not null and provider_call_returned_at is null
        returning id`,
       [input.evalRunItemId, input.evalRunId, input.projectId, input.executionToken]
     );
-    return returned.rowCount === 1;
+      await client.query("commit");
+      return returned.rowCount === 1;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async releaseEvalRunItemExecution(
@@ -583,6 +617,13 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      // Acquire ownership before sampling the lease clock: UPDATE predicates
+      // can otherwise be evaluated before an unchanged tuple lock is released.
+      await client.query(
+        'select id from eval_run_items where id=$1 and eval_run_id=$2 and project_id=$3 for update',
+        [input.evalRunItemId, input.evalRunId, input.projectId]
+      );
+
       // Status guard makes queue-retry replays count nothing: a non-pending
       // item updates zero rows and we skip the counter bump entirely.
       const itemResult = await client.query(
@@ -603,7 +644,8 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
              delivery_deadline_at = null,
              finished_at = now()
          where id = $1 and eval_run_id = $2 and project_id = $3 and status = 'pending'
-           and ($11::text is null or execution_token = $11)
+           and ($11::text is null or (execution_token = $11
+             and execution_claimed_at > clock_timestamp() - interval '15 minutes'))
            and exists (
              select 1 from eval_runs run
              where run.id = eval_run_items.eval_run_id
@@ -653,6 +695,13 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      // Acquire ownership before sampling the lease clock: UPDATE predicates
+      // can otherwise be evaluated before an unchanged tuple lock is released.
+      await client.query(
+        'select id from eval_run_items where id=$1 and eval_run_id=$2 and project_id=$3 for update',
+        [input.evalRunItemId, input.evalRunId, input.projectId]
+      );
+
       const itemResult = await client.query(
         `update eval_run_items
          set status = 'failed', error = $4, execution_token = null,
@@ -661,7 +710,12 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
              failure_kind = $6, not_attempted = $7, observed = $8::jsonb,
              finished_at = now()
          where id = $1 and eval_run_id = $2 and project_id = $3 and status = 'pending'
-           and ($5::text is null or execution_token = $5)
+           and (($5::text is null and not $10) or (execution_token = $5 and
+             case when $10 then
+               execution_claimed_at <= clock_timestamp() - interval '15 minutes'
+               and case when provider_call_started_at is not null or provider_call_returned_at is not null
+                 then $6 = 'outcome_unknown' and not $7 else $7 end
+             else execution_claimed_at > clock_timestamp() - interval '15 minutes' end))
            -- An item whose call has started was attempted; a stale snapshot
            -- that says otherwise changes nothing, and the next sweep records it.
            and (not $7 or $9 or provider_call_started_at is null)
@@ -676,7 +730,8 @@ export class PgEvalRunRepository implements EvalRunRepositoryPort {
           input.failure.state === "failure" ? input.failure.failureKind : null,
           input.failure.state === "not_attempted",
           input.failure.state === "failure" ? JSON.stringify(input.failure.observed) : null,
-          input.failure.state === "not_attempted" && input.failure.executorRefused === true]
+          input.failure.state === "not_attempted" && input.failure.executorRefused === true,
+          input.recoverExpiredClaim ?? false]
       );
       if (!itemResult.rows[0]) {
         await client.query("rollback");

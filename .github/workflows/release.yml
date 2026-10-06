@@ -46,8 +46,9 @@ jobs:
           RUBRIST_POSTGRES_PASSWORD: release-render-password
           RUBRIST_AUTH_SECRET: release-render-auth-secret-at-least-32-bytes
         run: |
-          (cd deploy/self-host && sha256sum -c compose.yaml.sha256)
+          (cd deploy/self-host && sha256sum -c compose.yaml.sha256 compose.sqlite.yaml.sha256)
           docker compose -f deploy/self-host/compose.yaml config --quiet
+          docker compose -f deploy/self-host/compose.sqlite.yaml config --quiet
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -57,7 +58,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: pnpm
 
       - name: Install dependencies
@@ -68,6 +69,11 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Guard shared contracts and repository boundaries
+        run: |
+          pnpm shared-contracts
+          pnpm repository-boundaries
 
       - name: Test
         run: pnpm test
@@ -146,39 +152,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Boot and verify the published release bundle
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Verify both published installation templates and SQLite restore
         shell: bash
         env:
-          RUBRIST_VERSION: ${{ github.ref_name }}
-          RUBRIST_BIND_ADDRESS: 127.0.0.1
-          RUBRIST_PORT: 18081
-          RUBRIST_PUBLIC_URL: http://127.0.0.1:18081
-          RUBRIST_POSTGRES_PASSWORD: release-smoke-postgres
-          RUBRIST_AUTH_SECRET: release-smoke-auth-secret-at-least-32-bytes
-          RUBRIST_BOOTSTRAP_TOKEN: release-smoke-bootstrap-token
+          RELEASE_TAG: ${{ github.ref_name }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
         run: |
-          RUBRIST_VERSION="${RUBRIST_VERSION#v}"
-          export RUBRIST_VERSION
-          project="rubrist-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cleanup() {
-            status=$?
-            if ((status != 0)); then
-              docker compose --project-name "$project" -f deploy/self-host/compose.yaml logs --no-color || true
-            fi
-            docker compose --project-name "$project" -f deploy/self-host/compose.yaml down -v --remove-orphans || true
-            exit "$status"
-          }
-          trap cleanup EXIT
-          docker compose --project-name "$project" -f deploy/self-host/compose.yaml pull
-          docker compose --project-name "$project" -f deploy/self-host/compose.yaml up -d
-          for attempt in $(seq 1 90); do
-            if curl -fsS --max-time 5 http://127.0.0.1:18081/health >/dev/null; then
-              docker compose --project-name "$project" -f deploy/self-host/compose.yaml ps
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
+          version="${RELEASE_TAG#v}"
+          api="ghcr.io/${IMAGE_OWNER}/rubrist-api:${version}"
+          web="ghcr.io/${IMAGE_OWNER}/rubrist-web:${version}"
+          node tools/ci/release-template-images.mjs
+          docker pull "$api"
+          docker pull "$web"
+          node tools/ci/postgres-deployment.mjs "$api" "$web"
+          node tools/ci/sqlite-deployment.mjs "$api" "$web"
 
   draft-release:
     needs: smoke-release
@@ -186,11 +178,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
       - name: Create operator-reviewed draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
+          deploy/self-host/compose.yaml
+          deploy/self-host/compose.yaml.sha256
+          deploy/self-host/compose.sqlite.yaml
+          deploy/self-host/compose.sqlite.yaml.sha256
+          deploy/coolify.yaml
+          deploy/coolify.sqlite.yaml
           --repo "$GITHUB_REPOSITORY"
           --verify-tag
           --draft
