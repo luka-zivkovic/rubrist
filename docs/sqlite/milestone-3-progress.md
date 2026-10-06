@@ -1,7 +1,8 @@
 # Milestone 3 ordinary workflows
 
 CURRENT 2026-10-05: the ordinary workflow implementation and independent audit
-and local qualification are complete; PR CI/Copilot review is pending.
+and local qualification are complete. CURRENT 2026-10-06: PR #195 review uses
+Claude Code in place of Copilot (see [PR review](#pr-review)); CI is pending.
 Milestone 2 PR #194 remains the predecessor until merged. No deployment is included.
 The [method and task checklist](milestone-3-checklist.md) maps all 165 main
 repository methods, production monitoring, capability resolution, and ordinary
@@ -103,3 +104,35 @@ migration stress test exceeded the default five-second test budget on a loaded
 hosted runner. Its own timeout is now 30 seconds, retaining every concurrent
 round, completion assertion and worker cleanup. Production busy deadlines are
 unchanged. Independent audit approved and all 23 storage tests pass locally.
+
+## PR review
+
+CURRENT 2026-10-06: Copilot review had stalled, so the user replaced it with
+Claude Code via agent-bridge for all remaining milestone PR reviews. The user
+also authorized fixes and stack-order merges after CI passes and the reviews
+are resolved. Claude Code reviewed PR #195 read-only at `c26a58e` against M2
+base `ceb6562`. It found no Critical or High defects and five actionable
+findings, all now corrected with focused regression tests:
+
+- M-1: SQLite production records and windows accept the shared timestamp
+  contract: seconds and fractions are optional, and the offset is `Z` or
+  `±HH:MM`. Invalid repository times are now typed errors (`invalid_record`
+  with its line, or `invalid_window`), so they no longer surface as 500s.
+- L-1: Eval-item recovery and production retention drain a failing in-flight
+  pass at shutdown; the timer still logs the failure. API shutdown stops every
+  scheduled task, logs any failed stop, still drains the queue and closes
+  storage, then exits non-zero.
+- L-2: An explicit human or adjudicated evaluator from another project, or an
+  unknown one, raises `CaseNotFoundError`, as in PostgreSQL.
+- L-3: A clean release by a live regression owner clears its dispatch marker.
+  A dispatch whose lease expired still counts once as uncertain.
+- L-4: The suite-manifest test has its own 30-second budget; global test
+  timeouts are unchanged.
+
+Migrations are unchanged, so their checksums are preserved. The review's
+optional database hardening (PostgreSQL does not enforce it either) is
+deliberately excluded. The API typecheck, repository-boundary guard and
+`git diff --check` pass. Focused SQLite, shutdown and regression tests pass
+141/141 in 24 files. The PostgreSQL retention and stored-report tests pass
+15/15 on disposable PostgreSQL using isolated schemas. CI and the independent
+review of this follow-up are pending.

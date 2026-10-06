@@ -126,7 +126,8 @@ export async function registerEvalRunWorkers(
     });
   }, 60_000);
   recoveryTimer.unref();
-  return {stop: async () => { stopped = true; clearInterval(recoveryTimer); await inFlight; }};
+  // The timer's catch already logged a failed sweep; shutdown still drains.
+  return {stop: async () => { stopped = true; clearInterval(recoveryTimer); await inFlight?.catch(() => undefined); }};
 }
 
 function errorMessage(error: unknown): string {

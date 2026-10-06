@@ -30,6 +30,7 @@ import { registerLangfuseImportWorker } from "./workers/langfuse-import.js";
 import { parseLangfusePollImportLimit, parseLangfusePollIntervalMs, registerLangfusePoller } from "./workers/langfuse-poller.js";
 import { registerLangSmithImportWorker } from "./workers/langsmith-import.js";
 import { parsePollImportLimit, parsePollIntervalMs, registerLangSmithPoller } from "./workers/langsmith-poller.js";
+import { type ScheduledTask } from "./workers/scheduled-tasks.js";
 import { bindingResolutionServices, recheckGovernedBinding } from "./lib/binding-resolution.js";
 import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
@@ -59,7 +60,7 @@ const analysisMeasurementRepository = sqlite?.analysisMeasurement ?? (pool ? new
 const productionDecisionRecordRepository=sqlite?.productionRecords ?? (pool?new PgProductionDecisionRecordRepository(pool):null);
 const resolutionRepository=sqlite?.resolution ?? evaluatorLifecycleRepository;
 const queue = sqlite?.queue ?? (pool ? createQueue() : undefined);
-const pollers: Array<{ stop(): void | Promise<void> }> = [];
+const pollers: ScheduledTask[] = [];
 
 if (analysisStudyRepository) {
   pollers.push(await registerAnalysisStudyDeadlineCloser(analysisStudyRepository));
