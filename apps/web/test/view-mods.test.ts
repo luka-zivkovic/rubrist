@@ -8,14 +8,16 @@ import {
   parseViewModManifest,
   parseViewModRequest,
   pinnedViewModText,
+  resolveViewMods,
   sandboxedViewModDocument,
   sha256Hex,
   viewFramePolicy,
   viewModFor,
-  viewModFrameOrigins
+  viewModFrameOrigins,
+  viewModSkipText
 } from "../src/lib/view-mods.js";
 
-const modFile = (path: string) => readFileSync(new URL(`../public/mods/${path}`, import.meta.url));
+const modFile = (path: string) => readFileSync(new URL(`../examples/view-mods/${path}`, import.meta.url));
 const shipped = (id: string) => JSON.parse(modFile(`${id}/mod.json`).toString("utf8"));
 const bytes = (buffer: Buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 const frame = { id: "html-view", name: "HTML view", version: "0.1.0", contract: VIEW_MOD_CONTRACT, renders: ["thing/v1"], entry: "view.html", entrySha256: "a".repeat(64), height: 460 };
@@ -76,6 +78,33 @@ describe("view frame policy", () => {
     expect(viewModFrameOrigins(mods)).toEqual(["https://n8n-preview-service.internal.n8n.cloud"]);
     expect(viewFramePolicy(viewModFrameOrigins(mods))).toBe("frame-src https://n8n-preview-service.internal.n8n.cloud");
     expect(viewFramePolicy(viewModFrameOrigins(mods.filter(mod => mod.id !== "n8n-execution")))).toBe("frame-src 'none'");
+  });
+});
+
+describe("installed mod resolution", () => {
+  const mods = ["langtracer-finding", "n8n-execution", "n8n-execution-html"].map(id => parseViewModManifest(shipped(id), id)!);
+
+  it("turns sandboxed HTML mods off while any pinned mod names an outside page", () => {
+    const resolved = resolveViewMods({ mods, skipped: [] });
+    expect(resolved.mods.map(mod => mod.id)).toEqual(["langtracer-finding", "n8n-execution"]);
+    expect(resolved.skipped).toEqual([{ id: "n8n-execution-html", reason: "frames-off" }]);
+    const withoutEmbed = resolveViewMods({ mods: mods.filter(mod => mod.id !== "n8n-execution"), skipped: [] });
+    expect(withoutEmbed.mods.map(mod => mod.id)).toEqual(["langtracer-finding", "n8n-execution-html"]);
+    expect(withoutEmbed.skipped).toEqual([]);
+  });
+
+  it("skips, visibly, a later mod that renders a view an earlier one renders", () => {
+    const twin = { ...parseViewModManifest(shipped("langtracer-finding"), "langtracer-finding")!, id: "langtracer-twin" };
+    const resolved = resolveViewMods({ mods: [mods[0]!, twin], skipped: [{ id: "x", reason: "changed" }] });
+    expect(resolved.mods.map(mod => mod.id)).toEqual(["langtracer-finding"]);
+    expect(resolved.skipped).toEqual([{ id: "x", reason: "changed" }, { id: "langtracer-twin", reason: "overlap" }]);
+    expect(viewModSkipText("overlap")).toMatch(/earlier mod/);
+    expect(viewModSkipText("frames-off")).toMatch(/outside page/);
+  });
+
+  it("bounds the view a case may declare", () => {
+    expect(declaredEvidenceView({ evidenceView: "x".repeat(121) })).toBeNull();
+    expect(declaredEvidenceView({ evidenceView: "x".repeat(120) })).toBe("x".repeat(120));
   });
 });
 

@@ -1,5 +1,7 @@
 import { evidenceObject } from "./trace-evidence.js";
-import { parseViewSpecs, type ViewSpec } from "./view-spec.js";
+import { clampViewModHeight, parseViewSpecs, type ViewSpec } from "./view-spec.js";
+
+export { clampViewModHeight, VIEW_MOD_MAX_HEIGHT, VIEW_MOD_MIN_HEIGHT } from "./view-spec.js";
 
 // SPIKE: view mods. A mod adds a display-only view of a case's recorded
 // evidence. It is selected only by an explicit declaration on the case, never
@@ -26,13 +28,6 @@ export type ViewModManifest =
 const MOD_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const ENTRY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}\.html$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-export const VIEW_MOD_MIN_HEIGHT = 120;
-export const VIEW_MOD_MAX_HEIGHT = 900;
-
-export function clampViewModHeight(value: unknown, fallback = 420): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.min(VIEW_MOD_MAX_HEIGHT, Math.max(VIEW_MOD_MIN_HEIGHT, Math.round(value))) : fallback;
-}
 
 // The folder name is the identity: a manifest cannot claim another mod's id,
 // and a frame entry cannot leave its own folder. A mod is one kind or the
@@ -57,7 +52,7 @@ export function parseViewModManifest(value: unknown, folder: string): ViewModMan
 
 export function declaredEvidenceView(metadata: unknown): string | null {
   const view = evidenceObject(metadata)?.evidenceView;
-  return typeof view === "string" && view.length > 0 ? view : null;
+  return typeof view === "string" && view.length > 0 && view.length <= 120 ? view : null;
 }
 
 // First installed mod wins; installation order is the index order.
@@ -107,7 +102,7 @@ export function parseViewModRequest(data: unknown): ViewModRequest | null {
   return null;
 }
 
-export type ViewModSkipReason = "changed" | "unverifiable" | "invalid" | "missing";
+export type ViewModSkipReason = "changed" | "unverifiable" | "invalid" | "missing" | "duplicate" | "overlap" | "frames-off";
 export class ViewModPinError extends Error {
   constructor(readonly reason: ViewModSkipReason) { super(`View mod file ${reason}`); }
 }
@@ -172,6 +167,7 @@ export function installedViewMods(): Promise<InstalledViewMods> {
     for (const entry of Array.isArray(entries) ? entries : []) {
       const { id, sha256 } = evidenceObject(entry) ?? {};
       if (typeof id !== "string" || !MOD_ID.test(id) || typeof sha256 !== "string" || !SHA256.test(sha256)) continue;
+      if (result.mods.some(mod => mod.id === id) || result.skipped.some(mod => mod.id === id)) { result.skipped.push({ id, reason: "duplicate" }); continue; }
       try {
         const manifest = parseViewModManifest(JSON.parse(await fetchPinned(`/mods/${id}/mod.json`, sha256)), id);
         if (manifest) result.mods.push(manifest);
@@ -180,9 +176,25 @@ export function installedViewMods(): Promise<InstalledViewMods> {
         result.skipped.push({ id, reason: error instanceof ViewModPinError ? error.reason : "invalid" });
       }
     }
-    return result;
+    return resolveViewMods(result);
   })().catch(() => ({ mods: [], skipped: [] })).then(result => { applyViewFramePolicy(viewModFrameOrigins(result.mods)); return result; });
   return installed;
+}
+
+// Index order decides, and the decision is visible: a later mod that renders a
+// view an earlier one already renders is skipped, never silently shadowed.
+// Frame mods are off whenever a pinned embed names an outside page: a sandboxed
+// frame can navigate itself to any address the page's frame policy allows, so
+// the two kinds cannot be safe together on one page.
+export function resolveViewMods(loaded: InstalledViewMods): InstalledViewMods {
+  const result: InstalledViewMods = { mods: [], skipped: [...loaded.skipped] };
+  const framesOff = viewModFrameOrigins(loaded.mods).length > 0;
+  for (const mod of loaded.mods) {
+    if (mod.kind === "frame" && framesOff) result.skipped.push({ id: mod.id, reason: "frames-off" });
+    else if (result.mods.some(other => other.renders.some(view => mod.renders.includes(view)))) result.skipped.push({ id: mod.id, reason: "overlap" });
+    else result.mods.push(mod);
+  }
+  return result;
 }
 
 export async function loadViewModDocument(manifest: Extract<ViewModManifest, { kind: "frame" }>): Promise<string> {
@@ -193,5 +205,8 @@ export function viewModSkipText(reason: ViewModSkipReason): string {
   if (reason === "changed") return "its files changed since they were pinned";
   if (reason === "unverifiable") return "this page cannot verify its files (that needs HTTPS or localhost)";
   if (reason === "missing") return "its files could not be loaded";
+  if (reason === "duplicate") return "the index lists its id twice";
+  if (reason === "overlap") return "an earlier mod already draws a view it lists";
+  if (reason === "frames-off") return "sandboxed HTML mods are off while a pinned mod names an outside page";
   return "its description is not valid";
 }

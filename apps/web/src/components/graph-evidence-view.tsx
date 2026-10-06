@@ -49,14 +49,14 @@ export function GraphEvidenceView({ graph, evaluatorFailingStep }: { graph: Draw
         <svg className="absolute inset-0" width={width} height={height} aria-hidden="true">
           {graph.edges.map((edge, index) => {
             const from = placed.get(edge.source)!, to = placed.get(edge.target)!;
-            const x1 = from.left + W, y1 = from.top + H * (edge.port + 1) / (edge.ports + 1), x2 = to.left, y2 = to.top + H / 2;
+            const x1 = from.left + W, y1 = from.top + (edge.port === null ? H / 2 : H * (edge.port + 1) / (edge.ports + 1)), x2 = to.left, y2 = to.top + H / 2;
             const bend = Math.max(30, Math.abs(x2 - x1) / 2);
             const ran = graph.nodes.some(node => node.id === edge.source && node.runs.length > 0)
               && graph.nodes.some(node => node.id === edge.target && node.runs.length > 0);
             return <g key={index}>
               <path d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`} fill="none" strokeWidth={1.5}
                 className={ran ? "stroke-ink-2" : "stroke-ink-3"} strokeDasharray={ran ? undefined : "4 4"} />
-              {edge.ports > 1 ? <text x={x1 + 6} y={y1 - 4} className="fill-ink-3 font-mono text-[10px]">out {edge.port}</text> : null}
+              {edge.port !== null && edge.ports > 1 ? <text x={x1 + 6} y={y1 - 4} className="fill-ink-3 font-mono text-[10px]">out {edge.port}</text> : null}
             </g>;
           })}
         </svg>

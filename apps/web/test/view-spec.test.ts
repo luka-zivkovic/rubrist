@@ -5,7 +5,7 @@ import {
   type DisplayBlock, type DisplayField, type DrawnGraph, type GraphViewSpec
 } from "../src/lib/view-spec.js";
 
-const read = (path: string) => JSON.parse(readFileSync(new URL(`../public/mods/${path}`, import.meta.url), "utf8"));
+const read = (path: string) => JSON.parse(readFileSync(new URL(`../examples/view-mods/${path}`, import.meta.url), "utf8"));
 const shippedSpec = read("n8n-execution/mod.json").views.find((view: { kind: string }) => view.kind === "graph");
 const example = read("n8n-execution/example-case.json");
 const parseViewSpec = (value: unknown) => parseViewSpecs([value])?.[0] ?? null;
@@ -66,6 +66,16 @@ describe("graph projection of the n8n example", () => {
     expect(graph.undrawnEdges).toBe(0);
   });
 
+  it("draws a connection with no recorded port from the middle, without inventing one", () => {
+    const graph = graphEvidence(spec, evidence(copy => {
+      copy.input.workflow.connections["Issue refund"] = { main: [[{ node: "Reply to customer", type: "main" }]] };
+    })) as DrawnGraph;
+    // n8n's `index` is the target input; the output port is the captured position, which this edge still has.
+    expect(graph.edges.find(edge => edge.source === "Issue refund")).toMatchObject({ port: 0, ports: 1 });
+    const unported = graphEvidence({ ...spec, edges: { ...spec.edges!, port: null } }, evidence()) as DrawnGraph;
+    expect(unported.edges.every(edge => edge.port === null && edge.ports === 1)).toBe(true);
+  });
+
   it("keeps repeated runs, recorded errors, unplaced steps and dangling edges visible", () => {
     const graph = graphEvidence(spec, evidence(copy => {
       copy.steps.push({ name: "Classify ticket", input: 1, output: 2, metadata: { status: "error", error: "rate limited" } });
@@ -81,6 +91,8 @@ describe("graph projection of the n8n example", () => {
   it("draws nothing rather than guess when the case lacks the expected shape", () => {
     expect(graphEvidence(spec, { input: "plain text", output: "", steps: null, metadata: {} })).toHaveProperty("problem");
     expect(graphEvidence(spec, evidence(copy => { delete copy.input.workflow.nodes[2].position; }))).toHaveProperty("problem");
+    expect(graphEvidence(spec, evidence(copy => { copy.input.workflow.nodes[2].position = ["9".repeat(400), 0]; }))).toHaveProperty("problem");
+    expect(graphEvidence(spec, evidence(copy => { copy.input.workflow.nodes[2].position = [Number.POSITIVE_INFINITY, 0]; }))).toHaveProperty("problem");
     expect(graphEvidence(spec, evidence(copy => { copy.input.workflow.nodes[3].name = "Webhook"; }))).toHaveProperty("problem");
     expect(graphEvidence(spec, evidence(copy => {
       copy.input.workflow.nodes = Array.from({ length: 301 }, (_, index) => ({ name: `n${index}`, position: [index, 0] }));
@@ -168,8 +180,8 @@ describe("embed block: another origin's page draws part of the view", () => {
   it("builds the page address and refuses unsafe ones", () => {
     expect(embedAddress(embed.src, "dark")?.href).toBe("https://n8n-preview-service.internal.n8n.cloud/workflows/demo?theme=dark");
     expect(embedAddress("http://localhost:5678/workflows/demo", "light")?.origin).toBe("http://localhost:5678");
-    for (const src of ["http://example.com/x", "javascript:alert(1)", "data:text/html,x", "https://user:pw@example.com/x", "https://example.com/x#y", "/mods/x/view.html", ""]) {
-      expect(embedAddress(src, "light")).toBeNull();
+    for (const src of ["http://example.com/x", "javascript:alert(1)", "data:text/html,x", "https://user:pw@example.com/x", "https://example.com/x#y", "/mods/x/view.html", "", "https://a{theme}.example/x", "https://{theme}.example.com/x"]) {
+      if (!src.includes("{theme}")) expect(embedAddress(src, "light")).toBeNull();
       expect(parseViewSpecs([{ ...embed, src }])).toBeNull();
     }
   });

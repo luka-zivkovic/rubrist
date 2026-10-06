@@ -89,8 +89,15 @@ function text(value: unknown): string | null {
 }
 
 function numeric(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  return typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : null;
+  const parsed = typeof value === "number" ? value : typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export const VIEW_MOD_MIN_HEIGHT = 120;
+export const VIEW_MOD_MAX_HEIGHT = 900;
+export function clampViewModHeight(value: unknown, fallback = 420): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(VIEW_MOD_MAX_HEIGHT, Math.max(VIEW_MOD_MIN_HEIGHT, Math.round(value))) : fallback;
 }
 
 export interface GraphViewSpec {
@@ -233,7 +240,10 @@ function templatePaths(value: unknown, found: ViewPath[], depth = 0): boolean {
 function parseEmbedSpec(record: Record<string, unknown>): EmbedViewSpec | null {
   if (!onlyKeys(record, ["kind", "title", "caption", "src", "height", "ready", "send", "sendAs"])) return null;
   const title = label(record.title, 80), caption = record.caption === undefined ? null : label(record.caption, 400);
+  // Both theme spellings must name the same origin: that origin is pinned,
+  // shown to the reader and the only one the page may post to.
   const address = typeof record.src === "string" && record.src.length <= 500 ? embedAddress(record.src, "light") : null;
+  if (address && embedAddress(record.src as string, "dark")?.origin !== address.origin) return null;
   const sendAs = record.sendAs ?? "object", paths: ViewPath[] = [];
   if (!title || (record.caption !== undefined && !caption) || !address || (sendAs !== "object" && sendAs !== "json-text")) return null;
   if (record.send === undefined || !templatePaths(record.send, paths) || paths.length === 0 || paths.length > 8) return null;
@@ -243,8 +253,7 @@ function parseEmbedSpec(record: Record<string, unknown>): EmbedViewSpec | null {
     if (entries.length === 0 || entries.length > 8 || !entries.every(([, value]) => ["string", "number", "boolean"].includes(typeof value))) return null;
     ready = Object.fromEntries(entries) as Record<string, EmbedScalar>;
   }
-  const height = typeof record.height === "number" && Number.isFinite(record.height) ? Math.min(900, Math.max(120, Math.round(record.height))) : 420;
-  return { kind: "embed", title, caption, src: record.src as string, origin: address.origin, height, ready, send: record.send, sendAs, paths };
+  return { kind: "embed", title, caption, src: record.src as string, origin: address.origin, height: clampViewModHeight(record.height), ready, send: record.send, sendAs, paths };
 }
 
 // The page says it is ready with a message, as an object or as JSON text,
@@ -312,7 +321,8 @@ function parseGraphSpec(record: Record<string, unknown>): GraphViewSpec | null {
 
 export interface GraphRun { index: number; step: Record<string, unknown>; status: string | null; isError: boolean; durationMs: number | null; error: unknown }
 export interface GraphNode { id: string; label: string; caption: string | null; x: number; y: number; runs: GraphRun[] }
-export interface GraphEdge { source: string; target: string; port: number; ports: number }
+// port is null when the case records no output port for the connection.
+export interface GraphEdge { source: string; target: string; port: number | null; ports: number }
 export interface DrawnGraph {
   title: string | null;
   nodes: GraphNode[];
@@ -348,9 +358,9 @@ export function graphEvidence(spec: GraphViewSpec, evidence: ViewEvidence): Grap
       const source = text(read(match, spec.edges.source)), target = text(read(match, spec.edges.target));
       const port = numeric(read(match, spec.edges.port));
       if (source === null || target === null || !nodes.has(source) || !nodes.has(target)) { undrawnEdges++; continue; }
-      edges.push({ source, target, port: port !== null && Number.isInteger(port) && port >= 0 ? port : 0, ports: 1 });
+      edges.push({ source, target, port: port !== null && Number.isInteger(port) && port >= 0 ? port : null, ports: 1 });
     }
-    for (const edge of edges) edge.ports = Math.max(...edges.filter(other => other.source === edge.source).map(other => other.port)) + 1;
+    for (const edge of edges) edge.ports = Math.max(0, ...edges.filter(other => other.source === edge.source).map(other => other.port ?? 0)) + 1;
   }
 
   const orphans: DrawnGraph["orphans"] = [];
