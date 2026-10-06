@@ -19,7 +19,7 @@ documentation or implementation gap rather than a change in product intent.
 | `apps/audit` | Provider-independent structured judging and verdict validation |
 | `packages/shared` | Zod domain models and transport contracts shared by API and web |
 | `packages/db` | PostgreSQL migrations, SQLite migrations and demo fixture data |
-| `packages/queue` | Queue names and pg-boss construction |
+| `packages/queue` | Queue names, pg-boss construction, and the SQLite durable queue adapter |
 
 ## Runtime modes
 
