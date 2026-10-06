@@ -1,3 +1,4 @@
+import { governedEvidenceCommand,checkGovernedSeparation } from './governed-capability-commands.js';
 import type { DatabaseSync,SQLInputValue,SQLOutputValue } from 'node:sqlite';
 import type { GovernedReviewActor } from '../../governed-review/repository.js';
 import type { AppendGovernedReviewAlignmentEventInput,GovernedAlignmentEventProjection } from '../../governed-review/contracts.js';
@@ -9,12 +10,13 @@ import { governedReviewAccess,governedReviewSubject } from './governed-subject-c
 import { sqliteCommand } from './command-context.js';
 function projection(row:Record<string,SQLOutputValue>):GovernedAlignmentEventProjection{return {alignmentEventId:String(row.id),batchId:String(row.batch_id),sequence:Number(row.sequence),kind:row.event_kind as GovernedAlignmentEventProjection['kind'],content:String(row.content),proposedInstructionVersionId:row.proposed_instruction_version_id===null?null:String(row.proposed_instruction_version_id),visibleLabelCount:Number(row.visible_label_count),occurredAt:new Date(String(row.occurred_at)).toISOString()};}
 export function appendNonsealedGovernedAlignment(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,input:AppendGovernedReviewAlignmentEventInput,clock=Date.now):GovernedAlignmentEventProjection {
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor);
   const batch=c.db.prepare('SELECT state FROM governed_review_batch_states WHERE batch_id=? AND project_id=?').get(batchId,actor.projectId);if(!batch)throw new GovernedReviewNotFoundError();
   const subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp);
   if(actor.projectRole!=='owner'&&!c.db.prepare('SELECT 1 FROM governed_review_tasks WHERE batch_id=? AND reviewer_subject_id=? LIMIT 1').get(batchId,subjectId))throw new GovernedReviewForbiddenError();
   const requestDigest=governedReviewRequestDigest({batchId,input});
+  const failed=checkGovernedSeparation(db,c,batchId,'adjudication',[subjectId],'alignment:'+input.idempotencyKey);if(failed)return failed;
   const replay=c.db.prepare('SELECT * FROM governed_review_alignment_events WHERE batch_id=? AND idempotency_key=?').get(batchId,input.idempotencyKey);
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return projection(replay);}
   if(batch.state!=='alignment_open')throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'append_alignment'});

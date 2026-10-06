@@ -1,3 +1,4 @@
+import { governedEvidenceCommand,checkGovernedSeparation } from './governed-capability-commands.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { GovernedReviewActor, GovernedTaskAction } from '../../governed-review/repository.js';
 import type { GovernedTaskMutationProjection } from '../../governed-review/contracts.js';
@@ -19,10 +20,11 @@ function projection(db:SqliteCommandDatabase,taskId:string):GovernedTaskMutation
 export function appendNonsealedGovernedTaskAction(db:DatabaseSync,actor:GovernedReviewActor,taskId:string,action:GovernedTaskAction,clock=Date.now):GovernedTaskMutationProjection {
  if(action.input.idempotencyKey.length<1||action.input.idempotencyKey.length>200)throw new GovernedReviewConflictError('governed_review_transition_conflict','Task action idempotency keys must remain in the public 1-200 character namespace');
  initializeGovernedViewValidator(db);
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor);
   const task=c.db.prepare('SELECT t.* FROM governed_review_tasks t JOIN governed_reviewer_subjects s ON s.id=t.reviewer_subject_id AND s.project_id=t.project_id WHERE t.id=? AND t.project_id=? AND s.account_user_id=?').get(taskId,actor.projectId,actor.userId);
   if(!task)throw new GovernedReviewNotFoundError();
+  const failed=checkGovernedSeparation(db,c,String(task.batch_id),'batch_open',[String(task.reviewer_subject_id)],action.input.idempotencyKey);if(failed)return failed;
   const input=action.input,requestDigest=governedReviewRequestDigest({taskId,action});
   const replay=c.db.prepare('SELECT request_digest FROM governed_review_task_events WHERE task_id=? AND idempotency_key=?').get(taskId,input.idempotencyKey);
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return projection(c.db,taskId);}

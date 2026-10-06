@@ -1,10 +1,10 @@
 import type { DatabaseSync,SQLInputValue } from 'node:sqlite';
-import { GovernedReviewIdempotencyConflictError,GovernedReviewNotFoundError } from '../../governed-review/errors.js';
+import { GovernedReviewIdempotencyConflictError,GovernedReviewNotFoundError,GovernedReviewSeparationIneligibleError,GovernedReviewSeparationUnknownError } from '../../governed-review/errors.js';
 import { COVERED_CAPABILITIES,stableId } from '../../governed-review/storage-values.js';
 import { governedReviewRequestDigest } from '../../lib/governed-review.js';
 import { canonicalGovernedJsonV1 } from '../../lib/governed-content-digest.js';
 import { governedJsonTextDigest } from './governed-json-text.js';
-import { registerSqliteValidator,type SqliteValidatorReader,type SqliteCommandContext } from './command-context.js';
+import { sqliteCommand,registerSqliteValidator,type SqliteValidatorReader,type SqliteCommandContext } from './command-context.js';
 type Reader=Pick<SqliteValidatorReader,'get'|'iterate'>;
 type Result='eligible'|'unknown'|'ineligible';
 const initialized=new WeakSet<DatabaseSync>();
@@ -35,6 +35,11 @@ export function initializeGovernedCapabilityValidator(db:DatabaseSync):void {
  registerSqliteValidator(db,'analysis_governed_capability_valid_v1',['governed_capability_insert'],(read,projectId,criterionVersionId,subjectId,result,excluded,unknown,storedEvidence)=>{
   const evaluated=evaluateGovernedCapability(read,String(projectId),String(criterionVersionId),String(subjectId));
   return evaluated.result===result&&canonicalGovernedJsonV1(evaluated.excluded)===String(excluded)&&canonicalGovernedJsonV1(evaluated.unknown)===String(unknown)&&canonicalGovernedJsonV1(evidence(String(criterionVersionId),evaluated))===String(storedEvidence);
+ });
+ registerSqliteValidator(db,'analysis_governed_separation_valid_v1',['governed_sealed_open','governed_sealed_task_access','governed_sealed_alignment_access','governed_sealed_adjudication_access'],(read,batchId,scope,subjectId)=>{
+  const batch=read.get('SELECT project_id,criterion_version_id FROM governed_review_batches WHERE id=?',batchId);if(!batch)return false;
+  const check=read.get('SELECT result FROM governed_review_capability_checks WHERE batch_id=? AND check_scope=? AND subject_id=? AND evaluator_version_id IS NULL ORDER BY sequence DESC LIMIT 1',batchId,scope,subjectId);
+  return check?.result==='eligible'&&evaluateGovernedCapability(read,String(batch.project_id),String(batch.criterion_version_id),String(subjectId)).result==='eligible';
  });initialized.add(db);
 }
 /** Called inside an owning command after validator initialization at entry. */
@@ -54,4 +59,22 @@ export function appendGovernedCapabilityChecks(db:DatabaseSync,c:SqliteCommandCo
   c.db.prepare(`INSERT INTO governed_review_capability_checks(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
  }
  return aggregate;
+}
+
+/** Commit failed capability evidence while returning no protected payload. */
+export function governedEvidenceCommand<T>(db:DatabaseSync,work:(c:SqliteCommandContext)=>T|GovernedReviewSeparationIneligibleError|GovernedReviewSeparationUnknownError,clock=Date.now):T {
+ initializeGovernedCapabilityValidator(db);
+ const result=sqliteCommand(db,work,clock);
+ if(result instanceof GovernedReviewSeparationIneligibleError||result instanceof GovernedReviewSeparationUnknownError)throw result;
+ return result;
+}
+export function checkGovernedSeparation(db:DatabaseSync,c:SqliteCommandContext,batchId:string,scope:'batch_open'|'adjudication'|'truth_freeze',subjects:string[],key:string){
+ if(c.db.prepare('SELECT role_intent FROM governed_review_batches WHERE id=?').get(batchId)?.role_intent!=='sealed_validation')return null;
+ const result=appendGovernedCapabilityChecks(db,c,batchId,scope,subjects,key);
+ return result==='unknown'?new GovernedReviewSeparationUnknownError():result==='ineligible'?new GovernedReviewSeparationIneligibleError():null;
+}
+export function governedContentSubjects(c:SqliteCommandContext,batchId:string,includePostBarrier=false):string[]{
+ const subjects=c.db.prepare('SELECT custodian_subject_id subject_id FROM governed_review_batches WHERE id=? AND custodian_subject_id IS NOT NULL UNION SELECT reviewer_subject_id FROM governed_review_tasks WHERE batch_id=?').all(batchId,batchId).map(r=>String(r.subject_id));
+ if(includePostBarrier)subjects.push(...c.db.prepare("SELECT adjudicator_subject_id subject_id FROM governed_review_adjudications WHERE batch_id=? UNION SELECT subject_id FROM governed_review_capability_checks WHERE batch_id=? AND check_scope='adjudication' AND result='eligible'").all(batchId,batchId).map(r=>String(r.subject_id)));
+ return [...new Set(subjects)].sort();
 }

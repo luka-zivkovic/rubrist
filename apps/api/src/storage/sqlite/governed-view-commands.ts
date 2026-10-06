@@ -1,3 +1,4 @@
+import { initializeGovernedCapabilityValidator,governedEvidenceCommand,checkGovernedSeparation,governedContentSubjects } from './governed-capability-commands.js';
 import type { DatabaseSync,SQLInputValue } from 'node:sqlite';
 import { GovernedReviewStreamCommandSchema,type GovernedReviewStreamCommand } from '../../governed-review/contracts.js';
 import type { GovernedReviewActor,GovernedBlindTaskViewArtifact } from '../../governed-review/repository.js';
@@ -15,6 +16,7 @@ const taskViewSql=governedBlindViewRowsSql.replace(' ORDER BY t.serve_order,t.id
 const internalViewKey=`rubrist-internal/view/v1/${'0'.repeat(200)}`;
 const digest=(kind:string,value:unknown)=>governedJsonTextDigest(kind,JSON.stringify(value));
 export function initializeGovernedViewValidator(db:DatabaseSync):void {
+ initializeGovernedCapabilityValidator(db);
  if(initialized.has(db))return;
  registerSqliteValidator(db,'analysis_governed_task_view_valid_v1',['governed_task_event_insert'],(reader,taskId,projectId,bytes)=>{
   if(!(bytes instanceof Uint8Array))return false;
@@ -28,7 +30,7 @@ function insert(c:SqliteCommandContext,table:'governed_review_batch_events'|'gov
 export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,action:'open'|'close_labeling'|'open_alignment'|'start_adjudication'|'finalize',raw:GovernedReviewStreamCommand,clock=Date.now):string {
  initializeGovernedViewValidator(db);
  const command=GovernedReviewStreamCommandSchema.parse(raw);
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor,true);const batch=c.db.prepare('SELECT * FROM governed_review_batch_states WHERE batch_id=? AND project_id=?').get(batchId,actor.projectId);if(!batch)throw new GovernedReviewNotFoundError();
   const subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp),requestDigest=governedReviewRequestDigest({batchId,action,command});
   const existing=c.db.prepare('SELECT id,request_digest FROM governed_review_batch_events WHERE batch_id=? AND idempotency_key=?').get(batchId,command.idempotencyKey);
@@ -36,6 +38,7 @@ export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedR
   if(Number(batch.state_version)!==command.expectedStateVersion)throw new GovernedReviewStreamConflictError({currentState:String(batch.state),currentVersion:Number(batch.state_version)});
   const expected=action==='open'?['draft']:action==='close_labeling'?['open']:action==='open_alignment'?['labeling_closed']:action==='start_adjudication'?['labeling_closed','alignment_open']:['labeling_closed','alignment_open','adjudicating'];
   if(!expected.includes(String(batch.state)))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:action});
+  if(action==='open'){const failed=checkGovernedSeparation(db,c,batchId,'batch_open',governedContentSubjects(c,batchId),command.idempotencyKey);if(failed)return failed;}
   let eventKind=action==='open'?'open':action==='open_alignment'?'alignment_open':action==='start_adjudication'?'adjudicating':'labeling_closed',details:unknown={};
   if(action==='close_labeling'){
    const stop=c.db.prepare('SELECT governed_timestamp_v1(sqlite_command_time())>=governed_timestamp_v1(stop_at) AS at_stop FROM governed_review_batches WHERE id=?').get(batchId)!;
@@ -58,10 +61,11 @@ export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedR
 export function openNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,raw:GovernedReviewStreamCommand,clock=Date.now):string {return transitionNonsealedGovernedBatch(db,actor,batchId,'open',raw,clock);}
 export function getOrCreateNonsealedBlindView(db:DatabaseSync,actor:GovernedReviewActor,taskId:string,clock=Date.now):GovernedBlindTaskViewArtifact {
  initializeGovernedViewValidator(db);
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor);
   const task=c.db.prepare('SELECT t.* FROM governed_review_tasks t JOIN governed_reviewer_subjects s ON s.id=t.reviewer_subject_id AND s.project_id=t.project_id WHERE t.id=? AND t.project_id=? AND s.account_user_id=?').get(taskId,actor.projectId,actor.userId);
   if(!task)throw new GovernedReviewNotFoundError();
+  const failed=checkGovernedSeparation(db,c,String(task.batch_id),'batch_open',[String(task.reviewer_subject_id)],`view:${taskId}`);if(failed)return failed;
   const viewed=c.db.prepare("SELECT canonical_view_bytes,view_digest FROM governed_review_task_events WHERE task_id=? AND event_kind='viewed' ORDER BY sequence LIMIT 1").get(taskId);
   if(viewed){const artifact={canonicalBytes:Buffer.from(viewed.canonical_view_bytes as Uint8Array),viewDigest:String(viewed.view_digest)};verifyExactBlindTaskViewArtifact(artifact);return artifact;}
   const state=c.db.prepare('SELECT state,state_version FROM governed_review_task_states WHERE task_id=?').get(taskId)!;

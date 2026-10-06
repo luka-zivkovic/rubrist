@@ -1,3 +1,4 @@
+import { governedEvidenceCommand,checkGovernedSeparation } from './governed-capability-commands.js';
 import type { DatabaseSync,SQLInputValue,SQLOutputValue } from 'node:sqlite';
 import type { GovernedReviewActor } from '../../governed-review/repository.js';
 import type { AppendGovernedReviewAdjudicationInput,GovernedAdjudicationProjection } from '../../governed-review/contracts.js';
@@ -9,11 +10,12 @@ import { governedReviewAccess,governedReviewSubject } from './governed-subject-c
 import { sqliteCommand,type SqliteCommandDatabase } from './command-context.js';
 function projection(db:SqliteCommandDatabase,row:Record<string,SQLOutputValue>):GovernedAdjudicationProjection{return {adjudicationId:String(row.id),batchId:String(row.batch_id),batchItemId:String(row.batch_item_id),chainVersion:Number(row.chain_version),predecessorAdjudicationId:row.supersedes_adjudication_id===null?null:String(row.supersedes_adjudication_id),decision:row.decision as GovernedAdjudicationProjection['decision'],rationale:String(row.rationale),basis:String(row.basis),correctionReason:row.correction_reason===null?null:String(row.correction_reason),consideredLabelIds:db.prepare('SELECT label_id FROM governed_review_adjudication_labels WHERE adjudication_id=? ORDER BY label_id').all(row.id!).map(l=>String(l.label_id)),createdAt:new Date(String(row.created_at)).toISOString()};}
 export function appendNonsealedGovernedAdjudication(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,itemId:string,input:AppendGovernedReviewAdjudicationInput,clock=Date.now):GovernedAdjudicationProjection {
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor,true);
   const batch=c.db.prepare('SELECT state FROM governed_review_batch_states WHERE batch_id=? AND project_id=?').get(batchId,actor.projectId);if(!batch)throw new GovernedReviewNotFoundError();
   const item=c.db.prepare('SELECT id FROM governed_review_batch_items WHERE batch_id=? AND project_id=? AND (id=? OR review_item_id=?)').get(batchId,actor.projectId,itemId,itemId);if(!item)throw new GovernedReviewNotFoundError();
   const batchItemId=String(item.id),subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp),requestDigest=governedReviewRequestDigest({batchId,itemId:batchItemId,input});
+  const failed=checkGovernedSeparation(db,c,batchId,'adjudication',[subjectId],input.idempotencyKey);if(failed)return failed;
   const replay=c.db.prepare('SELECT * FROM governed_review_adjudications WHERE batch_item_id=? AND idempotency_key=?').get(batchItemId,input.idempotencyKey);
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return projection(c.db,replay);}
   if(batch.state!=='adjudicating')throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:batch.state==='frozen'?'correct_adjudication_without_successor_materialization':'adjudicate'});

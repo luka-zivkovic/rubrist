@@ -431,3 +431,11 @@ API typecheck passes. Enforcement boundary: like the current PostgreSQL path,
 SQL checks immutable draw consistency and completeness; the trusted command
 executes sampling and serve-order algorithms. SQL does not independently
 reproduce random selection from the seed.
+
+CURRENT 0054: sealed opening checks the custodian and every reviewer. Protected
+views, task actions, alignment and adjudication rederive live separation before
+returning historical payloads or performing writes, including idempotent replay.
+Scoped SQL guards require the latest eligible record and current facts within
+the serialized command. Failed capability evidence commits without the protected
+operation; typed domain errors reach the caller. Independent audit approved
+41/41 relevant tests; API typecheck passes. Sealed freeze remains staged.
