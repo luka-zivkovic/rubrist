@@ -1,6 +1,5 @@
-import { stableId } from "./storage-values.js";
-export { stableId } from "./storage-values.js";
-import { createHash } from "node:crypto";
+import { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson } from "./storage-values.js";
+export { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson } from "./storage-values.js";
 import type { Pool, PoolClient } from "pg";
 
 import { governedContentV1Digest } from "../lib/governed-content-digest.js";
@@ -27,8 +26,8 @@ import type { GovernedReviewActor } from "./repository.js";
 
 export type Db = Pool | PoolClient;
 
-export const ALLOWED_LABELS = ["pass", "fail", "cannot_determine"] as const;
-export const MAX_BLIND_VIEW_BYTES = 2 * 1024 * 1024;
+
+
 // Public idempotency keys are bounded to 200 bytes by contracts.ts. Keeping
 // internal stream keys outside that length domain makes collisions impossible
 // even when a caller deliberately chooses the old `view:<taskId>` shape.
@@ -261,18 +260,13 @@ export async function normalizedTimestamp(db: Db, value: string | null): Promise
   return String(row.value);
 }
 
-export function sha256Bytes(bytes: Uint8Array): string {
-  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
+
 
 export function assertReplay(existing: unknown, candidate: string): void {
   if (String(existing) !== candidate) throw new GovernedReviewIdempotencyConflictError();
 }
 
-export function parseJson(value: unknown): unknown {
-  if (typeof value === "string") return JSON.parse(value);
-  return value;
-}
+
 
 export function jsonParam(value: unknown): string | null {
   return value === null || value === undefined ? null : JSON.stringify(value);

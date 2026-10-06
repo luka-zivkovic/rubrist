@@ -38,6 +38,12 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
   db.function('analysis_payload_snapshot_v1', { deterministic: true }, value => analysisPayloadSnapshotText(text(value)));
   db.function('analysis_trimmed_text_v1', { deterministic: true }, (value,limit) =>
     typeof value==='string' && value.length>0 && value===value.trim() && [...value].length<=Number(limit) ? 1 : 0);
+  db.function('governed_positive_numeric_v1', { deterministic: true }, (value,atMostOne) => {
+    try {
+      const numeric=canonicalGovernedJsonText(text(value));
+      return Number(/^(?:0\.\d+|[1-9]\d*(?:\.\d+)?)$/.test(numeric) && numeric!=='0' && (!atMostOne || numeric==='1' || numeric.startsWith('0.')));
+    } catch { return 0; }
+  });
   db.function('governed_review_payload_project_v1', { deterministic: true }, value => JSON.stringify(projectGovernedReviewPayload(JSON.parse(text(value)))));
   db.function('governed_timestamp_v1', { deterministic: true }, value => governedTimestamp(text(value)));
   db.function('governed_jsonb_octets_v1', { deterministic: true }, value => value===null ? 0 : postgresJsonTextOctets(text(value)));

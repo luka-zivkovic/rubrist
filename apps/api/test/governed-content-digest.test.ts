@@ -155,6 +155,20 @@ runPg("governed content digest JavaScript/PostgreSQL interoperability", () => {
     } finally { sqlite.close(); }
   });
 
+  it("retains governed sampling numeric precision and PostgreSQL positivity bounds", async () => {
+    const sqlite=new DatabaseSync(":memory:");
+    try {
+      initializeGovernedSqliteFunctions(sqlite);
+      for(const source of ['0','-0.0','1','0.3333333333333333','1.000000000000000000001','-1e-400','1e-400','1e999']) {
+        const expected=(await pool.query('SELECT ($1::numeric>0 AND $1::numeric<=1)::int probability,($1::numeric>0)::int weight',[source])).rows[0];
+        expect(sqlite.prepare('SELECT governed_positive_numeric_v1(?,1) probability,governed_positive_numeric_v1(?,0) weight').get(source,source)).toEqual(expected);
+        const expectedDigest=(await pool.query("SELECT governed_content_v1_digest('sampling/v1',jsonb_build_object('probability',$1::numeric)) digest",[source])).rows[0].digest;
+        expect(sqlite.prepare("SELECT governed_content_v1_digest('sampling/v1',json_object('probability',json(?))) digest").get(source)?.digest).toBe(expectedDigest);
+      }
+      for(const invalid of ['null','{}','[]','"1"','NaN','Infinity'])expect(sqlite.prepare('SELECT governed_positive_numeric_v1(?,0) valid').get(invalid)?.valid).toBe(0);
+    } finally { sqlite.close(); }
+  });
+
   it("preserves PostgreSQL UTC JSON timestamp text for governed digests", async () => {
     const sqlite=new DatabaseSync(":memory:");
     const client=await pool.connect();

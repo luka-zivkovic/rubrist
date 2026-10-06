@@ -307,3 +307,20 @@ content digests, byte bounds, replay, immutability and project erasure are
 covered. Sealed insertion still fails closed pending its complete population,
 frame and protected-successor port. Independent audit approved all nine focused
 tests, and API typechecking passes. No new public route is exposed yet.
+
+## Nonsealed governed draft bundles
+
+CURRENT: migration 0043 and the internal draft builder freeze server selection,
+serve order, exact review membership and the complete reviewer assignment set
+in one command. Reciprocal deferred keys require finalization before commit;
+finalization checks the draw digest and every assignment, streams exact blind
+views through a scoped read-only size validator, and prohibits later appends.
+Sampling decimals remain TEXT JSON numeric tokens to preserve digest precision.
+
+CURRENT: the blind-view artifact builder and its pure support functions are
+shared unchanged with PostgreSQL. Eighty-four governed SQLite/shared/PostgreSQL
+tests passed, plus PostgreSQL numeric interoperability vectors. Independent
+audit approved the slice after correcting offset-aware time-window ordering;
+all ten final draft tests and API typechecking pass. The broader SQLite suite
+passed 334 tests immediately before this draft slice. Other governed source
+kinds and public repository wiring remain unfinished.
