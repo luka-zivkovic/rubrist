@@ -44,7 +44,8 @@ export function registerProductionRetentionSweeper(
     });
   };
   if (intervalMs <= 0) {
-    return { sweep, stop: async () => { stopped = true; await inFlight; } };
+    // Whoever started a sweep observes its failure; shutdown only drains it.
+    return { sweep, stop: async () => { stopped = true; await inFlight?.catch(() => undefined); } };
   }
   tick();
   const timer = setInterval(tick, intervalMs);
@@ -54,7 +55,7 @@ export function registerProductionRetentionSweeper(
     stop: async () => {
       stopped = true;
       clearInterval(timer);
-      await inFlight;
+      await inFlight?.catch(() => undefined);
     }
   };
 }

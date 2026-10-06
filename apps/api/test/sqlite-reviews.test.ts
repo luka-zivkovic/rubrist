@@ -10,6 +10,7 @@ import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sq
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { createAuth } from '../src/lib/auth.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
+import { CaseNotFoundError } from '../src/repository/errors.js';
 const cleanup:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
 const definition=CreateCriterionInputSchema.parse({stableKey:'grounded',name:'Grounded',definition:'Use evidence.',evaluator:{rubricMarkdown:'Pass grounded answers.',prompt:'Judge {{rubric_markdown}}.',executionBinding:bindingInput(MOCK_BINDING)}});
@@ -138,6 +139,18 @@ describe('SQLite ungoverned review queues',()=>{
     await expect(f.r.recordVerdict({...imported,source:'human',externalRunId:undefined,skillVersionId:'missing'})).rejects.toThrow();
     await f.r.createCriterion(f.projectId,{...definition,stableKey:'second'},{});
     await expect(f.r.recordVerdict({...imported,source:'human',externalRunId:undefined})).rejects.toThrow(/multiple|criterion|ambiguous/i);
+  });
+  it('rejects an explicit human or adjudicated evaluator outside the case project with a typed not-found error',async()=> {
+    const f=await fixture();
+    const {user}=await f.runtime.auth.api.signUpEmail({body:{email:'other@example.test',password:'synthetic-long-password',name:'Other'}});
+    const other=await f.runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:false});
+    const foreign=(await f.r.createCriterion(other.projectId,definition,{})).evaluator.currentVersion.id,before=f.db.prepare('SELECT count(*) n FROM verdicts').get()?.n;
+    for(const source of ['human','adjudicated'] as const)for(const skillVersionId of [foreign,'skillv_missing']) {
+      const rejected=await f.r.recordVerdict({projectId:f.projectId,caseId:f.trace.caseId,source,actorUserId:f.user.id,skillVersionId,payload:{kind:'binary',pass:true,rationale:'Human'}}).then(()=>null,error=>error);
+      expect(rejected).toBeInstanceOf(CaseNotFoundError);expect(rejected.message).toContain(f.trace.caseId);
+    }
+    expect(f.db.prepare('SELECT count(*) n FROM verdicts').get()?.n).toBe(before);
+    expect(await f.r.recordVerdict({projectId:f.projectId,caseId:f.trace.caseId,source:'human',actorUserId:f.user.id,skillVersionId:f.versionId,payload:{kind:'binary',pass:true,rationale:'Human'}})).toMatchObject({skillVersionId:f.versionId});
   });
 });
 

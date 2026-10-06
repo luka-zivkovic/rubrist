@@ -47,7 +47,9 @@ export function sqliteRegressionCommands(db:DatabaseSync) {
    return {state:'claimed' as const,epoch,version:sqliteSkillVersion(row)};
   });},
   touchRegressionAttempt(a:RegressionAttempt,start:boolean) {return transaction(now=>{if(!owned(a,now))return false;run('UPDATE regression_gate_attempts SET lease_until=?,provider_started_at=CASE WHEN ? THEN coalesce(provider_started_at,?) ELSE provider_started_at END WHERE project_id=? AND skill_version_id=?',now+REGRESSION_LEASE_MS,Number(start),now,a.projectId,a.skillVersionId);return true;});},
-  releaseRegressionAttempt(a:RegressionAttempt) {transaction(()=>run('UPDATE regression_gate_attempts SET token=NULL,lease_until=NULL WHERE project_id=? AND skill_version_id=? AND token=? AND epoch=?',a.projectId,a.skillVersionId,a.token,a.epoch));},
+  // Release follows every settled provider call. A still-live owner therefore
+  // knows each dispatch outcome; only an expired lease stays uncertain.
+  releaseRegressionAttempt(a:RegressionAttempt) {transaction(now=>run('UPDATE regression_gate_attempts SET token=NULL,lease_until=NULL,provider_started_at=CASE WHEN lease_until>? THEN NULL ELSE provider_started_at END WHERE project_id=? AND skill_version_id=? AND token=? AND epoch=?',now,a.projectId,a.skillVersionId,a.token,a.epoch));},
   finishRegressionAttempt(a:RegressionAttempt,job:GateRunJob,result:RegressionRunResult) {return transaction(now=>{if(a.projectId!==job.projectId||a.skillVersionId!==job.skillVersionId)throw new DatasetRevisionConflictError('Regression attempt and outcome ownership mismatch');return owned(a,now)?finish(job,result,now):false;});},
   failRegressionGate(job:GateRunJob,message:string) {return transaction(now=>{
    const row=version(job);if(existing(job.projectId,job.skillVersionId)||row.status!=='calibrating')return true;

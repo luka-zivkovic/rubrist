@@ -148,6 +148,21 @@ it('fences stale regression attempts and failure finalizers and rejects incorrec
  expect(await s.command('finishRegressionAttempt',old,job,{...result.regressionRun,id:'late',status:'passed',error:null})).toBe(false);
 });
 
+it('counts an unfinished provider dispatch as uncertain only after its lease expired',async()=>{
+ const f=await fixture(),job=await pendingRegression(f),s=f.runtime.storage;
+ const attempt=()=>f.db.prepare('SELECT epoch,token,provider_started_at,uncertain_epochs FROM regression_gate_attempts WHERE skill_version_id=?').get(job.skillVersionId);
+ const refused=await createSqliteRuntime(f.path,()=>Object.assign(new MockJudgeProvider(),{async judge():Promise<never>{throw new Error('HTTP 401 definite provider refusal');}}));cleanup.push(()=>refused.close());
+ await expect(refused.repository.runRegressionGateForVersion(job)).rejects.toThrow(/401/);
+ expect(attempt()).toMatchObject({epoch:1,token:null,provider_started_at:null,uncertain_epochs:0});
+ const live=await s.command('claimRegressionAttempt',job,'live');if(live.state!=='claimed')throw new Error('claim');
+ expect(attempt()?.uncertain_epochs).toBe(0);
+ const owner={projectId:f.projectId,skillVersionId:job.skillVersionId,token:'live',epoch:live.epoch};
+ expect(await s.command('touchRegressionAttempt',owner,true)).toBe(true);
+ f.db.prepare('UPDATE regression_gate_attempts SET lease_until=0 WHERE skill_version_id=?').run(job.skillVersionId);
+ await s.command('releaseRegressionAttempt',owner);expect(attempt()).toMatchObject({token:null,uncertain_epochs:0});expect(attempt()?.provider_started_at).not.toBeNull();
+ const next=await s.command('claimRegressionAttempt',job,'next');expect(next.state).toBe('claimed');expect(attempt()).toMatchObject({epoch:3,provider_started_at:null,uncertain_epochs:1});
+});
+
 it('does not let an owned attempt finalize a different evaluator',async()=>{
  const f=await fixture(),firstJob=await pendingRegression(f),secondJob=await pendingRegression(f),s=f.runtime.storage;
  const claim=await s.command('claimRegressionAttempt',firstJob,'owner');if(claim.state!=='claimed')throw new Error('claim');
