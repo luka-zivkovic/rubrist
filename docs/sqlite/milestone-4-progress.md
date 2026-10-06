@@ -448,3 +448,10 @@ protected sealed predecessor; development exposure and competing sealed children
 block the write. Independent audit approved 21/21 sealed/nonsealed freeze and
 truth-link tests; API typecheck passes. Tests include competing batches over one
 successor intake, exposure after intake, orphan rejection and atomic rollback.
+
+CURRENT governed read projections: batch/task lists and summaries preserve
+PostgreSQL field shapes, ordering, hidden pre-barrier progress and hidden sealed
+outcomes. Detailed post-barrier reads check current membership, assignment or
+owner access, and sealed separation in the same command that loads the payload.
+Independent audit approved all three focused projection/authorization tests;
+API typecheck passes. Runtime composition is the next slice.
