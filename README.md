@@ -83,7 +83,7 @@ it is encrypted at rest. Use an exact version, never `latest`; see
 
 ### c. From source
 
-Prerequisites: Node.js 24 or newer, pnpm 10.33 or newer, Docker for local
+Prerequisites: Node.js 24.15.0 or newer, pnpm 10.33 or newer, Docker for local
 Postgres, and an optional Anthropic or OpenAI API key for real judging.
 
 ```bash
@@ -145,8 +145,10 @@ accounts, evaluations and receipts, collections/reviews, evaluator regression,
 all three trace integrations, and production monitoring. It requires explicit
 backend selection and Node 24.15+. The [specialist SQLite repositories](docs/sqlite/milestone-4.md) now include
 Analyze, governed truth, calibration, evaluator lifecycle and measurement.
-Installation packaging and release qualification remain in progress; use
-PostgreSQL for a released installation.
+The two [installation templates and recovery tools](docs/sqlite-operations.md)
+are implemented; [release qualification](docs/sqlite/milestone-6.md) records
+parity checks, failure recovery and measured operating limits. These changes
+are unreleased until the milestone PR stack and release workflow complete.
 
 ### d. Zero-infrastructure demo mode
 

@@ -20,7 +20,7 @@ test('online WAL snapshot restores exact bytes without overwriting files; verifi
     const bytes=Buffer.from([0,255,1,13,10,128]);db.prepare('INSERT INTO backup_fixture VALUES(1,?)').run(bytes);
     assert.ok(statSync(source+'-wal').size>0);
     const manifest=await createBackup({source,output,recoveryFile:recovery,secret});
-    assert.equal(manifest.history.length,65);
+    assert.equal(manifest.history.length,66);
     assert.equal(statSync(join(output,'database.sqlite')).mode&0o777,0o600);
     assert.equal(existsSync(join(output,'database.sqlite-wal')),false);
     assert.equal(JSON.stringify(manifest).includes(secret),false);

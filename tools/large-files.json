@@ -90,6 +90,26 @@
       "classification": "structural_exception",
       "reason": "One reviewable mapping covers every frozen PostgreSQL function definition and trigger with its source hash and current SQLite domain evidence. Splitting it would obscure inventory completeness.",
       "revisit": "Revisit when the frozen PostgreSQL invariant inventory or qualification format changes."
+    },
+    "tools/repository-boundaries.json": {
+      "classification": "generated",
+      "reason": "AST-derived explicit PostgreSQL transaction and client-command boundary inventory; generated with repository-boundaries --write and reviewed as a complete diff.",
+      "revisit": "Regenerate only after reviewing transaction ownership and lock implications; do not hand-split the fixture."
+    },
+    "apps/api/src/app.ts": {
+      "classification": "refactor_candidate",
+      "reason": "Application composition now combines public health/readiness, auth/setup middleware and many route registrations; the route-order contract is covered, but focused composition modules would improve cohesion.",
+      "revisit": "Extract cohesive auth/setup and router-registration modules in a dedicated behavior-preserving change with the route manifest tests."
+    },
+    "apps/api/test/pg-auth.test.ts": {
+      "classification": "refactor_candidate",
+      "reason": "PostgreSQL account/auth regression coverage grew across setup, session, invitations and erasure; isolated suites could share a fixture without changing production scope.",
+      "revisit": "Split by account lifecycle after retaining explicit real-PostgreSQL coverage and fixture cleanup."
+    },
+    "packages/shared/src/production-calibration-analysis.ts": {
+      "classification": "cohesion_review",
+      "reason": "One public production-calibration contract family contains interdependent schemas and semantic validation. Qualification does not split consumer-visible exports; shared-contract guard protects the existing surface.",
+      "revisit": "Review schema versus semantic-validator cohesion before adding another contract family; preserve export compatibility."
     }
   }
 }

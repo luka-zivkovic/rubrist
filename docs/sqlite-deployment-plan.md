@@ -2,7 +2,7 @@
 
 Prepared on 2026-10-04 for implementation in a separate session.
 
-Status: Milestone 4 specialist workflows locally qualified; PR review pending (2026-10-06). The
+Status: Milestones 0–6 implemented and locally qualified; stacked PR CI/Copilot review and merging remain pending (2026-10-06). The
 user agreed to two fixed deployment options for the same application. Isolated
 integrity/recovery prototypes, persistent accounts, native evaluations, ordinary
 workflows and specialist repositories are implemented; installation/release
@@ -309,6 +309,9 @@ contract evolution has explicit compatibility tests.
 
 ## Milestone 5 Ship the two installation templates
 
+CURRENT: [installation and recovery record](sqlite/milestone-5.md) tracks the
+implemented templates, independent audits and disposable container drills.
+
 - Add the SQLite template with persistent storage and no PostgreSQL service.
   Preserve the existing PostgreSQL distribution and Coolify behavior; add an
   equivalent SQLite deployment recipe where supported.
@@ -332,6 +335,9 @@ connect a harness, run an evaluation, restart, and recover their installation
 using the written instructions. The SQLite path runs with PostgreSQL absent.
 
 ## Milestone 6 Qualify parity and release readiness
+
+CURRENT: [qualification checklist](sqlite/milestone-6.md) tracks both-backend
+contracts, crash recovery, measured workload, packaging and remaining reviews.
 
 Run meaningful tests throughout implementation; this milestone consolidates
 coverage and operational checks rather than postponing them until the end.
