@@ -420,3 +420,14 @@ focused tests pass (including forged eligibility, exposure changes and unknown
 historical authorship), as do four specialist module-boundary tests and the API
 typecheck. Independent audit reran all twelve and approved without findings.
 Sealed access and the complete repository remain pending.
+
+CURRENT 0053: sealed drafts bind the finalized protected population's exact
+frame digest, collection provenance, time window and custodian. Shared draft
+construction preserves nonsealed behavior and accepts client-item aliases for
+sealed directed selection. Each sealed item receives at least two distinct
+reviewers, none the custodian. Sealed execution remains staged pending live
+separation gates. Independent audit approved 17/17 sealed/nonsealed draft tests;
+API typecheck passes. Enforcement boundary: like the current PostgreSQL path,
+SQL checks immutable draw consistency and completeness; the trusted command
+executes sampling and serve-order algorithms. SQL does not independently
+reproduce random selection from the seed.
