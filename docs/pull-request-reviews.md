@@ -1,6 +1,15 @@
-# Milestone PRs and Copilot review
+# Milestone PR reviews
 
-CURRENT workflow, authorized 2026-10-05. Each completed SQLite milestone is
+CURRENT update, authorized 2026-10-06: Claude Code through agent-bridge replaces
+Copilot for the remaining SQLite milestone PRs (#194–#198). Do not poll or
+request Copilot reviews for this stack. Review each milestone diff against its
+prerequisite, record the reviewed head and findings, fix actionable issues and
+obtain a completed Claude re-review of corrections. Merge after CI passes and
+actionable independent/Claude findings are resolved. Preserve the bottom-up
+stack workflow below. The historical Copilot setup remains documented for
+context; a fresh Copilot review is no longer a merge gate for these PRs.
+
+Historical workflow, authorized 2026-10-05 (reviewer superseded above). Each completed SQLite milestone is
 pushed and opened as one PR after local validation and independent audit.
 Follow-up corrections update that PR. The user subsequently authorized
 merging SQLite milestone PRs after passing CI and resolved independent/Copilot
@@ -22,7 +31,7 @@ GitHub applies that filter to the PR's base branch. Existing push behavior and
 read-only workflow permissions remain unchanged. No privileged review workflow
 or additional token secret is needed.
 
-## Native Copilot rules
+## Historical native Copilot rules
 
 The repository uses GitHub's native `copilot_code_review` ruleset rule:
 
@@ -40,7 +49,9 @@ Repository review guidance lives in `.github/copilot-instructions.md`. It
 prioritizes auth isolation, transaction/crash safety, immutable evidence and
 product boundaries. Keep it short and consistent with AGENTS and accepted ADRs.
 
-Copilot must be available to the PR author and have remaining review capacity.
+The following describes the original Copilot workflow, superseded for this
+SQLite stack by the 2026-10-06 update above. Copilot must be available to the PR
+author and have remaining review capacity.
 A requested or pending review is not a completed review. Inspect the Reviews
 section and CI checks, assess each finding, fix actionable defects, and request
 a new review if an automatic review did not trigger. Record any unavailable
