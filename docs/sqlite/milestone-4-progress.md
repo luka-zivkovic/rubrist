@@ -455,3 +455,12 @@ outcomes. Detailed post-barrier reads check current membership, assignment or
 owner access, and sealed separation in the same command that loads the payload.
 Independent audit approved all three focused projection/authorization tests;
 API typecheck passes. Runtime composition is the next slice.
+
+CURRENT governed runtime composition: all 16 repository methods now cross the
+serialized SQLite worker, and startup injects the repository into the existing
+session-only HTTP module. Promotion-handoff batch creation remains explicitly
+staged until the promotion port lands. Typed governed errors preserve safe
+public fields and class identity across RPC. Independent audit found and
+verified a corrected sealed-successor error mapping; nine runtime/read/transport
+tests pass, including concurrent replay, restart byte identity, HTTP conflicts,
+and exposed-predecessor `sealed_overlap`. API typecheck passes.

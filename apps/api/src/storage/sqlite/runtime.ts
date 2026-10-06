@@ -1,3 +1,4 @@
+import type { GovernedReviewRepository } from '../../governed-review/repository.js';
 import type { AnalysisStudyRepository } from '../../analysis-study/repository.js';
 import type { AnalysisPopulationRepository } from '../../analysis-population/repository.js';
 import type { ProductionDecisionRecordRepository } from '../../production-calibration/repository.js';
@@ -16,6 +17,24 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const governedReview:GovernedReviewRepository={
+    listInstructions:(...args)=>storage.command('governedInstructions',...args),
+    createInstruction:(...args)=>storage.command('governedInstructionCreate',...args),
+    listAssignableSubjects:(...args)=>storage.command('governedAssignableSubjects',...args),
+    createSealedIntake:(...args)=>storage.command('governedSealedIntake',...args),
+    createBatchDraft:(...args)=>storage.command('governedDraft',...args),
+    listBatches:(...args)=>storage.command('governedBatchList',...args),
+    getBatchSummary:(...args)=>storage.command('governedBatchSummary',...args),
+    transitionBatch:(...args)=>storage.command('governedTransition',...args),
+    listReviewerTasks:(...args)=>storage.command('governedReviewerTasks',...args),
+    getOrCreateBlindTaskView:(...args)=>storage.command('governedBlindView',...args),
+    appendTaskAction:(...args)=>storage.command('governedTaskAction',...args),
+    getPostBarrierItemView:(...args)=>storage.command('governedPostBarrierView',...args),
+    appendAlignmentEvent:(...args)=>storage.command('governedAlignment',...args),
+    appendAdjudication:(...args)=>storage.command('governedAdjudication',...args),
+    createImportedTruth:(...args)=>storage.command('governedImportedTruthCreate',...args),
+    listImportedTruth:(...args)=>storage.command('governedImportedTruthList',...args),
+  };
   const analysisStudies:AnalysisStudyRepository={
     createStudy:(...args)=>storage.command('studyCreate',...args),
     listStudies:(...args)=>storage.command('studyList',...args),
@@ -284,5 +303,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

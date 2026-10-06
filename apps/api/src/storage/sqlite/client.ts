@@ -1,3 +1,4 @@
+import * as governedErrors from '../../governed-review/errors.js';
 import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
 import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
@@ -35,6 +36,8 @@ export class SqliteStorage {
           const domainError = Object.hasOwn(repositoryErrors,message.error.name)
             ? repositoryErrors[message.error.name as keyof typeof repositoryErrors] : undefined;
           if (typeof domainError === 'function' && domainError.prototype instanceof Error) Object.setPrototypeOf(error,domainError.prototype);
+          const governedError=Object.hasOwn(governedErrors,message.error.name)?governedErrors[message.error.name as keyof typeof governedErrors]:undefined;
+          if(typeof governedError==='function'&&(governedError===governedErrors.GovernedReviewDomainError||governedError.prototype instanceof governedErrors.GovernedReviewDomainError))Object.setPrototypeOf(error,governedError.prototype);
           caller.reject(error);
         } else caller.resolve(reviveBytes(message.result));
       });

@@ -1,3 +1,4 @@
+import { GovernedReviewDomainError } from '../../governed-review/errors.js';
 import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
 import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
@@ -42,6 +43,10 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
   if(value instanceof AnalysisStudyRepositoryError){
     result.code=value.code;
     result.details=typeof value.details.studyId==='string'?{studyId:value.details.studyId}:{};
+  }
+  if(value instanceof GovernedReviewDomainError){
+    result.code=value.code;result.status=value.status;
+    if(value.details)result.details=Object.fromEntries(['currentState','currentVersion','attemptedAction','maxBytes'].flatMap(key=>{const item=value.details![key];return typeof item==='string'||typeof item==='number'?[[key,item]]:[];}));
   }
   return result;
 }

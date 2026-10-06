@@ -129,6 +129,7 @@ const server = serve({
     ...(sqlite ? {accounts:sqlite.accounts,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
     queue,
+    governedReviewRepository:sqlite?.governedReview,
     analysisPopulationRepository:sqlite?.analysisPopulations,
     analysisStudyRepository,
     analysisPromotionRepository,
