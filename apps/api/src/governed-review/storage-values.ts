@@ -52,3 +52,8 @@ export function taskEventContent(input: {
     viewDigest: input.viewDigest ?? null
   };
 }
+
+export const COVERED_CAPABILITIES = [
+  "criterion_authoring", "instruction_authoring", "evaluator_authoring",
+  "rubric_authoring", "prompt_authoring", "example_selection", "development_exposure"
+] as const;

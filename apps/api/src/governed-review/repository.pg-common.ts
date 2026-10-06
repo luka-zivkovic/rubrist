@@ -32,10 +32,7 @@ export type Db = Pool | PoolClient;
 // internal stream keys outside that length domain makes collisions impossible
 // even when a caller deliberately chooses the old `view:<taskId>` shape.
 export const INTERNAL_VIEW_IDEMPOTENCY_KEY = `rubrist-internal/view/v1/${"0".repeat(200)}`;
-export const COVERED_CAPABILITIES = [
-  "criterion_authoring", "instruction_authoring", "evaluator_authoring",
-  "rubric_authoring", "prompt_authoring", "example_selection", "development_exposure"
-] as const;
+export { COVERED_CAPABILITIES } from './storage-values.js';
 
 export interface BatchRow {
   id: string;

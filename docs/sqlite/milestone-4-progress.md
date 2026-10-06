@@ -409,3 +409,14 @@ lineage. Receipt responses contain no item payloads or internal item IDs.
 Independent audit approved eight focused tests and API typechecking passes.
 Positive protected-successor execution still requires the sealed freeze port.
 Sealed batch access remains staged pending live capability separation.
+
+CURRENT 0052: immutable system-derived separation checks now derive criterion,
+instruction and evaluator lineage authorship plus durable development exposure.
+The scoped database validator rederives the full result and evidence; SQL also
+checks tenant bindings, digest bases, stream sequencing, bounds and immutability.
+Changed facts append a new snapshot even when the enclosing command key repeats.
+Calibration-specific and independently verified checks remain staged. Twelve
+focused tests pass (including forged eligibility, exposure changes and unknown
+historical authorship), as do four specialist module-boundary tests and the API
+typecheck. Independent audit reran all twelve and approved without findings.
+Sealed access and the complete repository remain pending.
