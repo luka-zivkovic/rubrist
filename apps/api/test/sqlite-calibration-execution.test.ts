@@ -70,3 +70,11 @@ it.each(['identity','calls','state','upstream'])('rejects direct calibration att
  expect(()=>sqliteCommand(f.db,c=>c.db.prepare(`UPDATE binary_calibration_attempts SET ${set} WHERE id=?`).run(work.attemptId))).toThrow(field==='identity'?/immutable calibration attempt identity/:field==='upstream'?/upstream provider requires OpenRouter/:/state and calls are monotonic/);
  expect(f.db.prepare('SELECT accounting_state,attempt_state,physical_provider_calls,upstream_provider FROM binary_calibration_attempts WHERE id=?').get(work.attemptId)).toEqual({accounting_state:'pending',attempt_state:'started',physical_provider_calls:1,upstream_provider:null});
 });
+it('refuses to reject an authorized run, whose lease only a terminal mint can release',async()=>{
+ const f=await calibrationFixture(),run=createCalibrationRun(f.db,f.actor,f.calibrationInput),claim=sqliteCalibrationClaimCommands(f.db).claimRun(run.runId,'worker',10000)!;
+ sqliteCalibrationExecutionCommands(f.db).authorizeRun(claim);
+ expect(()=>sqliteCommand(f.db,c=>c.db.prepare("UPDATE binary_calibration_runs SET state='rejected',rejection_reason='x',completed_at=?,claim_worker_id=NULL,claim_token=NULL,claim_expires_at=NULL WHERE id=?").run(c.timestamp,run.runId))).toThrow(/authorized calibration run cannot be rejected/);
+ expect(f.db.prepare('SELECT state,authorization_check_id IS NOT NULL authorized FROM binary_calibration_runs WHERE id=?').get(run.runId)).toEqual({state:'running',authorized:1});
+ expect(f.db.prepare('SELECT run_id FROM binary_calibration_revision_leases').all()).toEqual([{run_id:run.runId}]);
+ expect(()=>sqliteCalibrationClaimCommands(f.db).rejectBeforeAuthorization(claim,'resolution_no_longer_holds')).toThrow(expect.objectContaining({code:'state_conflict'}));
+});

@@ -48,6 +48,7 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     recordProviderCallStarted:(...args)=>storage.command('calibrationProviderStarted',...args),
     completeAttempt:(...args)=>storage.command('calibrationCompleteAttempt',...args),
     finalizeRun:(...args)=>storage.command('calibrationFinalize',...args),
+    finalizeLifecycleForbiddenRun:(...args)=>storage.command('calibrationFinalizeLifecycleForbidden',...args),
     markRecoveryRequired:(...args)=>storage.command('calibrationMarkRecovery',...args),
   };
   const analysisMeasurement:AnalysisMeasurementRepository={getReport:(...args)=>storage.command('measurementReport',...args)};

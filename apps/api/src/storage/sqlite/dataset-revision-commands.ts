@@ -2,8 +2,9 @@ import { canonicalJson } from '../../lib/canonical-json.js';
 import { assertBlindProjectionSafe } from '../../governed-review/projection.js';
 import { canonicalGovernedJsonText, analysisPayloadSnapshotText } from './governed-json-text.js';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { DatabaseSync } from 'node:sqlite';
-import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, GovernedReviewPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision } from '@rubrist/shared';
+import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, GovernedReviewPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision, type DatasetRevisionPayloadSnapshot } from '@rubrist/shared';
 import type { RubristRepository } from '../../repository.js';
 import { DatasetNotFoundError, DatasetRevisionConflictError, DatasetRevisionNotFoundError, SealedValidationUnavailableError } from '../../repository/errors.js';
 import { datasetRevisionContentDigest, datasetRevisionDigest, datasetRevisionItemDigest, decidePublicDatasetRevisionCreation } from '../../lib/dataset-revision.js';
@@ -14,8 +15,16 @@ function snapshot(raw:unknown) {
   if(!value||!('input' in value)||!('output' in value)) throw new DatasetRevisionConflictError('Case has no complete retained normalized payload to freeze');
   return DatasetRevisionPayloadSnapshotSchema.parse({input:value.input,output:value.output,metadata:value.metadata??{},...(Array.isArray(value.steps)?{steps:value.steps}:{})});
 }
+/** PostgreSQL normalizedPayloadSnapshot: the exact retained source projection, never schema-normalized. */
+function sourceSnapshot(raw:unknown):DatasetRevisionPayloadSnapshot {
+  const value=parse(raw);
+  if(!value||!('input' in value)||!('output' in value)) throw new DatasetRevisionConflictError('Case has no complete retained normalized payload to freeze');
+  return {input:value.input,output:value.output,metadata:value.metadata??{},...(value.steps?{steps:value.steps}:{})};
+}
+// Ordinary items carry the exact source steps PostgreSQL freezes; only metadata-free governed payloads are step-canonical.
+const OrdinaryPayloadSnapshotSchema=DatasetRevisionPayloadSnapshotSchema.extend({steps:z.array(z.unknown()).optional()}).strict();
 function revision(row:Row) { return DatasetRevisionSchema.parse({...camel(row),exposureState:row.role==='sealed_validation'?(row.has_development_exposure?'exposed':'protected'):'visible_by_design',semanticLeakageDetection:'unsupported'}); }
-function item(row:Row) { return DatasetRevisionItemSchema.parse({...camel(row),payloadSnapshot:snapshot(row.payload_snapshot),referenceProvenance:parse(row.reference_provenance)}); }
+function item(row:Row) { return {...DatasetRevisionItemSchema.omit({payloadSnapshot:true}).parse({...camel(row),referenceProvenance:parse(row.reference_provenance)}),payloadSnapshot:sourceSnapshot(row.payload_snapshot)}; }
 function exposure(row:Row) { return DatasetExposureEventSchema.parse({...camel(row),details:parse(row.details)}); }
 export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db);
@@ -29,7 +38,7 @@ export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
       // Validate without normalizing the immutable digest input. Blind
       // snapshots omit metadata; ordinary snapshots retain their full shape.
       const exactPayload=parse(payload),governed=exactPayload!==null&&typeof exactPayload==='object'&&!Object.hasOwn(exactPayload,'metadata');
-      const validated=governed?GovernedReviewPayloadSnapshotSchema.parse(exactPayload):DatasetRevisionPayloadSnapshotSchema.parse(exactPayload);
+      const validated=governed?GovernedReviewPayloadSnapshotSchema.parse(exactPayload):OrdinaryPayloadSnapshotSchema.parse(exactPayload);
       if(canonicalJson(validated)!==canonicalJson(exactPayload))return 0;
       if(governed)assertBlindProjectionSafe(exactPayload);
       const exactProvenance=parse(provenance),validatedProvenance=DatasetReferenceProvenanceSchema.parse(exactProvenance);
@@ -60,7 +69,7 @@ export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
       const prepared=members.map(row=> {
         const identity=one('SELECT input_digest FROM case_input_identity_records WHERE project_id=? AND source_case_id=? ORDER BY created_at,id LIMIT 1',input.projectId,row.case_id);
         if(!identity) throw new DatasetRevisionConflictError('Case has no retained pre-redaction input identity');
-        const payloadSnapshot=snapshot(row.normalized_payload),referenceLabel=row.expected_label;
+        const payloadSnapshot=sourceSnapshot(row.normalized_payload),referenceLabel=row.expected_label;
         const matching=referenceLabel?all("SELECT * FROM verdicts WHERE project_id=? AND case_id=? AND source IN ('human','adjudicated') ORDER BY created_at,id",input.projectId,row.case_id).map(verdict).filter(value=>verdictLabelFromPayload(value.payload)===referenceLabel):[];
         const adjudicated=matching.filter(value=>value.source==='adjudicated'),supporting=adjudicated.length?adjudicated:matching.filter(value=>value.source==='human');
         const provenance:DatasetReferenceProvenance=referenceLabel===null?{kind:'unlabeled',sourceId:row.id,verdictIds:[],actorUserIds:[],basis:'No reference label was present when the collection was frozen.'}:
@@ -103,7 +112,7 @@ export function getOrCreateSqliteRegressionRevision(db:DatabaseSync,projectId:st
   const prepared=rows.map(row=> {
     const identity=one('SELECT input_digest FROM case_input_identity_records WHERE project_id=? AND source_case_id=? ORDER BY created_at,id LIMIT 1',projectId,row.case_id);
     if(!identity)throw new DatasetRevisionConflictError('Case has no retained pre-redaction input identity');
-    const payloadSnapshot=snapshot(row.normalized_payload),matching=all("SELECT v.* FROM verdicts v JOIN skill_versions s ON s.project_id=v.project_id AND s.id=v.skill_version_id WHERE v.project_id=? AND v.case_id=? AND s.criterion_version_id=? AND v.source IN ('human','adjudicated') ORDER BY v.created_at,v.id",projectId,row.case_id,criterionVersionId).map(verdict).filter(v=>verdictLabelFromPayload(v.payload)===row.agreed_label);
+    const payloadSnapshot=sourceSnapshot(row.normalized_payload),matching=all("SELECT v.* FROM verdicts v JOIN skill_versions s ON s.project_id=v.project_id AND s.id=v.skill_version_id WHERE v.project_id=? AND v.case_id=? AND s.criterion_version_id=? AND v.source IN ('human','adjudicated') ORDER BY v.created_at,v.id",projectId,row.case_id,criterionVersionId).map(verdict).filter(v=>verdictLabelFromPayload(v.payload)===row.agreed_label);
     const provenance:DatasetReferenceProvenance={kind:'golden_promotion',sourceId:row.id,verdictIds:matching.map(v=>v.id),actorUserIds:matching.flatMap(v=>v.actorUserId?[v.actorUserId]:[]),basis:'Visible golden promotion; known-failure governance, not sealed validation.'};
     return {row,payloadSnapshot,provenance,inputDigest:identity.input_digest,itemDigest:datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:identity.input_digest},redactedPayload:payloadSnapshot,referenceLabel:row.agreed_label,expectedFailStep:null,reviewProvenance:provenance,note:row.reason})};
   });

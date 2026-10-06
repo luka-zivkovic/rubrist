@@ -38,13 +38,26 @@ the write lock. Transaction/savepoint escapes and use after completion fail.
 Equal timestamps are allowed; final-validation evaluator reuse still requires
 strict pretest ordering, as in PostgreSQL.
 
+CURRENT clock limitation: the persisted clock never moves backward, so one
+faulty forward host-clock sample holds every later command at that time until
+wall time catches up. `rubrist_command_clock.last_ms` ahead of wall time
+reveals it. Legitimate advances are never capped, and no in-band repair exists:
+lowering the clock after evidence carries the faulty time would let later
+evidence appear earlier. Whether to keep that ordering guarantee, allow a
+rewind only when no evidence was stamped, or record a correction is an open
+decision; installations must keep host time disciplined until it is made.
+
 Complete immutable bundles require reciprocal deferred foreign-key obligations
 and guarded finalization records. Finalizers check the retained joined evidence;
 child and source guards reject trailing same-command changes. Payload-heavy
-validators are scoped, read-only, non-reentrant and available only to their
-named triggers. Plain connections can read projections and run integrity/FK
-checks; writes that need unavailable validators fail closed. Administrative DDL
-capable of removing guards is outside this data-write enforcement boundary.
+validators are scoped, read-only and non-reentrant. They run only when the
+innermost trigger or view has a name registered for them; the check is by name,
+not schema or object type. Managed commands cannot change schema, attach
+databases or set pragmas, so a command cannot shadow a validator trigger.
+Plain connections can read projections and run integrity/FK checks; writes
+that need unavailable validators fail closed. Administrative DDL outside
+managed commands, including same-named views or TEMP triggers, guard removal or
+check-suppressing pragmas, is outside this data-write enforcement boundary.
 
 Calibration capability and provider-policy snapshot semantics remain application
 logic, matching PostgreSQL; the database checks exact snapshot byte digests and
@@ -52,7 +65,15 @@ ownership. Authorization claims, protected-revision leases, attempt accounting,
 terminal aggregate/private-ledger minting and lease release are atomic guarded
 bundles. A started provider call is durable before dispatch; uncertain recovery
 cannot silently dispatch it again as fresh work. Public reads never expose the
-private attempt ledger or protected item payloads.
+private attempt ledger or protected item payloads. An authorized run cannot be
+rejected. If its evaluator lifecycle later refuses calibration, both backends
+end it without another provider call: one transaction accounts remaining
+attempts (started as `outcome_unknown`, unstarted as `not_attempted`), mints the
+existing `incomplete` artifact and releases the revision lease.
+
+A protected sealed predecessor has at most one successor intake, as in
+PostgreSQL. Any live project member may be the sealed-intake custodian; the
+existing separation-of-duties checks still apply.
 
 Lifecycle activation binds complete retained calibration and passing full
 regression evidence. Replacement retires the previous active evaluator in the

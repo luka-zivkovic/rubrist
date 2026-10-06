@@ -43,7 +43,7 @@ it('serializes evaluator edits with immutable criterion and regression pins and 
  await expect(f.r.createSkillVersionPending(skill,edit,{projectId:f.projectId})).rejects.toThrow(/explicit criterionVersionId/);
  expect((await f.r.createSkillVersionPending(skill,{...edit,criterionVersionId:definition!.id},{projectId:f.projectId})).criterionVersionId).toBe(definition!.id);
  await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());expect(await restarted.repository.getSkillVersion(f.projectId,versions[0]!.id)).toEqual(versions[0]);
-});
+}, 20_000); // Two runtimes and a restart; about 1s alone, slower under parallel CI contention.
 it('signs off once with atomic audit and refuses unavailable providers before persistence',async()=>{
  const f=await fixture(),skill=(await f.r.getSkillVersion(f.projectId,f.versionId))!.skillId;
  f.db.exec("CREATE TRIGGER reject_signoff BEFORE INSERT ON audit_logs WHEN NEW.action='skill_version.signoff' BEGIN SELECT RAISE(ABORT,'injected'); END");

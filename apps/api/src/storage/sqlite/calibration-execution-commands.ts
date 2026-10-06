@@ -1,4 +1,6 @@
 import {authorizeLifecycleExecution} from './lifecycle-authorization.js';
+import {EvaluatorLifecycleRepositoryError} from '../../evaluator-lifecycle/repository.js';
+import {GovernedReviewNotFoundError} from '../../governed-review/errors.js';
 import {randomBytes} from 'node:crypto';
 import type {DatabaseSync,SQLInputValue} from 'node:sqlite';
 import {type EvaluatorIdentity} from '@rubrist/shared';
@@ -18,6 +20,12 @@ function pinned(c:SqliteCommandContext,run:RunRow){
  const row=c.db.prepare('SELECT * FROM skill_versions WHERE id=? AND project_id=?').get(run.skill_version_id,run.project_id);if(!row)return null;
  try{const version=sqliteSkillVersion(row),identity=evaluatorIdentityFor(version);if(canonicalJson(identity.executionBinding)!==canonicalJson(JSON.parse(String(run.execution_binding)))||sha256Digest(identity.executionBinding)!==run.requested_binding_digest||skillDigestInput(identity).definitionDigest!==run.definition_digest)return null;return {version,identity};}catch{return null;}
 }
+/** PostgreSQL maps every lifecycle refusal of this exact authorization to `ineligible`; so does SQLite. */
+const lifecycleRefusals={execution_forbidden:'binary calibration identity or invariant is ineligible',not_found:'binary calibration evaluator version is unavailable',idempotency_conflict:'binary calibration execution authorization replay does not match'} as Record<string,string>;
+export function authorizeCalibrationLifecycle(c:SqliteCommandContext,run:RunRow){
+ try{authorizeLifecycleExecution(c,{projectId:run.project_id,skillVersionId:run.skill_version_id,context:'binary_calibration_evidence',resourceKind:'binary_calibration_run',resourceId:run.id,idempotencyKey:`provider-start:binary-calibration:${run.id}:${run.skill_version_id}`},stableId('eauth',run.id,'binary_calibration_evidence'));}
+ catch(error){if(error instanceof EvaluatorLifecycleRepositoryError)throw repoError('ineligible',lifecycleRefusals[error.code]??'binary calibration identity or invariant is ineligible');throw error;}
+}
 function authorized(c:SqliteCommandContext,claim:BinaryCalibrationExecutionClaim):BinaryCalibrationAuthorizedRun{
  const run=requireCalibrationClaim(c,claim);lease(c,run);const pin=pinned(c,run);if(!pin)throw repoError('state_conflict','binary calibration evaluator version no longer holds the identity its run pinned');
  const check=c.db.prepare("SELECT * FROM binary_calibration_exposure_checks WHERE id=? AND run_id=? AND phase='authorization'").get(String(run.authorization_check_id),run.id);if(!check)throw repoError('state_conflict','binary calibration authorization claim is stale');
@@ -28,9 +36,10 @@ export function sqliteCalibrationExecutionCommands(db:DatabaseSync,clock=Date.no
  initializeGovernedCapabilityValidator(db);initializeCalibrationValidator(db);
  return {
   authorizeRun(claim:BinaryCalibrationExecutionClaim):BinaryCalibrationAuthorizedRun{
-   const result=sqliteCommand(db,c=>{
-    const run=requireCalibrationClaim(c,claim),key=`provider-start:binary-calibration:${run.id}:${run.skill_version_id}`;
-    authorizeLifecycleExecution(c,{projectId:run.project_id,skillVersionId:run.skill_version_id,context:'binary_calibration_evidence',resourceKind:'binary_calibration_run',resourceId:run.id,idempotencyKey:key},stableId('eauth',run.id,'binary_calibration_evidence'));
+   let result:BinaryCalibrationAuthorizedRun|BinaryCalibrationRepositoryError;
+   try{result=sqliteCommand(db,c=>{
+    const run=requireCalibrationClaim(c,claim);
+    authorizeCalibrationLifecycle(c,run);
     if(run.authorization_check_id)return authorized(c,claim);
     const reject=(reason:string)=>{c.db.prepare("UPDATE binary_calibration_runs SET state='rejected',rejection_reason=?,completed_at=?,claim_worker_id=NULL,claim_token=NULL,claim_expires_at=NULL WHERE id=?").run(reason,c.timestamp,run.id);return repoError('ineligible','sealed calibration authorization was rejected');};
     if(!pinned(c,run))return reject('evaluator_version_changed');
@@ -47,7 +56,7 @@ export function sqliteCalibrationExecutionCommands(db:DatabaseSync,clock=Date.no
     c.db.prepare('UPDATE binary_calibration_runs SET authorization_check_id=?,started_at=? WHERE id=?').run(check.id,c.timestamp,run.id);
     insert(c,'binary_calibration_authorization_finalizations',{run_id:run.id,project_id:run.project_id,command_token:c.token});
     return authorized(c,claim);
-   },clock);
+   },clock);}catch(error){if(error instanceof GovernedReviewNotFoundError)throw repoError('ineligible','content-exposed subject is outside the calibration project');throw error;}
    // Rejection evidence must commit before the typed failure reaches the caller.
    if(result instanceof BinaryCalibrationRepositoryError)throw result;return result;
   },

@@ -13,9 +13,12 @@ export function sqlitePopulationCommands(db:DatabaseSync){
  function limit(value:number){if(!Number.isSafeInteger(value)||value<1||value>1000)throw new AnalysisPopulationRepositoryError('analysis_population_invalid_cursor','Invalid population page limit');return value;}
  function write<T>(fn:Parameters<typeof sqliteCommand<T>>[1]):T{try{return sqliteCommand(db,fn);}catch(error){
   if(error instanceof AnalysisPopulationRepositoryError)throw error;
-  const message=error instanceof Error?error.message:String(error),code=(error as {code?:string})?.code;
-  if(code==='ERR_SQLITE_ERROR'&&/busy|locked/i.test(message))throw new AnalysisPopulationRepositoryError('analysis_population_state_conflict','Analysis population serialization conflict; retry the same idempotency key');
-  if(code==='ERR_SQLITE_ERROR')throw new AnalysisPopulationRepositoryError('analysis_population_revision_conflict',message.slice(0,2000));throw error;
+  // Map only busy/locked and constraint/guard failures, as PostgreSQL maps
+  // only serialization and 23514/23503/55000. I/O, corruption and other
+  // engine errors stay unmapped server errors with no client-facing message.
+  const message=error instanceof Error?error.message:String(error),code=(error as {code?:string})?.code,primary=(Number((error as {errcode?:number})?.errcode)||0)&255;
+  if(code==='ERR_SQLITE_ERROR'&&(primary===5||primary===6))throw new AnalysisPopulationRepositoryError('analysis_population_state_conflict','Analysis population serialization conflict; retry the same idempotency key');
+  if(code==='ERR_SQLITE_ERROR'&&primary===19)throw new AnalysisPopulationRepositoryError('analysis_population_revision_conflict',message.slice(0,2000));throw error;
  }}
  const commands={
   populationCreate(...[actor,input]:Args<'createPopulation'>){return write(context=>{const created=buildSqlitePopulation(db,context,actor,input);return AnalysisPopulationCreateResultSchema.parse({...summary(actor.projectId,created.populationId),reusedPopulation:created.reused,reusedDraw:created.reused});});},
