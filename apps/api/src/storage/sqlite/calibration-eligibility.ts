@@ -275,4 +275,3 @@ export function snapshotRecord(
     recordedAt
   };
 }
-

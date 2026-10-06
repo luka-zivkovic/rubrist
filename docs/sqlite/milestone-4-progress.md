@@ -530,3 +530,16 @@ checks matching PostgreSQL. Independent review approved 25 focused calibration
 and governed-capability tests, including replay, competing evaluators, rollback,
 restart and erasure; API typechecking passes. Terminal mint, public repository
 wiring, lifecycle and measurement remain unfinished.
+
+CURRENT calibration mint checkpoint: migration 0061 commits completion checks,
+public artifact bytes, the private ledger, terminal run state and lease release
+as one bundle. Its scoped read-only finalizer reconstructs public/private bytes
+from retained run/attempt facts and authorization/completion metadata. Snapshot
+semantic construction still follows the PostgreSQL application boundary.
+Artifact lineage columns and completion event IDs must agree with public bytes.
+Explicit revocations and later development exposure change current admissibility
+without rewriting immutable evidence; there is no new revocation write API.
+Independent review approved the bounded mint slice after correcting those two
+metadata/reference checks. Five focused mint tests cover backup/restart, unknown
+outcomes, complete rollback, current revocation and forged bytes with recomputed
+digests. Runtime/public wiring and governed evaluator lifecycle remain pending.
