@@ -504,3 +504,15 @@ attempt-accounting and artifact/run projection helpers were extracted without
 changing any function body or PostgreSQL query. Independent review verified
 29 declarations and 30/30 real PostgreSQL/contract/integration tests with mocked
 providers. This does not yet enable SQLite calibration.
+
+CURRENT calibration control checkpoint: migrations 0058–0059 retain queued run
+identity, exact sealed truth and immutable suite-member pins, durable worker
+claims, claim takeover, heartbeat, recovery and pre-authorization rejection.
+Clock-sensitive reads and recheck timestamps use the serialized command clock.
+SQLite suite members come from the exact retained manifest BLOB. Independent
+review approved seven focused tests, including two-connection takeover,
+backwards host time, stale claims, tenant boundaries, replay, direct-SQL
+initialization guards and project erasure. It verified all 42 PostgreSQL pinned
+identity columns remain immutable. These are internal controls: provider
+dispatch, final-validation checks and terminal evidence are still staged; no
+calibration HTTP/RPC surface is enabled yet.
