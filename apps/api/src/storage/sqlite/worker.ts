@@ -1,3 +1,6 @@
+import { sqliteDiagnostic } from './diagnostics.js';
+import { acquireSqliteInstance } from './instance-lock.js';
+import { sqliteCommand } from './command-context.js';
 import { parentPort, workerData } from 'node:worker_threads';
 import { migrateSqlite, openSqlite } from '@rubrist/db/sqlite';
 import { createAuth } from '../../lib/auth.js';
@@ -8,13 +11,19 @@ import { sqliteCommands } from './commands.js';
 const port = parentPort!;
 // All messages (including async authentication) run in order. Domain commands
 // cannot enter the auth driver's open transaction or block its completion.
-const migration = openSqlite(workerData.path);
-try { migrateSqlite(migration); } finally { if (migration.isOpen) migration.close(); }
-const domain = openSqlite(workerData.path);
-const authentication = openSqlite(workerData.path);
-const auth = createAuth(authentication);
-const commands = sqliteCommands(domain,{seedStarterEvaluators:workerData.seedStarterEvaluators});
-if(workerData.seedStarterEvaluators)seedExistingSqliteStarterEvaluators(domain);
+const {domain, authentication, auth, commands, instance} = (() => {
+  try {
+    const instance = workerData.exclusiveInstance ? acquireSqliteInstance(workerData.path,process.env.RUBRIST_REQUIRE_PERSISTENT_MOUNT==='1') : null;
+    const migration = openSqlite(workerData.path);
+    try { migrateSqlite(migration); } finally { if (migration.isOpen) migration.close(); }
+    const domain = openSqlite(workerData.path);
+    const authentication = openSqlite(workerData.path);
+    const auth = createAuth(authentication);
+    const commands = sqliteCommands(domain,{seedStarterEvaluators:workerData.seedStarterEvaluators});
+    if(workerData.seedStarterEvaluators)seedExistingSqliteStarterEvaluators(domain);
+    return {domain, authentication, auth, commands, instance};
+  } catch (error) { throw new Error(sqliteDiagnostic(error)); }
+})();
 let pending = Promise.resolve();
 port.postMessage({ ready: true });
 port.on('message', (message) => {
@@ -22,8 +31,10 @@ port.on('message', (message) => {
     try {
       let result: unknown;
       if (message.kind === 'close') {
-        authentication.close(); domain.close();
+        authentication.close(); domain.close(); instance?.close();
         port.postMessage({id:message.id,result:null}); port.close(); return;
+      } else if (message.kind === 'probe') {
+        result = sqliteCommand(domain, () => true);
       } else if (message.kind === 'auth-handler') {
         const req = message.request;
         const response = await auth.handler(new Request(req.url,{method:req.method,headers:req.headers,...(req.body === null ? {} : {body:req.body})}));

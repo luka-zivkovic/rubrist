@@ -1,3 +1,4 @@
+import { ALL_QUEUES } from './index.js';
 import type { Queue, QueueJob, QueueJobState, QueueName, QueueSendOptions } from './index.js';
 
 export interface SqliteDelivery extends QueueJob<Record<string, unknown>> {
@@ -16,6 +17,7 @@ interface LocalDelivery { done: Promise<void>; expire(): void }
 
 export class SqliteQueue implements Queue {
   private running = false;
+  private readonly lastPoll = new Map<QueueName, number>();
   private generation = 0;
   private stopping: Promise<void> | undefined;
   private timer: NodeJS.Timeout | undefined;
@@ -36,6 +38,7 @@ export class SqliteQueue implements Queue {
   async start(): Promise<void> {
     if (this.stopping) throw new Error('SQLite queue is stopping');
     if (this.running) return;
+    this.lastPoll.clear();
     this.running = true;
     this.tick(++this.generation);
   }
@@ -63,6 +66,10 @@ export class SqliteQueue implements Queue {
         for (const jobs of this.active.values()) for (const job of jobs.values()) job.expire();
       }
     } finally { clearTimeout(timer); }
+  }
+  async isReady(): Promise<boolean> {
+    const now = Date.now();
+    return this.running && ALL_QUEUES.every(name => this.handlers.has(name) && now - (this.lastPoll.get(name) ?? 0) < 30_000);
   }
   async send<T extends object>(name: QueueName, data: T, options?: QueueSendOptions): Promise<string | null> {
     return this.store.send(name, data, options);
@@ -104,6 +111,7 @@ export class SqliteQueue implements Queue {
           void delivery.done.finally(()=>active.delete(job.token));
         }
       } catch (error) { console.error(`SQLite queue poll failed for ${name}; persisted jobs will be retried:`,error); }
+      finally { this.lastPoll.set(name, Date.now()); }
     }
   }
   private deliver(name: QueueName, job: SqliteDelivery, handler: (job: QueueJob<any>) => Promise<void>): LocalDelivery {

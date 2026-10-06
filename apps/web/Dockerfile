@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24-slim AS build
+FROM node:24.21.0-slim@sha256:b96009b6b18dc15ae52781abe71029198436d556149f441a11a44a706055c3a5 AS build
 WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate

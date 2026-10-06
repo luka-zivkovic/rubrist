@@ -1,3 +1,4 @@
+import { createReadiness } from "./storage/readiness.js";
 import { serve } from "@hono/node-server";
 import { runMigrations } from "@rubrist/db";
 import { createQueue } from "@rubrist/queue";
@@ -33,7 +34,10 @@ import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const config = storageConfig();
-const sqlite = config.kind === "sqlite" ? await createSqliteRuntime(config.path) : null;
+const sqlite = config.kind === "sqlite" ? await createSqliteRuntime(config.path,undefined,{exclusiveInstance:true,onFailure:()=>{
+  console.error('rubrist.storage.fatal: SQLite worker stopped unexpectedly; exiting for durable recovery.');
+  process.exit(1);
+}}) : null;
 const pool = config.kind === "postgres" ? createPgPool(config.url) : null;
 
 if (pool) {
@@ -122,9 +126,16 @@ if (queue) {
   }));
 }
 
+const readiness = createReadiness(async () => {
+  if (config.kind === 'demo') return true;
+  if (sqlite) await sqlite.storage.probe();
+  else if (pool) await pool.query('SELECT 1');
+  return await queue?.isReady?.() === true;
+});
 const server = serve({
   fetch: createApp(repository, {
     auth,
+    readiness: readiness.check,
     runtimeMode: config.kind === "demo" ? "demo" : "persistent",
     ...(sqlite ? {accounts:sqlite.accounts,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
@@ -144,6 +155,7 @@ const server = serve({
 console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  readiness.stop();
   console.log(`Received ${signal}; shutting down Rubrist API`);
   const forceExit = setTimeout(() => {
     console.error("Timed out while shutting down Rubrist API; forcing exit");
@@ -152,9 +164,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   forceExit.unref();
 
   try {
-    await Promise.all(pollers.map((poller) => poller.stop()));
-    await closeServer();
-    await queue?.stop();
+    await Promise.all([closeServer(), queue?.stop(), ...pollers.map((poller) => poller.stop())]);
     await pool?.end();
     await sqlite?.close();
     clearTimeout(forceExit);

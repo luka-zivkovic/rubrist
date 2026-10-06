@@ -188,6 +188,7 @@ export function bootstrapRateLimitIdentity(c: Context): string {
 }
 
 export interface CreateAppOptions {
+  readiness?: (() => Promise<boolean>) | undefined;
   auth?: RubristAuth | undefined;
   pool?: Pool | undefined; // PostgreSQL composition compatibility only.
   accounts?: AccountServices | undefined;
@@ -280,6 +281,16 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     })
   );
 
+  app.get("/health", (c) => {
+    return c.json({ ok: true, service: "rubrist-api" });
+  });
+
+  app.get("/ready", async (c) => {
+    c.header("cache-control", "no-store");
+    const ready = options.readiness ? await options.readiness().catch(() => false) : !persistent;
+    return c.json({ ok: ready, service: "rubrist-api" }, ready ? 200 : 503);
+  });
+
   app.use("*", async (c, next) => {
     if (!persistent) {
       c.set("user", null);
@@ -295,9 +306,6 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     await next();
   });
 
-  app.get("/health", (c) => {
-    return c.json({ ok: true, service: "rubrist-api" });
-  });
 
   app.get("/api/auth/setup-required", async (c) => {
     if (!persistent) return c.json({ setupRequired: false, authEnabled: false });

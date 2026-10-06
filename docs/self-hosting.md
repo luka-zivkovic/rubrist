@@ -20,6 +20,15 @@
 - **ASSUMPTION:** the default stack runs on one Coolify server, exposes only
   the nginx `web` service through TLS, and keeps the API and Postgres private.
 
+## SQLite installation
+
+**CURRENT:** SQLite installation and recovery tooling is under Milestone 5
+qualification; it has not been released by this work. See
+[SQLite installation and recovery](sqlite-operations.md) for the separate
+SQLite template, installer, readiness, backup/restore and forward-only upgrade
+contract. The existing trustctl distribution remains PostgreSQL-only. The
+pre-launch PostgreSQL baseline/reset policy below does not reset SQLite history.
+
 ## Generic single-host bundle
 
 `deploy/self-host/compose.yaml` is the platform-neutral, release-owned bundle

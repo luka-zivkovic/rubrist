@@ -17,7 +17,7 @@ import type { RubristRepository } from '../../repository.js';
 import { SqliteStorage } from './client.js';
 
 export { SqliteFeatureUnavailableError } from './feature-error.js';
-export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
+export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean;onFailure?:()=>void;exclusiveInstance?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
   const evaluatorLifecycle:EvaluatorLifecycleRepository={

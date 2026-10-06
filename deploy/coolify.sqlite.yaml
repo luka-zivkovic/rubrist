@@ -23,16 +23,18 @@ services:
     image: ghcr.io/luka-zivkovic/rubrist-api:${RUBRIST_VERSION:?}
     environment:
       PORT: "8787"
-      RUBRIST_STORAGE: postgres
-      DATABASE_URL: postgresql://rubrist:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-rubrist}
+      RUBRIST_STORAGE: sqlite
+      RUBRIST_REQUIRE_PERSISTENT_MOUNT: "1"
+      RUBRIST_SQLITE_PATH: ${RUBRIST_SQLITE_PATH:-/var/lib/rubrist/rubrist.sqlite}
       BETTER_AUTH_SECRET: ${SERVICE_REALBASE64_64_AUTHSECRET}
       BETTER_AUTH_URL: ${SERVICE_URL_WEB}
       TRUSTED_ORIGINS: ${SERVICE_URL_WEB}
       RUBRIST_TRUST_PROXY: "1"
       RUBRIST_BOOTSTRAP_TOKEN: ${SERVICE_PASSWORD_64_BOOTSTRAP}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    stop_grace_period: 45s
+    volumes:
+      - rubrist_sqlite_data:/var/lib/rubrist
+      - rubrist_sqlite_backups:/var/lib/rubrist-backups
     healthcheck:
       test:
         [
@@ -46,19 +48,6 @@ services:
       timeout: 5s
       retries: 12
 
-  postgres:
-    image: postgres:17.11-alpine
-    environment:
-      POSTGRES_USER: rubrist
-      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
-      POSTGRES_DB: ${POSTGRES_DB:-rubrist}
-    volumes:
-      - rubrist_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
 volumes:
-  rubrist_postgres_data:
+  rubrist_sqlite_data:
+  rubrist_sqlite_backups:

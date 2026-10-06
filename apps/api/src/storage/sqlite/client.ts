@@ -20,14 +20,15 @@ export class SqliteStorage {
   private failure: Error | null = null;
   private readonly pending = new Map<number,{resolve:(value:any)=>void;reject:(error:Error)=>void}>();
   readonly ready: Promise<void>;
-  constructor(path: string, options:{seedStarterEvaluators?:boolean}={}) {
+  constructor(path: string, options:{seedStarterEvaluators?:boolean;onFailure?:()=>void;exclusiveInstance?:boolean}={}) {
     const source = import.meta.url.endsWith('.ts');
     this.worker = new Worker(new URL(source ? './worker.ts' : './worker.js',import.meta.url), {
-      workerData:{path,seedStarterEvaluators:options.seedStarterEvaluators??true}, ...(source ? {execArgv:['--import','tsx']} : {})
+      workerData:{path,exclusiveInstance:options.exclusiveInstance??false,seedStarterEvaluators:options.seedStarterEvaluators??true}, ...(source ? {execArgv:['--import','tsx']} : {})
     });
+    let initialized = false;
     this.ready = new Promise((resolve,reject) => {
       this.worker.on('message',message => {
-        if (message.ready) { resolve(); return; }
+        if (message.ready) { initialized=true; resolve(); return; }
         const caller = this.pending.get(message.id);
         if (!caller) return;
         this.pending.delete(message.id);
@@ -50,12 +51,14 @@ export class SqliteStorage {
         } else caller.resolve(reviveBytes(message.result));
       });
       const failed = (error: Error) => {
+        const firstFailure=!this.failure;
         this.failure=error; reject(error);
         for (const caller of this.pending.values()) caller.reject(error);
         this.pending.clear();
+        if(initialized && firstFailure && !this.closed) options.onFailure?.();
       };
       this.worker.on('error',failed);
-      this.worker.on('exit',code => { if (!this.closed || code !== 0) failed(new Error(`SQLite worker exited (${code})`)); });
+      this.worker.on('exit',code => { if (!this.closed) failed(new Error(`SQLite worker exited (${code})`)); });
     });
   }
   private async request(message: Record<string,unknown>): Promise<any> {
@@ -70,6 +73,7 @@ export class SqliteStorage {
   command<K extends keyof SqliteCommands>(name: K, ...args: Parameters<SqliteCommands[K]>): Promise<ReturnType<SqliteCommands[K]>> {
     return this.request({kind:'command',name,args});
   }
+  async probe(): Promise<void> { await this.request({kind:'probe'}); }
   auth(): RubristAuth {
     const api = Object.fromEntries(['getSession','signUpEmail','signInEmail'].map(name => [name,async (input: Record<string,unknown>) => {
       const result = await this.request({kind:'auth-api',name,input:{...input,...(input.headers ? {headers:[...new Headers(input.headers as ConstructorParameters<typeof Headers>[0])]}: {})}});
