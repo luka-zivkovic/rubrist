@@ -28,6 +28,7 @@ import { registerLangfuseImportWorker } from "./workers/langfuse-import.js";
 import { parseLangfusePollImportLimit, parseLangfusePollIntervalMs, registerLangfusePoller } from "./workers/langfuse-poller.js";
 import { registerLangSmithImportWorker } from "./workers/langsmith-import.js";
 import { parsePollImportLimit, parsePollIntervalMs, registerLangSmithPoller } from "./workers/langsmith-poller.js";
+import { stopScheduledTasks, type ScheduledTask } from "./workers/scheduled-tasks.js";
 import { bindingResolutionServices, recheckGovernedBinding } from "./lib/binding-resolution.js";
 import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
@@ -54,7 +55,7 @@ const analysisMeasurementRepository = pool ? new PgAnalysisMeasurementRepository
 const productionDecisionRecordRepository=sqlite?.productionRecords ?? (pool?new PgProductionDecisionRecordRepository(pool):null);
 const resolutionRepository=sqlite?.resolution ?? evaluatorLifecycleRepository;
 const queue = sqlite?.queue ?? (pool ? createQueue() : undefined);
-const pollers: Array<{ stop(): void | Promise<void> }> = [];
+const pollers: ScheduledTask[] = [];
 
 if (analysisStudyRepository) {
   pollers.push(await registerAnalysisStudyDeadlineCloser(analysisStudyRepository));
@@ -149,13 +150,13 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   forceExit.unref();
 
   try {
-    await Promise.all(pollers.map((poller) => poller.stop()));
+    const failedTasks = await stopScheduledTasks(pollers);
     await closeServer();
     await queue?.stop();
     await pool?.end();
     await sqlite?.close();
     clearTimeout(forceExit);
-    process.exit(0);
+    process.exit(failedTasks === 0 ? 0 : 1);
   } catch (error) {
     clearTimeout(forceExit);
     console.error("Failed to shut down Rubrist API cleanly", error);

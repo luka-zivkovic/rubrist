@@ -147,6 +147,7 @@ export type ProductionRecordRepositoryErrorCode =
   | "empty_batch"
   | "batch_too_large"
   | "invalid_record"
+  | "invalid_window"
   | "record_too_large"
   | "future_dated_record"
   | "conflicting_decision"

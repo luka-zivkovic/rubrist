@@ -54,7 +54,7 @@ describe('SQLite suites and comparison bindings',()=>{
     expect(await restarted.repository.getEvaluatorSuiteManifest('other',manifest.manifestId)).toBeNull();
     await restarted.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
     expect(f.db.prepare('SELECT count(*) n FROM evaluator_suite_manifests').get()?.n).toBe(0);
-  });
+  }, 30_000); // Concurrent runtimes, rollback sandboxes and a restart: ~2.7s alone, over 5s under contention.
   it('pins both comparisons to their exact versions, collection and tenant',async()=> {
     const f=await fixture(),dataset=await f.r.createDataset({projectId:f.projectId,name:'Compare'}),versions=f.members.map(member=>member.skillVersionId);
     const a=await f.r.createEvalRun({projectId:f.projectId,datasetId:dataset.id,skillVersionId:versions[0]!,trigger:'manual',items:[]});

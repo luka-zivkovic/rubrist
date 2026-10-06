@@ -83,3 +83,20 @@ it('orders microsecond outcomes independently of reverse arrival and timezone no
  expect(joinProductionDecisionRecords(loaded.records)[0]?.outcomes.is_flaky?.value).toBe(true);
  expect(f.db.prepare("SELECT record_at FROM production_decision_records WHERE kind='outcome' ORDER BY record_at").all().map(r=>r.record_at)).toEqual(['2026-09-20T11:00:00.000100Z','2026-09-20T11:00:00.000200Z']);
 });
+it('accepts the shared minute-precision and offset timestamp contract and types invalid repository times',async()=>{
+ const f=await fixture(),input={projectId:f.projectId,submitter:{kind:'user' as const,userId:f.user.id}};
+ expect(await f.p.appendRecords({...input,records:[decision('minute',0.8,'2026-09-20T10:00Z'),outcome('minute','2026-09-20T13:00+02:00')]})).toMatchObject({inserted:{decisions:1,outcomes:1}});
+ expect(f.db.prepare('SELECT record_at FROM production_decision_records ORDER BY record_at').all().map(r=>r.record_at)).toEqual(['2026-09-20T10:00:00.000000Z','2026-09-20T11:00:00.000000Z']);
+ const loaded=await f.p.loadRecords({projectId:f.projectId,window:{from:new Date('2026-09-20T10:00Z'),to:new Date('2026-09-20T12:00+01:00')},maxRecords:10});
+ expect(loaded.records.map(r=>r.at)).toEqual(['2026-09-20T10:00Z','2026-09-20T13:00+02:00']);
+ // Bypass the HTTP schema: the repository still answers with typed errors.
+ for(const at of ['2026-09-20T10:00+0200','2026-02-30T10:00Z','2026-09-20T10:00:00.Z'])
+  await expect(f.p.appendRecords({...input,records:[decision('valid'),decision('bad',0.8,at)]})).rejects.toMatchObject({name:'ProductionRecordRepositoryError',code:'invalid_record',details:{line:2}});
+ await expect(f.p.loadRecords({projectId:f.projectId,window:{from:new Date('invalid'),to:null},maxRecords:10})).rejects.toMatchObject({name:'ProductionRecordRepositoryError',code:'invalid_window',details:{bound:'from'}});
+ const artifact=buildProductionCalibrationArtifact(loaded.records,{now:new Date('2026-09-21T00:00Z'),window:{from:new Date('2026-09-20T10:00Z'),to:new Date('2026-09-20T11:00Z')}});
+ const minuteArtifact={...artifact,window:{from:'2026-09-20T10:00Z',to:'2026-09-20T13:00+02:00'}},snapshot={projectId:f.projectId,userId:f.user.id,parameters:{},recordCount:2,recordSetDigest:loaded.recordSetDigest};
+ const saved=await f.p.saveSnapshot({...snapshot,artifact:minuteArtifact});
+ expect(saved.window).toEqual({from:'2026-09-20T10:00:00.000Z',to:'2026-09-20T11:00:00.000Z'});expect(await f.p.getSnapshot(f.projectId,saved.id)).toEqual({snapshot:saved,artifact:minuteArtifact});
+ await expect(f.p.saveSnapshot({...snapshot,artifact:{...artifact,window:{from:artifact.window.from,to:'2026-09-20T11:00+0100'}}})).rejects.toMatchObject({name:'ProductionRecordRepositoryError',code:'invalid_window',details:{bound:'to'}});
+ expect(await f.p.listSnapshots(f.projectId)).toHaveLength(1);
+});
