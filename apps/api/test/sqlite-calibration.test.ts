@@ -31,7 +31,7 @@ it('enforces the native database lineage, byte digest and staged execution bound
  const reordered=JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(String(original.execution_binding))).reverse()));
  // Semantic equality reaches the later active-run uniqueness check.
  expect(()=>insert({execution_binding:reordered})).toThrow(/UNIQUE constraint failed: binary_calibration_runs.dataset_revision_id, binary_calibration_runs.skill_version_id/);
- expect(()=>sqliteCommand(f.db,c=>c.db.prepare("UPDATE binary_calibration_runs SET started_at='2026-10-06T00:00:00.000Z' WHERE id=?").run(run.runId))).toThrow(/complete owning commands/);
+ expect(()=>sqliteCommand(f.db,c=>c.db.prepare("UPDATE binary_calibration_runs SET started_at='2026-10-06T00:00:00.000Z' WHERE id=?").run(run.runId))).toThrow(/calibration authorization/);
  expect(()=>f.db.prepare('DELETE FROM binary_calibration_runs WHERE id=?').run(run.runId)).toThrow(/project erasure/);
  await f.runtime.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
  expect(f.db.prepare('SELECT * FROM binary_calibration_runs').all()).toEqual([]);

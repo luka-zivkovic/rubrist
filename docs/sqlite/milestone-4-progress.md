@@ -516,3 +516,17 @@ initialization guards and project erasure. It verified all 42 PostgreSQL pinned
 identity columns remain immutable. These are internal controls: provider
 dispatch, final-validation checks and terminal evidence are still staged; no
 calibration HTTP/RPC surface is enabled yet.
+
+CURRENT calibration authorization checkpoint: migration 0060 enables native
+final-validation checks, a single active revision lease, exact governed attempt
+seeding, durable provider-call starts and terminal attempt accounting. An
+ineligible authorization commits its capability checks and rejected run before
+returning the typed error. An interrupted started call is accounted as
+`outcome_unknown`, never returned as fresh work. Deferred authorization claims
+require the complete bundle and prevent additional attempts after finalization.
+Development exposure is blocked while the lease is held. Snapshot semantics
+are constructed by the application, with database byte-digest and ownership
+checks matching PostgreSQL. Independent review approved 25 focused calibration
+and governed-capability tests, including replay, competing evaluators, rollback,
+restart and erasure; API typechecking passes. Terminal mint, public repository
+wiring, lifecycle and measurement remain unfinished.

@@ -1,3 +1,4 @@
+import {initializeCalibrationValidator} from './calibration-validator.js';
 import {sqlitePromotionCommands} from './promotion-commands.js';
 import { sqliteGovernedCommands } from './governed-commands.js';
 import { sqliteStudyCommands } from './study-commands.js';
@@ -50,6 +51,7 @@ const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 
 export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
   initializeSqliteCommandContext(db);
+  initializeCalibrationValidator(db);
   initializePopulationFrameValidator(db);
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
