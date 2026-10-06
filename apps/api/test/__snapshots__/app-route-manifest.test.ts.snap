@@ -4,8 +4,9 @@ exports[`app route registration contract > pins readable demo and auth-enabled r
 [
   "ALL /*",
   "ALL /*",
-  "ALL /*",
   "GET /health",
+  "GET /ready",
+  "ALL /*",
   "GET /api/auth/setup-required",
   "POST /api/auth/setup",
   "POST /api/auth/redeem-invite",
@@ -255,8 +256,9 @@ exports[`app route registration contract > pins readable demo and auth-enabled r
 [
   "ALL /*",
   "ALL /*",
-  "ALL /*",
   "GET /health",
+  "GET /ready",
+  "ALL /*",
   "GET /api/auth/setup-required",
   "POST /api/auth/setup",
   "POST /api/auth/redeem-invite",

@@ -14,8 +14,9 @@ const root=mkdtempSync(join(tmpdir(),'rubrist-deployment-')),first=join(root,'fi
 const owned=[],helpers=[];
 const port=await new Promise((resolve,reject)=>{const server=createServer();server.on('error',reject);server.listen(0,'127.0.0.1',()=>{const port=server.address().port;server.close(error=>error?reject(error):resolve(port));});});
 const origin=`http://127.0.0.1:${port}`;
-function run(command,args,cwd){try{return execFileSync(command,args,{cwd,encoding:'utf8',timeout:900_000,stdio:['ignore','pipe','pipe']}).trim();}catch(error){throw Error(`${command} ${args[0]} failed: ${error.stderr?.toString()??error.message}`);}}
-function compose(directory,...args){return run('docker',['compose',...args],directory);}
+const environment=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^COMPOSE_|^RUBRIST_|^(DATABASE_URL|BETTER_AUTH_SECRET)$/.test(key)));
+function run(command,args,cwd){try{return execFileSync(command,args,{cwd,env:environment,encoding:'utf8',timeout:900_000,stdio:['ignore','pipe','pipe']}).trim();}catch(error){throw Error(`${command} ${args[0]} failed: ${error.stderr?.toString()??error.message}`);}}
+function compose(directory,...args){const project=/^COMPOSE_PROJECT_NAME=(rubrist-[a-f0-9]{16})$/m.exec(readFileSync(join(directory,'.env'),'utf8'))?.[1];if(!project)throw Error('Missing generated disposable project name');return run('docker',['compose','--project-name',project,'--env-file',join(directory,'.env'),'--file',join(directory,'compose.yaml'),'--file',join(directory,'compose.override.yaml'),...args],directory);}
 function configure(directory,image){writeFileSync(join(directory,'compose.override.yaml'),`services:\n  api:\n    image: ${JSON.stringify(image)}\n    pull_policy: never\n  web:\n    image: ${JSON.stringify(webImage)}\n    pull_policy: never\n    ports: !override\n      - '127.0.0.1:${port}:80'\n`);}
 function endpoint(){return origin;}
 const smoke=fileURLToPath(new URL('./deployment-smoke.mjs',import.meta.url));

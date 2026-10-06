@@ -37,11 +37,11 @@ describe("app route registration contract", () => {
     const authenticated = routeManifest({ auth: fakeAuth, accounts:createPgAccountServices({} as Pool) });
     const authenticatedWithPool = routeManifest({ auth: fakeAuth, pool: {} as Pool });
 
-    expect(demo).toHaveLength(244);
+    expect(demo).toHaveLength(245);
     // This snapshot intentionally follows Hono's route registry. A Hono upgrade
     // must show reviewers the complete ordered route-table diff, not a new hash.
     expect(demo).toMatchSnapshot("demo route manifest");
-    expect(authenticated).toHaveLength(246);
+    expect(authenticated).toHaveLength(247);
     expect(authenticated).toMatchSnapshot("authenticated route manifest");
     // Legacy PG composition and injected accounts register the same routes.
     // Real auth behavior is characterized in pg-auth.test.ts.
@@ -50,11 +50,12 @@ describe("app route registration contract", () => {
 
   it("keeps public routes, body limits, auth, and project resolution in fail-closed order", () => {
     const routes = routeManifest({ auth: fakeAuth, accounts:createPgAccountServices({} as Pool) });
-    expect(routes.slice(0, 18)).toEqual([
-      "ALL /*",
+    expect(routes.slice(0, 19)).toEqual([
       "ALL /*",
       "ALL /*",
       "GET /health",
+      "GET /ready",
+      "ALL /*",
       "GET /api/auth/setup-required",
       "POST /api/auth/setup",
       "POST /api/auth/redeem-invite",
