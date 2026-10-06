@@ -1,7 +1,7 @@
 # Milestone 5: installation and operations
 
-**CURRENT (2026-10-06):** implementation and focused independent audits pass;
-full regression, container upgrade drill and PR checks are still running. This
+**CURRENT (2026-10-06):** implementation, independent audits and complete local
+qualification pass. PR CI and Copilot review remain pending. This
 is not a published release or an authorization to deploy an existing installation.
 
 The two fixed templates select PostgreSQL or SQLite for all state. SQLite has
@@ -65,8 +65,19 @@ CURRENT focused evidence:
 - Disposable SQLite containers, PostgreSQL absent: first owner, session login,
   harness API key, mock evaluation, exact receipt retrieval; restart and fresh
   volume restore preserve the same session, key and receipt bytes.
-- API typecheck, repository boundary guard and diff checks pass. Full-suite,
-  final container and release validation will be recorded before the PR opens.
+- Final pinned image `56cd8d2c915d`: PostgreSQL installation/restart/replacement
+  passed; SQLite installation/restart/replacement/backup/fresh-volume restore,
+  newer-schema refusal, synthetic predecessor upgrade and old-backup rollback
+  passed. Both smoke scripts also passed with deliberately conflicting parent
+  Compose settings; explicit project/files and a filtered environment isolate
+  every operation and cleanup to disposable resources.
+- Workspace typecheck, complete build, shared contracts, repository boundaries,
+  57/57 tooling tests and diff checks pass. The large-file report exits cleanly
+  but identifies four pre-existing unclassified files; classification is tracked
+  in Milestone 6. Full regression first passed 2,842 tests with two stale route
+  snapshot failures; the corrected public-health/readiness ordering passes its
+  independent 4/4 rerun. The final clean full suite passed **2,844/2,844 tests
+  in 361 files, zero skips, plus 57/57 tooling tests**.
 
 The generic installer is also embedded in the exact API image. Host Node is an
 optional source-checkout path. The full container smoke script owns only fresh
