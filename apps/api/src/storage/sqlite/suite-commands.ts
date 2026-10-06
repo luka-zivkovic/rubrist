@@ -12,7 +12,7 @@ type Args<K extends keyof RubristRepository> = Parameters<RubristRepository[K]>;
 export function sqliteSuiteCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db),definitions=sqliteDefinitionCommands(db);
   function member(projectId:string,criterionVersionId:string,skillVersionId:string) {
-    const row=one(`SELECT cv.* FROM criterion_versions cv JOIN criteria c ON c.project_id=cv.project_id AND c.id=cv.criterion_id JOIN skills s ON s.project_id=c.project_id AND s.criterion_id=c.id JOIN skill_versions v ON v.project_id=s.project_id AND v.skill_id=s.id AND v.criterion_version_id=cv.id WHERE cv.project_id=? AND cv.id=? AND v.id=? AND c.source_kind='native'`,projectId,criterionVersionId,skillVersionId);
+    const row=one(`SELECT cv.* FROM criterion_versions cv JOIN criteria c ON c.project_id=cv.project_id AND c.id=cv.criterion_id JOIN skills s ON s.project_id=c.project_id AND s.criterion_id=c.id JOIN skill_versions v ON v.project_id=s.project_id AND v.skill_id=s.id AND v.criterion_version_id=cv.id WHERE cv.project_id=? AND cv.id=? AND v.id=? AND EXISTS(SELECT 1 FROM evaluator_lifecycle_contexts lc WHERE lc.project_id=v.project_id AND lc.skill_version_id=v.id AND lc.implicit_allowed=1)`,projectId,criterionVersionId,skillVersionId);
     const version=definitions.getSkillVersion(projectId,skillVersionId),evaluator=version?suiteMemberEvaluator(version):null;
     if(!row||!evaluator) throw new EvaluatorSuiteBindingError('Suite member must bind the exact criterion/evaluator version and authorized lifecycle');
     return {criterionId:String(row.criterion_id),criterionVersionId:String(row.id),criterionName:String(row.name),criterionDefinition:String(row.definition),...evaluator};

@@ -1,9 +1,9 @@
+import {authorizeLifecycleExecution} from './lifecycle-authorization.js';
 import {randomBytes} from 'node:crypto';
 import type {DatabaseSync,SQLInputValue} from 'node:sqlite';
-import {EVALUATOR_EXECUTION_AUTHORIZATION_VERSION,type EvaluatorIdentity} from '@rubrist/shared';
+import {type EvaluatorIdentity} from '@rubrist/shared';
 import {BinaryCalibrationRepositoryError,type BinaryCalibrationExecutionClaim,type BinaryCalibrationAuthorizedRun,type CompleteBinaryCalibrationAttemptInput} from '../../binary-calibration/repository.js';
 import {stableId,repoError,validateAttemptCompletion,attemptColumnsFor,type RunRow} from '../../binary-calibration/storage-values.js';
-import {evaluatorExecutionAuthorizationDigest} from '../../lib/evaluator-lifecycle.js';
 import {canonicalJson,sha256Digest} from '../../lib/canonical-json.js';
 import {evaluatorIdentityFor,skillDigestInput} from '../../lib/evaluator-identity.js';
 import {sqliteSkillVersion} from './definition-commands.js';
@@ -30,9 +30,7 @@ export function sqliteCalibrationExecutionCommands(db:DatabaseSync,clock=Date.no
   authorizeRun(claim:BinaryCalibrationExecutionClaim):BinaryCalibrationAuthorizedRun{
    const result=sqliteCommand(db,c=>{
     const run=requireCalibrationClaim(c,claim),key=`provider-start:binary-calibration:${run.id}:${run.skill_version_id}`;
-    const basis={projectId:run.project_id,skillVersionId:run.skill_version_id,context:'binary_calibration_evidence' as const,lifecycleEventId:null,calibrationArtifactId:null,resourceKind:'binary_calibration_run',resourceId:run.id},digest=evaluatorExecutionAuthorizationDigest(basis);
-    c.db.prepare('INSERT INTO evaluator_execution_authorizations VALUES(?,?,?,?,?,NULL,NULL,?,?,?,?,?) ON CONFLICT(project_id,idempotency_key) DO NOTHING').run(stableId('eauth',run.id,basis.context),EVALUATOR_EXECUTION_AUTHORIZATION_VERSION,run.project_id,run.skill_version_id,basis.context,basis.resourceKind,basis.resourceId,key,digest,c.milliseconds);
-    if(c.db.prepare('SELECT content_digest FROM evaluator_execution_authorizations WHERE project_id=? AND idempotency_key=?').get(run.project_id,key)?.content_digest!==digest)throw repoError('state_conflict','binary calibration authorization identity changed');
+    authorizeLifecycleExecution(c,{projectId:run.project_id,skillVersionId:run.skill_version_id,context:'binary_calibration_evidence',resourceKind:'binary_calibration_run',resourceId:run.id,idempotencyKey:key},stableId('eauth',run.id,'binary_calibration_evidence'));
     if(run.authorization_check_id)return authorized(c,claim);
     const reject=(reason:string)=>{c.db.prepare("UPDATE binary_calibration_runs SET state='rejected',rejection_reason=?,completed_at=?,claim_worker_id=NULL,claim_token=NULL,claim_expires_at=NULL WHERE id=?").run(reason,c.timestamp,run.id);return repoError('ineligible','sealed calibration authorization was rejected');};
     if(!pinned(c,run))return reject('evaluator_version_changed');

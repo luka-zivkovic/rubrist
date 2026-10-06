@@ -1,3 +1,4 @@
+import {EvaluatorLifecycleRepositoryError} from '../../evaluator-lifecycle/repository.js';
 import {BinaryCalibrationRepositoryError} from '../../binary-calibration/repository.js';
 import {AnalysisPromotionRepositoryError} from '../../analysis-promotion/repository.js';
 import { GovernedReviewDomainError } from '../../governed-review/errors.js';
@@ -42,6 +43,7 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
   }
+  if(value instanceof EvaluatorLifecycleRepositoryError){result.code=value.code;result.details=Object.fromEntries(['modelId','alias','rule','problems','providerMessage','suggestion'].flatMap(key=>{const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];}));}
   if(value instanceof BinaryCalibrationRepositoryError)result.code=value.code;
   if(value instanceof AnalysisPromotionRepositoryError){result.code=value.code;result.details={};}
   if(value instanceof AnalysisStudyRepositoryError){

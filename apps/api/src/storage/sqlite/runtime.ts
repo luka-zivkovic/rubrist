@@ -19,6 +19,12 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const evaluatorLifecycle:EvaluatorLifecycleRepository={
+    createCandidate:(...args)=>storage.command('lifecycleCreate',...args),candidateExists:(...args)=>storage.command('lifecycleCandidateExists',...args),
+    getLifecycle:(...args)=>storage.command('lifecycleGet',...args),listLifecycles:(...args)=>storage.command('lifecycleList',...args),
+    getGovernedBinding:(...args)=>storage.command('lifecycleBinding',...args),recordResolution:(...args)=>storage.command('lifecycleResolution',...args),
+    authorizeExecution:(...args)=>storage.command('lifecycleAuthorize',...args),activate:(...args)=>storage.command('lifecycleActivate',...args),retire:(...args)=>storage.command('lifecycleRetire',...args)
+  };
   const binaryCalibration:BinaryCalibrationControlRepository={
     createRun:(...args)=>storage.command('calibrationCreate',...args),
     listRuns:(...args)=>storage.command('calibrationList',...args),
@@ -330,5 +336,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,evaluatorLifecycle,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

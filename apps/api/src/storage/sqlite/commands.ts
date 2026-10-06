@@ -1,3 +1,5 @@
+import {sqliteLifecycleCommands} from './lifecycle-commands.js';
+import {initializeLifecycleValidator} from './lifecycle-validator.js';
 import {sqliteCalibrationCommands} from './calibration-commands.js';
 import {initializeCalibrationValidator} from './calibration-validator.js';
 import {sqlitePromotionCommands} from './promotion-commands.js';
@@ -53,6 +55,7 @@ const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
   initializeSqliteCommandContext(db);
   initializeCalibrationValidator(db);
+  initializeLifecycleValidator(db);
   initializePopulationFrameValidator(db);
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
@@ -228,7 +231,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteCalibrationCommands(db), ...sqlitePromotionCommands(db), ...sqliteGovernedCommands(db), ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqliteLifecycleCommands(db), ...sqliteCalibrationCommands(db), ...sqlitePromotionCommands(db), ...sqliteGovernedCommands(db), ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

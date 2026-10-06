@@ -68,7 +68,7 @@ describe('SQLite native evaluator definitions',()=>{
     expect(db.prepare('SELECT count(*) n FROM evaluator_execution_authorizations').get()?.n).toBe(1);
     // A promoted criterion must belong to its complete owning promotion command.
     expect(()=>db.prepare("INSERT INTO criteria VALUES('governed',?,'governed','analysis_promotion',NULL,?)").run(f.projectId,new Date().toISOString())).toThrow(/unfinalized owning promotion/);
-    expect(()=>commands.authorizeSkillVersionExecution({...auth,skillVersionId:'absent-governed-version',idempotencyKey:'governed'})).toThrow(/governed/);
+    expect(()=>commands.authorizeSkillVersionExecution({...auth,skillVersionId:'absent-governed-version',idempotencyKey:'governed'})).toThrow(/Evaluator version not found/);
     expect(db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
   });
   it('rejects forged digests and altered evaluator identity even through direct SQL',async()=>{

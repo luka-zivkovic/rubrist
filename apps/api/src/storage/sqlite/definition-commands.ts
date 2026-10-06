@@ -1,10 +1,11 @@
+import {authorizeLifecycleExecution} from './lifecycle-authorization.js';
 import { sqliteCommand } from './command-context.js';
 import { sqliteLimit } from './query-values.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import {
   CreateCriterionInputSchema, CreateCriterionVersionInputSchema, SkillVersionSchema,
-  CriterionSchema, CriterionVersionSchema, EVALUATOR_EXECUTION_AUTHORIZATION_VERSION,
+  CriterionSchema, CriterionVersionSchema,
   type Skill, type SkillVersion, type EvaluatorExecutionContext
 } from '@rubrist/shared';
 import type { RubristRepository } from '../../repository.js';
@@ -40,6 +41,7 @@ function definition(row: Row) {
     createdByUserId:row.created_by_user_id,createdAt:row.created_at});
 }
 
+const versionSelect=`SELECT v.*,CASE lc.state WHEN 'candidate' THEN 'calibrating' WHEN 'active' THEN 'production' WHEN 'needs_review' THEN 'needs_review' WHEN 'retired' THEN 'deprecated' ELSE v.status END status FROM skill_versions v LEFT JOIN evaluator_lifecycle_contexts lc ON lc.project_id=v.project_id AND lc.skill_version_id=v.id`;
 const initializedConnections=new WeakSet<DatabaseSync>();
 export function sqliteDefinitionCommands(db: DatabaseSync) {
   const one = (sql: string, ...args: SQLInputValue[]) => db.prepare(sql).get(...args) as Row | undefined;
@@ -92,11 +94,12 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
       const count=Number(one('SELECT count(*) n FROM criteria WHERE project_id=?',projectId)!.n);
       if(count>1) throw new AmbiguousProjectSkillError(projectId,count);
     }
-    const row=one(`SELECT s.*,u.name owner_name,sv.id version_id FROM skills s
+    const row=one(`SELECT s.*,u.name owner_name,sv.id version_id,CASE lc.state WHEN 'candidate' THEN 'calibrating' WHEN 'active' THEN 'production' WHEN 'needs_review' THEN 'needs_review' WHEN 'retired' THEN 'deprecated' ELSE s.status END status FROM skills s
       JOIN skill_versions sv ON sv.skill_id=s.id AND sv.project_id=s.project_id
       JOIN criteria c ON c.id=s.criterion_id AND c.project_id=s.project_id
+      JOIN evaluator_lifecycle_contexts lc ON lc.project_id=sv.project_id AND lc.skill_version_id=sv.id
       LEFT JOIN "user" u ON u.id=s.owner_user_id
-      WHERE s.project_id=? ${criterionId?'AND s.criterion_id=?':''} ${latest?'':"AND c.source_kind='native'"}
+      WHERE s.project_id=? ${criterionId?'AND s.criterion_id=?':''} ${latest?'':"AND lc.implicit_allowed=1"}
       ORDER BY ${latest?'':"CASE WHEN sv.status IN ('approved','production') THEN 0 WHEN sv.status IN ('regressing','failed','deprecated') THEN 2 ELSE 1 END,"}
       sv.created_at DESC,sv.id DESC LIMIT 1`,projectId,...(criterionId?[criterionId]:[]));
     if(!row) throw new NoCurrentSkillError(projectId);
@@ -137,7 +140,7 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
       });
     },
     getSkillVersion(projectId: string, versionId: string): SkillVersion | null {
-      const row=one('SELECT * FROM skill_versions WHERE project_id=? AND id=?',projectId,versionId);return row?sqliteSkillVersion(row):null;
+      const row=one(versionSelect+' WHERE v.project_id=? AND v.id=?',projectId,versionId);return row?sqliteSkillVersion(row):null;
     },
     getCriterionVersionForSkillVersion(projectId: string, versionId: string) {
       const row=one('SELECT cv.* FROM criterion_versions cv JOIN skill_versions sv ON sv.criterion_version_id=cv.id AND sv.project_id=cv.project_id WHERE sv.project_id=? AND sv.id=?',projectId,versionId);
@@ -147,15 +150,9 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
     getCurrentSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId),
     getLatestSkill: (projectId: string) => skill(projectId,undefined,true),
     getLatestSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId,true),
-    listSkillVersions: (projectId: string, skillId: string, limit=50) => all('SELECT * FROM skill_versions WHERE project_id=? AND skill_id=? ORDER BY created_at DESC,id DESC LIMIT ?',projectId,skillId,sqliteLimit(limit)).map(sqliteSkillVersion),
+    listSkillVersions: (projectId: string, skillId: string, limit=50) => all(versionSelect+' WHERE v.project_id=? AND v.skill_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT ?',projectId,skillId,sqliteLimit(limit)).map(sqliteSkillVersion),
     authorizeSkillVersionExecution(input: Args<'authorizeSkillVersionExecution'>[0]): void {
-      transaction(now=>{
-        const digest=evaluatorExecutionAuthorizationDigest({...input,lifecycleEventId:null,calibrationArtifactId:null});
-        run(`INSERT INTO evaluator_execution_authorizations VALUES(?,?,?,?,?,NULL,NULL,?,?,?,?,?)
-          ON CONFLICT(project_id,idempotency_key) DO NOTHING`,id('eauth'),EVALUATOR_EXECUTION_AUTHORIZATION_VERSION,input.projectId,input.skillVersionId,input.context,
-          input.resourceKind,input.resourceId,input.idempotencyKey,digest,now);
-        if(one('SELECT content_digest FROM evaluator_execution_authorizations WHERE project_id=? AND idempotency_key=?',input.projectId,input.idempotencyKey)?.content_digest!==digest) throw new Error('Execution authorization idempotency key was reused');
-      });
+      sqliteCommand(db,c=>authorizeLifecycleExecution(c,input));
     }
   };
   return commands;

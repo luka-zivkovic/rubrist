@@ -572,3 +572,36 @@ review approved both the storage and typed calibration tests (2/2); adjacent
 storage/typed coverage passes 24/24 and API typechecking passes. Lifecycle
 inserts remain staged until complete candidate bundles and all consumer guards
 are implemented together. This checkpoint does not enable governed evaluators.
+
+CURRENT candidate lifecycle checkpoint: migration 0063 enables complete
+analysis-promoted evaluator candidates. A deferred command claim binds the
+frozen nonsealed truth, byte-identical full regression copy, authored evaluator,
+resolution, developer exposure and immutable seed event. Per-item guards reject
+altered copies even with recomputed digests; finalization rejects missing parts
+and later same-command mutations. Existing native/imported/sealed freeze guards
+remain in force outside the exact claimed regression variant.
+
+CURRENT parity choices, checked with Claude Code against accepted ADRs: candidate
+regression revisions have no extra creation exposure, matching PostgreSQL.
+Payload TEXT is retained verbatim, while exact numeric comparison rejects
+values changed by the PostgreSQL command's binary64 round trip. A real PG oracle
+covers numeric scale, large integers, exponent notation and smallest subnormal
+thresholds. Five actual typed candidates retain exact thresholds and declared
+authorship in their request digests. No new ADR approval was needed.
+
+CURRENT execution controls: rebuilt authorizations preserve old rows, row IDs,
+digests and timestamps and bind new records to the current lifecycle head.
+Implicit selectors, import pins and suite publication require current eligible
+lifecycle evidence; explicit candidate calibration/regression remain possible.
+Status projections, including regression replay, reflect lifecycle state.
+Candidate create/read/list/replay and typed errors cross the worker and HTTP
+composition. Activation and retirement still return unsupported until their
+transition/reciprocity guards land; no deployment is performed.
+
+Independent review approved 37 focused tests, then 30 candidate tests after
+closing same-command pointer deletion, authorship-declaration parity and terminal
+regression projection findings. Broader candidate/promotion/definition/calibration
+qualification passes 107/107 across 12 files, including the real PostgreSQL
+numeric oracle. API typechecking passes. Remaining M4: activation, retirement,
+replacement and revocation transitions, measurement, inventory mapping and final
+qualification.
