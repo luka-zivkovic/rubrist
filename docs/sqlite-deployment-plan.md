@@ -2,7 +2,7 @@
 
 Prepared on 2026-10-04 for implementation in a separate session.
 
-Status: Milestone 4 specialist workflows under final qualification (2026-10-06). The
+Status: Milestone 4 specialist workflows locally qualified; PR review pending (2026-10-06). The
 user agreed to two fixed deployment options for the same application. Isolated
 integrity/recovery prototypes, persistent accounts, native evaluations, ordinary
 workflows and specialist repositories are implemented; installation/release

@@ -641,3 +641,15 @@ materialized truth corrections are now explicitly exercised. The expanded
 lifecycle/calibration correction also passed its independent 32-test rerun.
 All requested map cross-references were added. No code finding remains open in
 these audits. Consolidated qualification and Copilot review remain pending.
+
+## Final local qualification (2026-10-06)
+
+CURRENT: after all independent findings were resolved, the complete suite with
+explicit disposable PostgreSQL coverage passed 2,836/2,836 tests in 359 files,
+zero skips, plus 54/54 tooling tests. Workspace typecheck, full build,
+shared-contract guard, repository boundaries, large-file guard and diff checks
+passed. The final suite exposed two PostgreSQL fixture auth-secret omissions and
+a study support-export boundary mismatch; focused independent review approved
+all corrections (5/5 and 2/2), followed by the clean full rerun. Rebased on the
+latest Milestone 3 with identical file content. PR CI and Copilot review remain
+pending; installation and release qualification continue as Milestones 5–6.

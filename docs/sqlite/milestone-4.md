@@ -86,7 +86,12 @@ internally consistent incorrect draw, foreign child-label membership, invalid
 barrier transitions, stale authorization pins and valid canonical manifests for
 ineligible lifecycle states.
 
-CURRENT consolidated test/build/CI results will be recorded after the final
-qualification run. The milestone is not merge-ready until those checks and
-Copilot review are complete. Earlier slice counts in the progress record are
-historical checkpoints, not a substitute for final qualification.
+CURRENT final local qualification (2026-10-06): 2,836 tests in 359 files pass
+with PostgreSQL enabled, with zero skipped tests; all 54 tooling tests pass.
+Workspace typecheck, shared-contract guard (30 modules, 1,129 exports, 639 runtime
+exports), full build, repository boundaries, large-file guard and diff checks pass.
+The suite exposed two missing synthetic auth-secret fixtures and excess exports
+from the shared study-value extraction; independent review approved those fixes,
+and the full rerun passes. The branch is based on the latest Milestone 3; rebase
+changed no files. CI and a completed Copilot review remain required before merge.
+Earlier slice counts are historical checkpoints, not final qualification.
