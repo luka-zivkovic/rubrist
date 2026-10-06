@@ -653,3 +653,27 @@ a study support-export boundary mismatch; focused independent review approved
 all corrections (5/5 and 2/2), followed by the clean full rerun. Rebased on the
 latest Milestone 3 with identical file content. PR CI and Copilot review remain
 pending; installation and release qualification continue as Milestones 5–6.
+
+## Independent review fixes (2026-10-06, uncommitted)
+
+CURRENT: Claude Code's independent PR #196 review found no Blocker or High
+issue. Its confirmed findings are corrected in forward migrations only; no
+existing migration changed. `0066_retention_indexes.sql` was copied byte for
+byte from Milestone 6, so `0067_governed_sealed_intake_parity.sql` and
+`0068_binary_calibration_terminal_recovery.sql` follow it.
+
+- Sealed intake: PostgreSQL's one-successor predecessor index is ported, with
+  the same idempotency-conflict error PostgreSQL returns. A live member may be
+  custodian, matching PostgreSQL. Upgrade fails closed if a branch exists.
+- Dataset and golden freezes keep PostgreSQL's exact source projection. Raw
+  step names and keys are no longer schema-normalized for ordinary items;
+  governed blind payloads keep their exact step-canonical check.
+- Calibration: an authorized run cannot be rejected. Lifecycle refusal after
+  authorization mints the existing incomplete artifact atomically on both
+  backends, without provider dispatch, and releases the lease. Lifecycle
+  refusals surface as typed `ineligible` errors on both backends.
+- Population writes map only constraint and busy failures to domain errors.
+- Managed commands deny schema, attachment and pragma changes.
+- The persisted clock latch remains an open decision (see milestone-4.md).
+
+Qualification counts above predate these fixes and must be rerun.
