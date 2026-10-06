@@ -1,0 +1,270 @@
+{
+  "sourceTraceId": "n8n-execution-8842",
+  "metadata": {
+    "evidenceView": "n8n-execution/v1",
+    "source": "n8n",
+    "n8nWorkflowId": "wf_support_triage",
+    "n8nExecutionId": "8842"
+  },
+  "input": {
+    "workflow": {
+      "name": "Support ticket triage",
+      "nodes": [
+        {
+          "id": "node-1",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [
+            0,
+            300
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-2",
+          "name": "Classify ticket",
+          "type": "@n8n/n8n-nodes-langchain.agent",
+          "typeVersion": 1.7,
+          "position": [
+            220,
+            300
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-3",
+          "name": "Refund request?",
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.2,
+          "position": [
+            440,
+            300
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-4",
+          "name": "Look up order",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [
+            660,
+            200
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-5",
+          "name": "Issue refund",
+          "type": "n8n-nodes-base.stripe",
+          "typeVersion": 1,
+          "position": [
+            880,
+            200
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-6",
+          "name": "Escalate to human",
+          "type": "n8n-nodes-base.slack",
+          "typeVersion": 2.3,
+          "position": [
+            660,
+            400
+          ],
+          "parameters": {}
+        },
+        {
+          "id": "node-7",
+          "name": "Reply to customer",
+          "type": "n8n-nodes-base.gmail",
+          "typeVersion": 2.1,
+          "position": [
+            1100,
+            300
+          ],
+          "parameters": {}
+        }
+      ],
+      "connections": {
+        "Webhook": {
+          "main": [
+            [
+              {
+                "node": "Classify ticket",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Classify ticket": {
+          "main": [
+            [
+              {
+                "node": "Refund request?",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Refund request?": {
+          "main": [
+            [
+              {
+                "node": "Look up order",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Escalate to human",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Look up order": {
+          "main": [
+            [
+              {
+                "node": "Issue refund",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Issue refund": {
+          "main": [
+            [
+              {
+                "node": "Reply to customer",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Escalate to human": {
+          "main": [
+            [
+              {
+                "node": "Reply to customer",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "ticket": {
+      "from": "dana@example.com",
+      "subject": "Where is my order?",
+      "body": "Order 10482 was meant to arrive on Friday and tracking has not moved in four days. Can you tell me where it is?"
+    }
+  },
+  "steps": [
+    {
+      "name": "Webhook",
+      "input": null,
+      "output": {
+        "from": "dana@example.com",
+        "subject": "Where is my order?",
+        "body": "Order 10482 was meant to arrive on Friday and tracking has not moved in four days. Can you tell me where it is?"
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 3
+      }
+    },
+    {
+      "name": "Classify ticket",
+      "input": {
+        "subject": "Where is my order?",
+        "body": "Order 10482 was meant to arrive on Friday and tracking has not moved in four days. Can you tell me where it is?"
+      },
+      "output": {
+        "intent": "refund_request",
+        "orderId": "10482",
+        "confidence": 0.58,
+        "reasoning": "The customer is unhappy about a late delivery and probably wants their money back."
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 1840,
+        "model": "gpt-4.1-mini"
+      }
+    },
+    {
+      "name": "Refund request?",
+      "input": {
+        "intent": "refund_request"
+      },
+      "output": {
+        "branch": "true"
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 1
+      }
+    },
+    {
+      "name": "Look up order",
+      "input": {
+        "orderId": "10482"
+      },
+      "output": {
+        "orderId": "10482",
+        "status": "in_transit",
+        "total": 84.5,
+        "currency": "EUR",
+        "carrier": "DPD",
+        "lastScan": "2026-09-30T07:12:00Z"
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 212
+      }
+    },
+    {
+      "name": "Issue refund",
+      "input": {
+        "orderId": "10482",
+        "amount": 84.5,
+        "currency": "EUR"
+      },
+      "output": {
+        "refundId": "re_3Qx81",
+        "status": "succeeded",
+        "amount": 84.5
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 640
+      }
+    },
+    {
+      "name": "Reply to customer",
+      "input": {
+        "to": "dana@example.com",
+        "template": "refund_issued"
+      },
+      "output": {
+        "messageId": "18c2f0a",
+        "body": "Hi Dana, we have refunded EUR 84.50 for order 10482. It can take 5 to 10 days to reach your account."
+      },
+      "metadata": {
+        "status": "success",
+        "executionTimeMs": 388
+      }
+    }
+  ],
+  "output": "Hi Dana, we have refunded EUR 84.50 for order 10482. It can take 5 to 10 days to reach your account."
+}

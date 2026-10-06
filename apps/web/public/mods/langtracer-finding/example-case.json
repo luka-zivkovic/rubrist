@@ -1,0 +1,82 @@
+{
+  "sourceTraceId": "langtracer-finding-example",
+  "metadata": {
+    "evidenceView": "langtracer-finding/v1",
+    "source": "langtracer"
+  },
+  "input": {
+    "toolRuns": [
+      {
+        "runId": "00000000-0000-0000-266c-d08b3522f447",
+        "name": "workspace_write_file",
+        "status": "ok",
+        "durationMs": 9120,
+        "inputs": {
+          "content": "{\"content\":\"import { workflow, node, trigger } from '@n8n/workflow-sdk';\\n\\nconst notion_Trigger = trigger({\\n  type: 'n8n-nodes-base.notionTrigger',\\n  version: 1,\\n  config: { name: 'Notion Trigger', parameters: { pollTimes: { item: [{ mode: 'everyMinute' }] } }, position: [0, 0] }\\n});\\n\\nconst build_blocks = node({\\n  type: 'n8n-nodes-base.code',\\n  config: {\\n    name: 'Build Transcript Blocks',\\n    parameters: { jsCode: `const lines = $json.text.split(/\\n/);\\nreturn lines.map(line => ({ json: { line } }));` },\\n    position: [176, 0]\\n  }\\n});\\n\\nconst wf = workflow('wf_example_0001', 'My workflow', { executionOrder: 'v1' });\\nexport default wf.add(notion_Trigger).to(build_blocks);\\n\",\"name\":\"My workflow\",\"workflowId\":\"wf_example_0001\"}",
+          "storedChars": 753,
+          "storedTruncated": false,
+          "captureTruncated": false,
+          "pages": 1
+        }
+      },
+      {
+        "runId": "00000000-0000-0000-7e5f-c61a0b9d2e10",
+        "name": "workspace_write_file",
+        "status": "ok",
+        "durationMs": 8804,
+        "inputs": {
+          "content": "{\"content\":\"import { workflow, node, trigger } from '@n8n/workflow-sdk';\\n\\nconst notion_Trigger = trigger({\\n  type: 'n8n-nodes-base.notionTrigger',\\n  version: 1,\\n  config: { name: 'Notion Trigger', parameters: { pollTimes: { item: [{ mode: 'everyMinute' }] } }, position: [0, 0] }\\n});\\n\\nconst build_blocks = node({\\n  type: 'n8n-nodes-base.code',\\n  config: {\\n    name: 'Build Transcript Blocks',\\n    parameters: { jsCode: `const lines = $json.text.split('\\n\\n');\\nreturn lines.map(line => ({ json: { line } }));` },\\n    position: [176, 0]\\n  }\\n});\\n\\nconst wf = workflow('wf_example_0001', 'My workflow', { executionOrder: 'v1' });\\nexport default wf.add(notion_Trigger).to(build_blocks);\\n\",\"name\":\"My workflow\",\"workflowId\":\"wf_example_0001\"}",
+          "storedChars": 755,
+          "storedTruncated": false,
+          "captureTruncated": false,
+          "pages": 1
+        }
+      },
+      {
+        "runId": "00000000-0000-0000-c76d-14a59b8714d5",
+        "name": "workspace_write_file",
+        "status": "ok",
+        "durationMs": 10427,
+        "inputs": {
+          "content": "{\"content\":\"import { workflow, node, trigger } from '@n8n/workflow-sdk';\\n\\nconst notion_Trigger = trigger({\\n  type: 'n8n-nodes-base.notionTrigger',\\n  version: 1,\\n  config: { name: 'Notion Trigger', parameters: { pollTimes: { item: [{ mode: 'everyMinute' }] } }, position: [0, 0] }\\n});\\n\\nconst build_blocks = node({\\n  type: 'n8n-nodes-base.code',\\n  config: {\\n    name: 'Build Transcript Blocks',\\n    parameters: { jsCode: `const lines = $json.text.split('\\\\\\\\n\\\\\\\\n');\\nreturn lines.map(line => ({ json: { line } }));` },\\n    position: [176, 0]\\n  }\\n});\\n\\nconst wf = workflow('wf_example_0001', 'My workflow', { executionOrder: 'v1' });\\nexport default wf.add(notion_Trigger).to(build_blocks);\\n\",\"name\":\"My workflow\",\"workflowId\":\"wf_example_0001\"}",
+          "storedChars": 761,
+          "storedTruncated": false,
+          "captureTruncated": false,
+          "pages": 1
+        }
+      },
+      {
+        "runId": "00000000-0000-0000-91aa-5b2c7d3e4f60",
+        "name": "workspace_write_file",
+        "status": "ok",
+        "durationMs": 7311,
+        "inputs": {
+          "content": "{\"content\":\"import { workflow, node, trigger } from '@n8n/workflow-sdk';\\n\\nconst notion_Trigger = trigger({\\n  type: 'n8n-nodes-base.notionTrigger',\\n  version: 1,\\n  config: { name: 'Notion Trigger', parameters: { poll…[TRUNCATED]",
+          "storedChars": 220,
+          "storedTruncated": true,
+          "captureTruncated": false,
+          "pages": 1
+        }
+      }
+    ]
+  },
+  "output": {
+    "kind": "capability_gap",
+    "name": "code-node-string-escaping-in-sdk-source",
+    "description": "Code node JS written inside SDK template literals lost or mangled backslash escapes, producing invalid-regex and syntax errors at runtime.",
+    "expectedBehavior": "Generated Code-node JavaScript that contains escapes or regexes runs without syntax errors, and the agent avoids or verifies escape-sensitive constructs when embedding code in SDK source.",
+    "failurePattern": "A regex was stripped to an invalid expression; the follow-up '\\n\\n' literal became real newlines causing SyntaxError, so one node needed three successive fixes.",
+    "proposedCheck": "Build a Code node splitting text on newlines or a regex and verify the saved jsCode parses as valid JS with intact escapes.",
+    "severity": "wrong",
+    "failureClass": "tool",
+    "openCodeNote": "This node broke three times in a row on escaping and I had to paste the error back each time.",
+    "anchorDetail": "Build Transcript Blocks Code node — jsCode escaping",
+    "isTestCaseCandidate": true,
+    "citations": [
+      "00000000-0000-0000-266c-d08b3522f447",
+      "00000000-0000-0000-7e5f-c61a0b9d2e10",
+      "00000000-0000-0000-c76d-14a59b8714d5",
+      "00000000-0000-0000-0000-000000000404"
+    ]
+  }
+}

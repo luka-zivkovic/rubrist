@@ -1,0 +1,110 @@
+{
+  "id": "langtracer-finding",
+  "name": "LangTracer finding",
+  "version": "0.1.0",
+  "contract": "rubrist/view-mod/v1",
+  "renders": [
+    "langtracer-finding/v1"
+  ],
+  "views": [
+    {
+      "kind": "fields",
+      "title": "Finding under review",
+      "fields": [
+        {
+          "label": "Kind",
+          "value": "output.kind",
+          "as": "badge"
+        },
+        {
+          "label": "Severity",
+          "value": "output.severity",
+          "as": "badge"
+        },
+        {
+          "label": "Failure class",
+          "value": "output.failureClass",
+          "as": "badge"
+        },
+        {
+          "label": "Test case candidate",
+          "value": "output.isTestCaseCandidate",
+          "as": "badge"
+        },
+        {
+          "label": "Name",
+          "value": "output.name"
+        },
+        {
+          "label": "Description",
+          "value": "output.description"
+        },
+        {
+          "label": "Expected behavior",
+          "value": "output.expectedBehavior"
+        },
+        {
+          "label": "Failure pattern",
+          "value": "output.failurePattern"
+        },
+        {
+          "label": "Proposed check",
+          "value": "output.proposedCheck"
+        },
+        {
+          "label": "Open code note",
+          "value": "output.openCodeNote"
+        },
+        {
+          "label": "Anchor",
+          "value": "output.anchorDetail"
+        },
+        {
+          "label": "Cited runs",
+          "each": "output.citations.*",
+          "linkTo": "runs"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "id": "runs",
+      "title": "Recorded tool runs",
+      "each": "input.toolRuns.*",
+      "key": "runId",
+      "heading": "name",
+      "badges": [
+        {
+          "label": "status",
+          "value": "status"
+        },
+        {
+          "label": "ms",
+          "value": "durationMs"
+        },
+        {
+          "label": "stored truncated",
+          "value": "inputs.storedTruncated"
+        },
+        {
+          "label": "capture truncated",
+          "value": "inputs.captureTruncated"
+        }
+      ],
+      "fields": [
+        {
+          "label": "Written content",
+          "value": "inputs.content",
+          "decode": "json",
+          "then": "content",
+          "as": "code"
+        },
+        {
+          "label": "Run id",
+          "value": "runId",
+          "as": "code"
+        }
+      ]
+    }
+  ]
+}
