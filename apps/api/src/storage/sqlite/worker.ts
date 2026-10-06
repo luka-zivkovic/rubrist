@@ -24,8 +24,14 @@ const {domain, authentication, auth, commands, instance} = (() => {
     return {domain, authentication, auth, commands, instance};
   } catch (error) { throw new Error(sqliteDiagnostic(error)); }
 })();
+// Clock diagnostics are detection only (persisted clock minus host time); a
+// failed read never blocks startup.
+const startupClockAheadMs = (() => {
+  try { return Number(domain.prepare('SELECT last_ms FROM rubrist_command_clock WHERE singleton=1').get()?.last_ms) - Date.now(); }
+  catch { return undefined; }
+})();
 let pending = Promise.resolve();
-port.postMessage({ ready: true });
+port.postMessage({ ready: true, clockAheadMs: startupClockAheadMs });
 port.on('message', (message) => {
   pending = pending.then(async () => {
     try {
@@ -34,7 +40,7 @@ port.on('message', (message) => {
         authentication.close(); domain.close(); instance?.close();
         port.postMessage({id:message.id,result:null}); port.close(); return;
       } else if (message.kind === 'probe') {
-        result = sqliteCommand(domain, () => true);
+        result = {clockAheadMs: sqliteCommand(domain, context => context.milliseconds) - Date.now()};
       } else if (message.kind === 'auth-handler') {
         const req = message.request;
         const response = await auth.handler(new Request(req.url,{method:req.method,headers:req.headers,...(req.body === null ? {} : {body:req.body})}));
