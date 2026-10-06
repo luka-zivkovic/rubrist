@@ -15,6 +15,7 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
   const value = error instanceof Error ? error : new Error('SQLite command failed');
   const result: Record<string, unknown> = {name:value.name,message:value.message};
   const fields = value as unknown as Record<string,unknown>;
+  if (typeof fields.errcode === 'number' && Number.isSafeInteger(fields.errcode)) result.errcode=fields.errcode;
   if (typeof fields.statusCode === 'number') result.statusCode=fields.statusCode;
   if (fields.body && typeof fields.body === 'object') {
     const body=fields.body as Record<string,unknown>;

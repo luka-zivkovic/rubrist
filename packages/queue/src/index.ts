@@ -7,7 +7,7 @@ export type QueueJobState = "created" | "retry" | "active" | "completed" | "canc
 // "Queue <name> does not exist" otherwise. Every known queue is created
 // (idempotently — pg-boss's create_queue is ON CONFLICT DO NOTHING) at start()
 // so adding a name to the union above is the only registration step.
-const ALL_QUEUES: QueueName[] = ["langsmith.import", "langfuse.import", "ironside.import", "judge.run", "gate.run", "feedback.sync", "eval.run", "eval.item", "binary-calibration.run"];
+export const ALL_QUEUES: QueueName[] = ["langsmith.import", "langfuse.import", "ironside.import", "judge.run", "gate.run", "feedback.sync", "eval.run", "eval.item", "binary-calibration.run"];
 
 export interface QueueSendOptions {
   // A deterministic pg-boss job UUID makes a durable domain dispatch safe to
@@ -35,6 +35,7 @@ export interface QueueJob<T extends object> {
 }
 
 export interface Queue {
+  isReady?(): Promise<boolean>;
   start(): Promise<void>;
   stop(): Promise<void>;
   send<T extends object>(name: QueueName, data: T, options?: QueueSendOptions): Promise<string | null>;
@@ -44,6 +45,7 @@ export interface Queue {
 
 export class PgBossQueue implements Queue {
   private readonly boss: PgBoss;
+  private running = false;
 
   constructor(connectionString = process.env.DATABASE_URL) {
     if (!connectionString) throw new Error("DATABASE_URL is required for PgBossQueue");
@@ -55,10 +57,22 @@ export class PgBossQueue implements Queue {
     for (const name of ALL_QUEUES) {
       await this.boss.createQueue(name);
     }
+    this.running = true;
   }
 
   async stop(): Promise<void> {
+    this.running = false;
     await this.boss.stop();
+  }
+
+  async isReady(): Promise<boolean> {
+    if (!this.running) return false;
+    const workers = this.boss.getWipData();
+    const now = Date.now();
+    if (!ALL_QUEUES.every(name => workers.some(worker => worker.name === name && worker.state === 'active'
+      && worker.lastFetchedOn !== null && (worker.count > 0 || now - worker.lastFetchedOn < 30_000)))) return false;
+    const queues = await this.boss.getQueues(ALL_QUEUES);
+    return this.running && ALL_QUEUES.every(name => queues.some(queue => queue.name === name));
   }
 
   async send<T extends object>(name: QueueName, data: T, options?: QueueSendOptions): Promise<string | null> {

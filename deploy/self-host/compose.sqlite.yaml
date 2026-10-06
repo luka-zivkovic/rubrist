@@ -1,6 +1,5 @@
-# Generic single-host Rubrist distribution managed by trustctl.
-# Operator customizations belong in compose.override.yaml; trustctl treats this
-# file as release-owned and refuses to update it after local edits.
+# Single-host SQLite distribution. One API instance; durable local volume.
+# PostgreSQL and trustctl retain their separate existing distribution.
 services:
   web:
     image: ghcr.io/luka-zivkovic/rubrist-web:${RUBRIST_VERSION:?RUBRIST_VERSION is required}
@@ -20,19 +19,20 @@ services:
     image: ghcr.io/luka-zivkovic/rubrist-api:${RUBRIST_VERSION:?RUBRIST_VERSION is required}
     restart: unless-stopped
     init: true
-    stop_grace_period: 45s
     environment:
       PORT: "8787"
-      RUBRIST_STORAGE: postgres
-      DATABASE_URL: postgresql://rubrist:${RUBRIST_POSTGRES_PASSWORD:?RUBRIST_POSTGRES_PASSWORD is required}@postgres:5432/${RUBRIST_POSTGRES_DB:-rubrist}
+      RUBRIST_STORAGE: sqlite
+      RUBRIST_REQUIRE_PERSISTENT_MOUNT: "1"
+      RUBRIST_SQLITE_PATH: ${RUBRIST_SQLITE_PATH:-/var/lib/rubrist/rubrist.sqlite}
       BETTER_AUTH_SECRET: ${RUBRIST_AUTH_SECRET:?RUBRIST_AUTH_SECRET is required}
       BETTER_AUTH_URL: ${RUBRIST_PUBLIC_URL:-http://localhost:8081}
       TRUSTED_ORIGINS: ${RUBRIST_PUBLIC_URL:-http://localhost:8081}
       RUBRIST_TRUST_PROXY: "1"
       RUBRIST_BOOTSTRAP_TOKEN: ${RUBRIST_BOOTSTRAP_TOKEN:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
+    stop_grace_period: 45s
+    volumes:
+      - rubrist_sqlite_data:/var/lib/rubrist
+      - rubrist_sqlite_backups:/var/lib/rubrist-backups
     healthcheck:
       test:
         [
@@ -46,20 +46,6 @@ services:
       timeout: 5s
       retries: 18
 
-  postgres:
-    image: postgres:17.11-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: rubrist
-      POSTGRES_PASSWORD: ${RUBRIST_POSTGRES_PASSWORD:?RUBRIST_POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${RUBRIST_POSTGRES_DB:-rubrist}
-    volumes:
-      - rubrist_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
 volumes:
-  rubrist_postgres_data:
+  rubrist_sqlite_data:
+  rubrist_sqlite_backups:

@@ -1,3 +1,5 @@
+import { createReadiness } from "./storage/readiness.js";
+import { stagedShutdown } from "./shutdown.js";
 import { serve } from "@hono/node-server";
 import { runMigrations } from "@rubrist/db";
 import { createQueue } from "@rubrist/queue";
@@ -28,13 +30,16 @@ import { registerLangfuseImportWorker } from "./workers/langfuse-import.js";
 import { parseLangfusePollImportLimit, parseLangfusePollIntervalMs, registerLangfusePoller } from "./workers/langfuse-poller.js";
 import { registerLangSmithImportWorker } from "./workers/langsmith-import.js";
 import { parsePollImportLimit, parsePollIntervalMs, registerLangSmithPoller } from "./workers/langsmith-poller.js";
-import { stopScheduledTasks, type ScheduledTask } from "./workers/scheduled-tasks.js";
+import { type ScheduledTask } from "./workers/scheduled-tasks.js";
 import { bindingResolutionServices, recheckGovernedBinding } from "./lib/binding-resolution.js";
 import { PgCapabilityCheckStore } from "./lib/capability-check-store.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const config = storageConfig();
-const sqlite = config.kind === "sqlite" ? await createSqliteRuntime(config.path) : null;
+const sqlite = config.kind === "sqlite" ? await createSqliteRuntime(config.path,undefined,{exclusiveInstance:true,onFailure:()=>{
+  console.error('rubrist.storage.fatal: SQLite worker stopped unexpectedly; exiting for durable recovery.');
+  process.exit(1);
+}}) : null;
 const pool = config.kind === "postgres" ? createPgPool(config.url) : null;
 
 if (pool) {
@@ -123,9 +128,16 @@ if (queue) {
   }));
 }
 
+const readiness = createReadiness(async () => {
+  if (config.kind === 'demo') return true;
+  if (sqlite) await sqlite.storage.probe();
+  else if (pool) await pool.query('SELECT 1');
+  return await queue?.isReady?.() === true;
+});
 const server = serve({
   fetch: createApp(repository, {
     auth,
+    readiness: readiness.check,
     runtimeMode: config.kind === "demo" ? "demo" : "persistent",
     ...(sqlite ? {accounts:sqlite.accounts,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
@@ -145,6 +157,7 @@ const server = serve({
 console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  readiness.stop();
   console.log(`Received ${signal}; shutting down Rubrist API`);
   const forceExit = setTimeout(() => {
     console.error("Timed out while shutting down Rubrist API; forcing exit");
@@ -152,19 +165,22 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   }, 30_000);
   forceExit.unref();
 
-  try {
-    const failedTasks = await stopScheduledTasks(pollers);
-    await closeServer();
-    await queue?.stop();
-    await pool?.end();
-    await sqlite?.close();
-    clearTimeout(forceExit);
-    process.exit(failedTasks === 0 ? 0 : 1);
-  } catch (error) {
-    clearTimeout(forceExit);
-    console.error("Failed to shut down Rubrist API cleanly", error);
-    process.exit(1);
-  }
+  // Requests and poller ticks may still enqueue, so the queue (whose stop
+  // closes pg-boss's pool) stops only after them. Stage one keeps at most 15s
+  // of the 30s forced-exit budget; the container grace period is 45s.
+  const clean = await stagedShutdown({
+    closeServer,
+    pollers,
+    stopQueue: queue ? () => queue.stop() : undefined,
+    closeStorage: [
+      ...(pool ? [() => pool.end()] : []),
+      ...(sqlite ? [() => sqlite.close()] : [])
+    ],
+    drainMs: 15_000
+  });
+  clearTimeout(forceExit);
+  if (!clean) console.error("Failed to shut down Rubrist API cleanly");
+  process.exit(clean ? 0 : 1);
 }
 
 async function closeServer(): Promise<void> {

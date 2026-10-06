@@ -31,7 +31,8 @@ export interface BinaryCalibrationWorkerOptions {
 export type BinaryCalibrationRecheck = (binding: RecheckedBinding) => Promise<RecheckOutcome>;
 
 export interface BinaryCalibrationOrchestrator {
-  stop(): void;
+  /** Disables future discovery and drains an active pass, which may enqueue. */
+  stop(): Promise<void>;
   discover(): Promise<number>;
 }
 
@@ -108,9 +109,12 @@ export async function registerBinaryCalibrationWorker(
   timer.unref();
 
   return {
-    stop: () => {
+    stop: async () => {
       stopped = true;
       clearInterval(timer);
+      // Whoever started a pass observes (and the timer logs) its failure;
+      // shutdown only waits so the queue closes after its sends.
+      await discoveryInFlight?.catch(() => undefined);
     },
     discover
   };
