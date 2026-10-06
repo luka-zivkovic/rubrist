@@ -40,3 +40,12 @@ it('rejects frame extension after finalization even within another valid managed
  const f=await governedFixture(),result=create(f.db,f.actor,input),original=f.db.prepare('SELECT * FROM governed_review_items WHERE sealed_intake_population_id=? LIMIT 1').get(result.intakeId)!;
  expect(()=>sqliteCommand(f.db,c=>{const row:Record<string,SQLInputValue>={...original,id:'late',idempotency_key:'late',created_at:c.timestamp,sealed_frame_position:2};c.db.prepare(`INSERT INTO governed_review_items(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));})).toThrow();
 });
+import {interceptSqliteInsert} from './helpers/sqlite-insert-intercept.js';
+it.each(['missing-member','wrong-frame'])('rejects an incomplete or forged positive-count sealed frame: %s',async fault=>{
+ const f=await governedFixture(),spy=fault==='missing-member'?interceptSqliteInsert(f.db,'governed_review_items',row=>row.sealed_frame_position===1?null:row):interceptSqliteInsert(f.db,'governed_sealed_intake_populations',row=>{
+  row.frame_digest='sha256:'+'0'.repeat(64);
+  row.content_digest=governedContentV1Digest('governed-sealed-intake-population/v1',{collectionProvenance:JSON.parse(String(row.collection_provenance)),custodianRoleAtReview:row.custodian_role_at_review,custodianSubjectId:row.custodian_subject_id,frameCount:row.frame_count,frameDigest:row.frame_digest,populationDefinition:JSON.parse(String(row.population_definition)),predecessorRevisionId:row.predecessor_revision_id,windowEnd:row.window_end,windowStart:row.window_start});return row;
+ });
+ try{expect(()=>create(f.db,f.actor,input)).toThrow(/complete exact frame/);}finally{spy.mockRestore();}
+ expect(f.db.prepare('SELECT * FROM governed_sealed_intake_populations').all()).toEqual([]);expect(f.db.prepare("SELECT * FROM governed_input_identity_claims WHERE usage_class='sealed'").all()).toEqual([]);
+});

@@ -18,3 +18,12 @@ it('lists only current project participants and preserves retained subject ident
  expect(f.db.prepare('SELECT account_user_id FROM governed_reviewer_subjects WHERE id=?').get(member.subjectId)?.account_user_id).toBeNull();
  expect(commands.governedAssignableSubjects(f.actor)).toEqual([owner]);
 });
+
+it('rejects corrupt subject digests, rebinding, manual unlink and no-op updates',async()=>{
+ const f=await governedFixture();
+ expect(()=>f.db.prepare('INSERT INTO governed_reviewer_subjects VALUES(?,?,?,?,?)').run('forged',f.projectId,null,'sha256:'+'0'.repeat(64),new Date().toISOString())).toThrow(/subject digest mismatch/);
+ for(const set of ['id=id','account_user_id=NULL',"account_user_id='foreign'","subject_digest='sha256:'||printf('%064d',0)"]){
+  expect(()=>f.db.exec('UPDATE governed_reviewer_subjects SET '+set+" WHERE id='subject'")).toThrow(/immutable reviewer subject/);
+ }
+ expect(()=>f.db.exec("DELETE FROM governed_reviewer_subjects WHERE id='subject'")).toThrow(/project erasure/);
+});

@@ -74,11 +74,12 @@ describe('SQLite immutable dataset foundation',()=>{
     expect(()=>f.db.prepare('INSERT INTO criterion_regression_revisions VALUES(?,?,?,?)').run(f.projectId,'unbound',revision.id,new Date().toISOString())).toThrow(/regression revision mismatch/);
     expect(()=>f.db.exec('DELETE FROM dataset_revisions')).toThrow(/erasure/);
     const row=f.db.prepare('SELECT * FROM dataset_revisions WHERE id=?').get(revision.id)!;
-    f.db.exec('BEGIN IMMEDIATE');
+    expect(()=>sqliteCommand(f.db,()=>{
     const clone={...row,id:'incomplete',series_id:'incomplete',idempotency_key:null};
     f.db.prepare(`INSERT INTO dataset_revisions(${Object.keys(clone).join(',')}) VALUES(${Object.keys(clone).map(()=>'?').join(',')})`).run(...Object.values(clone) as never[]);
     expect(()=>f.db.exec("INSERT INTO dataset_revision_finalizations VALUES('incomplete','wrong-project')")).toThrow(/bundle/);
-    expect(()=>f.db.exec('COMMIT')).toThrow(/FOREIGN KEY/);f.db.exec('ROLLBACK');
+    })).toThrow(/FOREIGN KEY/);
+    expect(f.db.prepare("SELECT * FROM dataset_revisions WHERE id='incomplete'").all()).toEqual([]);
     expect(f.db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
   });
 });

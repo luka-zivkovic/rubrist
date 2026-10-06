@@ -1,3 +1,4 @@
+import {sqliteCommands} from '../src/storage/sqlite/commands.js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -5,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
 import { createUnseededSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
-import { sqliteDatasetRevisionCommands } from '../src/storage/sqlite/dataset-revision-commands.js';
 import { datasetInputIdentity, datasetRevisionItemDigest, datasetRevisionContentDigest, datasetRevisionDigest } from '../src/lib/dataset-revision.js';
 const cleanup:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
@@ -41,7 +41,7 @@ it('keeps one durable input class across concurrent imports, restart, retention 
 });
 
 it('creates revision-item claims atomically and rejects an opposite preexisting claim through direct SQL',()=>{
- const db=openSqlite(':memory:');cleanup.push(()=>db.close());migrateSqlite(db);sqliteDatasetRevisionCommands(db);
+ const db=openSqlite(':memory:');cleanup.push(()=>db.close());migrateSqlite(db);sqliteCommands(db);
  const stamp=new Date().toISOString();
  db.prepare('INSERT INTO organizations VALUES(?,?,?)').run('org','Org',stamp);
  db.prepare('INSERT INTO projects(id,organization_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').run('project','org','Project',stamp,stamp);

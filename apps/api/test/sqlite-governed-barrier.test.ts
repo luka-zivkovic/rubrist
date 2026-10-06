@@ -59,3 +59,34 @@ it('preserves microsecond precision when classifying closure before the fixed st
  const id=transition(f.db,f.actor,batchId,'close_labeling',{expectedStateVersion:1,idempotencyKey:'close'},()=>millis);
  expect(JSON.parse(String(f.db.prepare('SELECT details FROM governed_review_batch_events WHERE id=?').get(id)!.details)).closedAtFixedStop).toBe(false);
 });
+import {sqliteCommand} from '../src/storage/sqlite/command-context.js';
+import {interceptSqliteInsert} from './helpers/sqlite-insert-intercept.js';
+it.each(['early','actor'])('rejects a directly forged server expiry: %s',async kind=>{
+ const f=await prepared(),taskId=f.tasks[0]!,subject=String(f.db.prepare('SELECT reviewer_subject_id FROM governed_review_tasks WHERE id=?').get(taskId)!.reviewer_subject_id);
+ expect(()=>sqliteCommand(f.db,c=>{
+  const actor=kind==='actor'?subject:null,role=kind==='actor'?'owner':null,basis=taskEventContent({actorRoleAtReview:role,actorSubjectId:actor,eventKind:'expired',labelId:null,reason:'fixed_stop',taskId,sequence:1,previousEventDigest:null});
+  c.db.prepare('INSERT INTO governed_review_task_events(id,project_id,task_id,sequence,state_version,expected_previous_state_version,event_kind,actor_subject_id,actor_role_at_review,reason,event_digest,idempotency_key,request_digest,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('forged-expiry',f.projectId,taskId,1,1,0,'expired',actor,role,'fixed_stop',governedContentV1Digest('governed-review-task-event/v1',basis),'forged-expiry','sha256:'+'0'.repeat(64),c.timestamp);
+ },kind==='actor'?()=>Date.parse(f.input.fixedStopAt):Date.now)).toThrow(/expiry|expiration|expired|exact reviewer snapshot/);
+ expect(f.db.prepare("SELECT * FROM governed_review_task_events WHERE event_kind='expired'").all()).toEqual([]);
+});
+it.each(['resolved','incomplete'])('rejects direct invalid batch %s despite a valid event digest',async target=>{
+ const f=await prepared(),taskId=f.tasks[0]!;
+ if(target==='incomplete'){
+  const view=getOrCreateNonsealedBlindView(f.db,f.actor,taskId);action(f.db,f.actor,taskId,{kind:'submit_label',input:{expectedStreamVersion:1,idempotencyKey:'label',viewDigest:view.viewDigest,label:'pass',rationale:'Supported',failureCodes:[]}});
+ }
+ transition(f.db,f.actor,f.batchId,'close_labeling',{expectedStateVersion:1,idempotencyKey:'close'},()=>Date.parse(f.input.fixedStopAt));
+ const spy=interceptSqliteInsert(f.db,'governed_review_batch_events',row=>{
+  row.event_kind=target;row.event_digest=governedContentV1Digest('governed-review-batch-event/v1',{actorRoleAtReview:row.actor_role_at_review,actorSubjectId:row.actor_subject_id,batchId:row.batch_id,datasetRevisionId:row.dataset_revision_id??null,details:JSON.parse(String(row.details)),eventKind:target,previousEventDigest:row.previous_event_digest,representativeIneligibleReasons:JSON.parse(String(row.representative_ineligible_reasons)),representativeOfPopulationId:row.representative_of_population_id??null,sequence:row.sequence,stateVersion:row.state_version});return row;
+ });
+ try{expect(()=>transition(f.db,f.actor,f.batchId,'finalize',{expectedStateVersion:2,idempotencyKey:'invalid'})).toThrow(target==='resolved'?/complete resolved truth/:/coverage gap or unresolvable/);}finally{spy.mockRestore();}
+ expect(f.db.prepare('SELECT state FROM governed_review_batch_states WHERE batch_id=?').get(f.batchId)?.state).toBe('labeling_closed');
+});
+it('rejects a direct task mutation after the labeling barrier',async()=>{
+ const f=await prepared(),taskId=f.tasks[0]!,view=getOrCreateNonsealedBlindView(f.db,f.actor,taskId),label=action(f.db,f.actor,taskId,{kind:'submit_label',input:{expectedStreamVersion:1,idempotencyKey:'label',viewDigest:view.viewDigest,label:'pass',rationale:'Supported',failureCodes:[]}});
+ transition(f.db,f.actor,f.batchId,'close_labeling',{expectedStateVersion:1,idempotencyKey:'close'});
+ const previous=f.db.prepare('SELECT * FROM governed_review_task_events WHERE task_id=? ORDER BY sequence DESC LIMIT 1').get(taskId)!;
+ expect(()=>sqliteCommand(f.db,c=>{
+  const basis=taskEventContent({actorRoleAtReview:String(previous.actor_role_at_review),actorSubjectId:String(previous.actor_subject_id),eventKind:'label_withdrawn',labelId:label.activeLabelId!,reason:'Late',taskId,sequence:3,previousEventDigest:String(previous.event_digest)});
+  c.db.prepare('INSERT INTO governed_review_task_events(id,project_id,task_id,sequence,state_version,expected_previous_state_version,event_kind,actor_subject_id,actor_role_at_review,label_id,reason,previous_event_digest,event_digest,idempotency_key,request_digest,occurred_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('late',f.projectId,taskId,3,3,2,'label_withdrawn',previous.actor_subject_id!,previous.actor_role_at_review!,label.activeLabelId!,'Late',previous.event_digest!,governedContentV1Digest('governed-review-task-event/v1',basis),'late','sha256:'+'0'.repeat(64),c.timestamp);
+ })).toThrow(/open batch|labeling.*closed|requires open/);
+});

@@ -58,3 +58,17 @@ it('submits a persisted view on a fresh peer connection',async()=>{
  expect(submitted).toMatchObject({state:'submitted',stateVersion:2,activeLabelId:expect.any(String)});
  expect(f.db.prepare('SELECT label_id FROM governed_active_review_labels WHERE task_id=?').get(f.taskId)?.label_id).toBe(submitted.activeLabelId);
 });
+import {interceptSqliteInsert} from './helpers/sqlite-insert-intercept.js';
+import {taskEventContent} from '../src/governed-review/storage-values.js';
+it.each(['withdrawal','replacement'])('rejects wrong direct label %s lineage with a recomputed digest',async kind=>{
+ const f=await prepared(),first=action(f.db,f.actor,f.taskId,{kind:'submit_label',input:input(f.view.viewDigest)});
+ if(kind==='replacement')action(f.db,f.actor,f.taskId,{kind:'withdraw_label',input:{expectedStreamVersion:2,idempotencyKey:'withdraw',labelId:first.activeLabelId!,reason:'Correction'}});
+ const spy=interceptSqliteInsert(f.db,kind==='withdrawal'?'governed_review_task_events':'governed_review_labels',row=>{
+  if(kind==='withdrawal'){
+   row.label_id='foreign';row.event_digest=governedContentV1Digest('governed-review-task-event/v1',taskEventContent({actorRoleAtReview:String(row.actor_role_at_review),actorSubjectId:String(row.actor_subject_id),eventKind:String(row.event_kind),labelId:'foreign',reason:String(row.reason),taskId:f.taskId,sequence:Number(row.sequence),previousEventDigest:String(row.previous_event_digest)}));
+  }else{
+   row.replaces_label_id='foreign';row.content_digest=governedContentV1Digest('governed-review-label/v1',{attempt:row.attempt,blindViewDigest:row.blind_view_digest,failureCodes:JSON.parse(String(row.failure_codes)),label:row.label,rationale:row.rationale,replacesLabelId:'foreign',reviewerSubjectId:row.reviewer_subject_id,taskId:row.task_id});
+  }return row;
+ });
+ try{expect(()=>kind==='withdrawal'?action(f.db,f.actor,f.taskId,{kind:'withdraw_label',input:{expectedStreamVersion:2,idempotencyKey:'bad-withdraw',labelId:first.activeLabelId!,reason:'Correction'}}):action(f.db,f.actor,f.taskId,{kind:'submit_label',input:input(f.view.viewDigest,3,'bad-replacement')})).toThrow(/active label|prior label|replacement|previous attempt/);}finally{spy.mockRestore();}
+});

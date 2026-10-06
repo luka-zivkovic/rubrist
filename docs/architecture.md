@@ -53,9 +53,12 @@ Ordinary revisions, reviews, regression, integrations and production monitoring
 now use native SQLite storage and the shared workers. Regression ownership uses
 a durable token/epoch lease with whole-attempt recovery; it does not hold a write
 lock across provider calls. Pollers drain active work before shutdown.
-Advanced analysis and governed specialist workflows remain unavailable until
-Milestone 4. This is not a release installation option yet. See
-[Milestone 3](sqlite/milestone-3-progress.md) and its method/task checklist.
+Advanced analysis, governed review/truth, binary calibration, evaluator lifecycle
+and measurement now use SQLite specialist repositories. Atomic finalization
+claims and scoped validators preserve the evidence invariants; calibration
+workers use durable leases and attempt accounting. See [Milestone 4](sqlite/milestone-4.md)
+for provenance compatibility, enforcement boundaries and invariant mapping.
+Installation and release qualification remain separate milestones.
 
 ## Core flows
 

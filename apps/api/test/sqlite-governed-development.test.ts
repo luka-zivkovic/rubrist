@@ -16,6 +16,8 @@ function fixture(){
  const history=join(dir,'history');mkdirSync(history);const source=fileURLToPath(new URL('../../../packages/db/sqlite-migrations/',import.meta.url));
  for(const file of readdirSync(source).filter(n=>n.endsWith('.sql')&&n<'0041'))copyFileSync(join(source,file),join(history,file));
  migrateSqlite(db,history);const commands=sqliteCommands(db),stamp='2026-01-01T00:00:00.000Z';
+ // Historical native-only projection for current fixture authoring; removed before upgrade.
+ db.exec('CREATE TEMP VIEW evaluator_lifecycle_contexts AS SELECT project_id,id skill_version_id,NULL state,NULL lifecycle_event_id,NULL calibration_artifact_id,1 implicit_allowed,1 explicit_allowed FROM skill_versions');
  db.prepare('INSERT INTO "user"(id,name,email,created_at,updated_at) VALUES(?,?,?,?,?)').run('owner','Owner','owner@example.test',stamp,stamp);
  const {projectId}=commands.ensureWorkspaceForUser({userId:'owner',email:'owner@example.test',owner:true});
  const create=(key:string,recorded=true)=>commands.createCriterion(projectId,CreateCriterionInputSchema.parse({stableKey:key,name:'Evidence',definition:'Use evidence',evaluator:{rubricMarkdown:'Pass grounded answers',prompt:'Review independently',executionBinding:bindingInput(MOCK_BINDING)}}),recorded?{actorUserId:'owner'}:{});
@@ -26,6 +28,7 @@ it('backfills exact retained recorded authorship and atomically appends future d
  const f=fixture(),old=f.create('old'),legacy=f.create('legacy',false),versionId=old.evaluator.currentVersion.id;
  const history=f.db.prepare('SELECT * FROM rubrist_sqlite_migrations ORDER BY id').all();
  const before=f.db.prepare('SELECT * FROM skill_versions WHERE id=?').get(versionId)!;
+ f.db.exec('DROP VIEW temp.evaluator_lifecycle_contexts');
  migrateSqlite(f.db);migrateSqlite(f.db);
  expect(f.db.prepare('SELECT * FROM rubrist_sqlite_migrations ORDER BY id').all().slice(0,history.length)).toEqual(history);
  const row=f.db.prepare('SELECT * FROM governed_evaluator_development_events').get()!;
@@ -51,6 +54,7 @@ it('rolls back the forward migration for incompatible legacy NUL identity bytes'
  row.id='bad\0identity';row.version='0.1.1';
  sqliteCommand(f.db,()=>f.db.prepare(`INSERT INTO skill_versions(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row)));
  const before=f.db.prepare('SELECT * FROM rubrist_sqlite_migrations ORDER BY id').all();
+ f.db.exec('DROP VIEW temp.evaluator_lifecycle_contexts');
  expect(()=>migrateSqlite(f.db)).toThrow(/CHECK/);
  expect(f.db.prepare('SELECT * FROM rubrist_sqlite_migrations ORDER BY id').all()).toEqual(before);
  expect(f.db.prepare("SELECT 1 FROM sqlite_schema WHERE name='governed_evaluator_development_events'").get()).toBeUndefined();

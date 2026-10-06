@@ -73,3 +73,11 @@ it('rejects a self-consistent item digest that forges retained view history',asy
  }})).toThrow(/projections differ/);
  expect(f.db.prepare('SELECT * FROM analysis_study_closures').all()).toEqual([]);
 });
+it('rejects identity insertion after closure finalization in its creating command',async()=>{
+ const f=await fixture();freeze(f);draftStudy(f);studyEvent(f);
+ expect(()=>closeStudy(f,{after:c=>{
+  const original=c.db.prepare('SELECT * FROM case_input_identity_records WHERE source_case_id IN(SELECT case_id FROM analysis_population_members) LIMIT 1').get()!,row={...original,id:'late-identity'};
+  c.db.prepare(`INSERT INTO case_input_identity_records(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?')})`).run(...Object.values(row));
+ }})).toThrow(/closure frame identity/);
+ expect(f.db.prepare('SELECT * FROM analysis_study_closures').all()).toEqual([]);
+});

@@ -313,3 +313,15 @@ it('rejects assignments after withdrawal, abandonment or the exact study deadlin
  const other=await fixture();freeze(other);draftStudy(other);studyEvent(other);taxonomyRevision(other);const otherFailure=itemEvent(other,'failure_observed');studyEvent(other,'study_abandoned');
  expect(()=>assignment(other,otherFailure)).toThrow(/closed by state/);
 });
+it('rejects an internally consistent draw that omits a lower-ranked member',async()=>{
+ const f=await fixture(),original=population.drawAnalysisPopulationSample;
+ const spy=vi.spyOn(population,'drawAnalysisPopulationSample').mockImplementation(input=>{
+  const valid=original(input),ranked=input.members.map(m=>({...m,rankDigest:population.analysisPopulationRankDigest({seed:input.seed,caseId:m.caseId,frameMemberDigest:m.frameMemberDigest})})).sort(population.compareAnalysisPopulationRanks);
+  const selections=ranked.slice(1,input.fixedBudget+1).map((m,position)=>({...m,position,contentDigest:population.analysisPopulationDrawItemContentDigest({...m,position})}));
+  expect(selections).toHaveLength(input.fixedBudget);
+  const contentDigest=population.analysisPopulationDrawContentDigest(selections.map(s=>s.contentDigest)),drawDigest=population.analysisPopulationDrawDigest({...input,contentDigest,populationSize:input.members.length,drawItemContentDigests:selections.map(s=>s.contentDigest)});
+  return {...valid,selections,contentDigest,drawDigest};
+ });
+ try{expect(()=>freeze(f)).toThrow(/draw selection mismatch/);}finally{spy.mockRestore();}
+ expect(f.db.prepare('SELECT * FROM analysis_populations').all()).toEqual([]);expect(f.db.prepare('SELECT * FROM analysis_population_draw_items').all()).toEqual([]);
+});

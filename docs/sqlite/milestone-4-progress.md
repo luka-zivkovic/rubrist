@@ -626,3 +626,18 @@ CURRENT remaining M4 work: final per-predicate inventory reconciliation and
 consolidated qualification. Inventory review has identified additional governed
 parity and direct-SQL coverage corrections; those are not yet qualified. M4 is
 still incomplete and has not been opened as a PR.
+
+CURRENT invariant reconciliation: all 388 original function/trigger entries now
+have unique source-hash-preserving implementation/test navigation in
+`invariant-port-map.json`. The original source inventory retains its historical
+labels. The new map guard verifies bookkeeping; domain audits verify predicates.
+The analysis audit ran 212 tests and requested two adversarial cases; both now
+pass with 110 independently rerun tests. The governed audit prompted forward
+migration 0065: truth-label sets validate membership/cardinality without
+requiring one JSON serialization/order, and subject UPDATE permits only the
+actual account-erasure exception. Its 60 independently rerun tests pass.
+Direct child-label membership, server expiry, barrier transitions and protected
+materialized truth corrections are now explicitly exercised. The expanded
+lifecycle/calibration correction also passed its independent 32-test rerun.
+All requested map cross-references were added. No code finding remains open in
+these audits. Consolidated qualification and Copilot review remain pending.

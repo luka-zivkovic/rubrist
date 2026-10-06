@@ -141,7 +141,7 @@ const server = serve({
   port
 });
 
-console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite ordinary workflows)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
+console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`Received ${signal}; shutting down Rubrist API`);

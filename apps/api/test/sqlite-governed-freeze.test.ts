@@ -61,6 +61,11 @@ it('freezes adjudicated truth with its exact head and preserves cannot-determine
  expect(f.db.prepare('SELECT count(*) n FROM governed_dataset_truth_link_labels WHERE truth_link_id=?').get(truth.id!)?.n).toBe(0);
  const event=f.db.prepare("SELECT representative_ineligible_reasons FROM governed_review_batch_events WHERE batch_id=? AND event_kind='frozen'").get(f.batchId)!;
  expect(JSON.parse(String(event.representative_ineligible_reasons))).toEqual(['cannot_determine_present']);
+ expect(()=>sqliteCommand(f.db,c=>{
+  const old=c.db.prepare('SELECT * FROM governed_review_adjudications WHERE id=?').get(adjudication.adjudicationId)!,row:Record<string,SQLInputValue>={...old,id:'materialized-correction',chain_version:2,expected_previous_chain_version:1,supersedes_adjudication_id:adjudication.adjudicationId,correction_reason:'Correct decision',decision:'fail',idempotency_key:'materialized-correction',created_at:c.timestamp,created_command_token:c.token};
+  row.content_digest=governedContentV1Digest('governed-review-adjudication/v1',{adjudicatorRoleAtReview:row.adjudicator_role_at_review,adjudicatorSubjectId:row.adjudicator_subject_id,basis:row.basis,batchId:row.batch_id,batchItemId:row.batch_item_id,chainVersion:row.chain_version,consideredLabelCount:row.considered_label_count,consideredLabelSetDigest:row.considered_label_set_digest,correctionReason:row.correction_reason,decision:row.decision,rationale:row.rationale,supersedesAdjudicationId:row.supersedes_adjudication_id});
+  c.db.prepare(`INSERT INTO governed_review_adjudications(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?')})`).run(...Object.values(row));
+ })).toThrow(/materialized truth requires protected successor correction/);
  expect(()=>appendNonsealedGovernedAdjudication(f.db,adjudicator,f.batchId,f.batchItemId,{expectedHeadAdjudicationId:adjudication.adjudicationId,decision:'fail',basis:'Changed',rationale:'Changed',correctionReason:'Changed',idempotencyKey:'late'})).toThrow(expect.objectContaining({code:'governed_review_transition_conflict'}));
 });
 it('rejects a stale command token even when two commands share the same timestamp',async()=>{
@@ -74,4 +79,32 @@ it('rejects a stale command token even when two commands share the same timestam
   const row:Record<string,SQLInputValue>={id:'forged-token',project_id:f.projectId,batch_id:batchId,sequence:1,state_version:1,expected_previous_state_version:0,event_kind:'open',actor_subject_id:subject,actor_role_at_review:'owner',representative_ineligible_reasons:'[]',details:'{}',event_digest:governedContentV1Digest('governed-review-batch-event/v1',basis),request_digest:'sha256:'+'0'.repeat(64),created_command_token:previous.token,occurred_at:c.timestamp,idempotency_key:'forged-token'};
   c.db.prepare(`INSERT INTO governed_review_batch_events(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
  },()=>now)).toThrow(/owning command token/);
+});
+import {interceptSqliteInsert} from './helpers/sqlite-insert-intercept.js';
+async function twoRaterTruth(){
+ const f=await governedDraftFixture(),{user}=await f.runtime.auth.api.signUpEmail({body:{email:'second-rater@example.test',password:'synthetic-long-password',name:'Rater'}});
+ f.db.prepare('INSERT INTO project_members VALUES(?,?,?,?,?)').run('second-rater',f.projectId,user.id,'member',new Date().toISOString());
+ const batchId=createNonsealedGovernedDraft(f.db,f.actor,{...f.input,reviewerUserIds:[f.userId,user.id]});
+ transition(f.db,f.actor,batchId,'open',{expectedStateVersion:0,idempotencyKey:'open'});
+ for(const task of f.db.prepare('SELECT t.id,s.account_user_id FROM governed_review_tasks t JOIN governed_reviewer_subjects s ON s.id=t.reviewer_subject_id WHERE t.batch_id=?').all(batchId)){
+  const actor={...f.actor,userId:String(task.account_user_id),projectRole:task.account_user_id===f.userId?'owner' as const:'member' as const},view=getOrCreateNonsealedBlindView(f.db,actor,String(task.id));
+  action(f.db,actor,String(task.id),{kind:'submit_label',input:{viewDigest:view.viewDigest,label:'pass',rationale:'Supported',failureCodes:[],expectedStreamVersion:1,idempotencyKey:'label'}});
+ }
+ transition(f.db,f.actor,batchId,'close_labeling',{expectedStateVersion:1,idempotencyKey:'close'});transition(f.db,f.actor,batchId,'finalize',{expectedStateVersion:2,idempotencyKey:'resolve'});
+ return {...f,batchId};
+}
+it.each(['whitespace','reverse','omit','duplicate','foreign'])('validates truth label membership independently of JSON formatting: %s',async mode=>{
+ const f=await twoRaterTruth();let transformed:string[]=[];
+ const spy=interceptSqliteInsert(f.db,'governed_dataset_truth_links',row=>{
+  const labels=JSON.parse(String(row.governed_label_ids)) as string[];expect(labels).toHaveLength(2);
+  transformed=mode==='reverse'?[...labels].reverse():mode==='omit'?labels.slice(0,1):mode==='duplicate'?[labels[0]!,labels[0]!]:mode==='foreign'?[labels[0]!,'foreign']:labels;
+  row.governed_label_ids=JSON.stringify(transformed,null,mode==='whitespace'?2:undefined);
+  row.content_digest=governedContentV1Digest('governed-dataset-truth-link/v1',{adjudicationId:row.adjudication_id,batchItemId:row.batch_item_id,criterionVersionId:row.criterion_version_id,datasetRevisionId:row.dataset_revision_id,datasetRevisionItemId:row.dataset_revision_item_id,governedLabelIds:transformed,importedTruthId:row.imported_truth_id,resolutionKind:row.resolution_kind,resolvedLabel:row.resolved_label,sourceKind:row.source_kind,supportingLabelCount:row.supporting_label_count});return row;
+ });
+ try{
+  if(mode==='whitespace'||mode==='reverse'){
+   const revisionId=freeze(f.db,f.actor,f.batchId,command),truth=f.db.prepare('SELECT * FROM governed_dataset_truth_links WHERE dataset_revision_id=?').get(revisionId)!;
+   expect(JSON.parse(String(truth.governed_label_ids))).toEqual(transformed);expect(f.db.prepare('SELECT count(*) n FROM governed_dataset_truth_link_labels WHERE truth_link_id=?').get(truth.id!)?.n).toBe(2);
+  }else expect(()=>freeze(f.db,f.actor,f.batchId,command)).toThrow(/every exact active independent label/);
+ }finally{spy.mockRestore();}
 });
