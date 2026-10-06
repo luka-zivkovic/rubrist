@@ -1,3 +1,4 @@
+import { datasetInputIdentity } from '../../lib/dataset-revision.js';
 import { projectGovernedReviewPayload } from '../../governed-review/projection.js';
 import { governedTimestamp } from './governed-timestamp.js';
 import { createHash } from 'node:crypto';
@@ -44,6 +45,7 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
       return Number(/^(?:0\.\d+|[1-9]\d*(?:\.\d+)?)$/.test(numeric) && numeric!=='0' && (!atMostOne || numeric==='1' || numeric.startsWith('0.')));
     } catch { return 0; }
   });
+  db.function('governed_input_identity_v1', { deterministic: true }, value => datasetInputIdentity({input:JSON.parse(text(value)).input}).digest);
   db.function('governed_review_payload_project_v1', { deterministic: true }, value => JSON.stringify(projectGovernedReviewPayload(JSON.parse(text(value)))));
   db.function('governed_timestamp_v1', { deterministic: true }, value => governedTimestamp(text(value)));
   db.function('governed_jsonb_octets_v1', { deterministic: true }, value => value===null ? 0 : postgresJsonTextOctets(text(value)));

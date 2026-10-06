@@ -398,3 +398,14 @@ that assertion was corrected. Tests cover rollback at each freeze step, native
 and imported payload forgery, numeric round trips, same-time command tokens,
 adjudicated truth, manual-sampling limits, peer continuation and plain integrity
 checks. Sealed intake, capability separation and sealed freeze remain unfinished.
+
+## Sealed intake frames
+
+CURRENT: migration 0051 freezes sealed intake populations and their complete
+ordered frames atomically, checks retained payload/input identity, and reserves
+durable sealed input claims. Cross-class reuse and unrelated sealed reuse fail;
+protected successors must bind exact unexposed predecessor items in the same
+lineage. Receipt responses contain no item payloads or internal item IDs.
+Independent audit approved eight focused tests and API typechecking passes.
+Positive protected-successor execution still requires the sealed freeze port.
+Sealed batch access remains staged pending live capability separation.
