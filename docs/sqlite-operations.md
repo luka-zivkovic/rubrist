@@ -27,9 +27,9 @@ docker compose up -d --wait --wait-timeout 900
 
 `--version` must equal the release of the image (or checkout) that runs the
 installer; any other value is refused, because the template comes from that
-release. CURRENT qualification exercises this command's script from a
-repository checkout at the image's `/repo` layout, not by running the image:
-the `docker run` wrapper above is not yet tested.
+release. CURRENT qualification runs this container installer for both backends
+and verifies a fresh recovery installation preserves the original secret.
+These checks use a locally rebuilt candidate image; no release is published.
 
 The directory must not exist. The installer writes a unique Compose project
 name, the selected `compose.yaml`, `.env`, and `auth-recovery.json`. Files are
@@ -71,7 +71,8 @@ migration, not simply changing `user:` on a populated volume.
 - Shutdown disables readiness immediately, then drains HTTP requests and
   scheduled pollers together for at most 15 seconds, because both can still
   enqueue jobs. Only then does it stop the queue (draining claimed jobs) and
-  close storage. The container allows 45 seconds; the app forces exit after 30. An interrupted dispatched model call can become
+  close storage. The container allows 45 seconds; the app forces exit after 30.
+  An interrupted dispatched model call can become
   `outcome_unknown`; recovery does not promise exactly-once external calls.
 
 Named volumes survive container replacement. They are not backups. Never run
@@ -92,7 +93,7 @@ incomplete backup. Existing output directories are never reused or overwritten.
 # run the final rm even if the backup fails.
 docker compose cp auth-recovery.json api:/tmp/rubrist-auth-recovery.json
 docker compose exec -T api node tools/storage/sqlite-backup.mjs backup \
-  --source /var/lib/rubrist/rubrist.sqlite \
+  --source "$(docker compose exec -T api printenv RUBRIST_SQLITE_PATH)" \
   --output /var/lib/rubrist-backups/before-upgrade \
   --recovery-file /tmp/rubrist-auth-recovery.json
 docker compose cp api:/var/lib/rubrist-backups/before-upgrade ./before-upgrade
@@ -128,12 +129,28 @@ Stop the original stack before starting its replacement. Running both copies
 can repeat integration polling and external feedback writes. Keep the old volume
 untouched until recovery is verified.
 
-Prepare a fresh directory with the recovered secret, using the installer command
-above plus `--recovery-file /out/auth-recovery.json` (place that protected file in
-the mounted parent). Copy the backup directory into the new installation folder.
-Do **not** start the new API before restoring. From the new installation folder,
-copy the backup and recovery record into a temporary helper container that
-mounts the new installation's volumes, then restore inside it:
+From the parent of the original installation, prepare a different directory
+with the recovered secret. Use the release image you intend to restore; for
+rollback, use the older matching release image and version. Keep the recovery
+record private and copy the selected backup into the new installation:
+
+```sh
+umask 077
+cp rubrist-install/auth-recovery.json ./auth-recovery.json
+chmod 600 ./auth-recovery.json
+docker run --rm --user "$(id -u):$(id -g)" \
+  --mount "type=bind,src=$PWD,dst=/out" \
+  --entrypoint node ghcr.io/luka-zivkovic/rubrist-api:X.Y.Z \
+  tools/self-host/install.mjs --backend sqlite --version X.Y.Z \
+  --directory /out/rubrist-restored --public-url http://localhost:8081 \
+  --recovery-file /out/auth-recovery.json
+cp -R rubrist-install/before-upgrade rubrist-restored/before-upgrade
+cd rubrist-restored
+```
+
+Do **not** start the new API before restoring. Copy the backup and recovery
+record into a temporary helper container that mounts the new installation's
+volumes, then restore inside it:
 
 ```sh
 helper="rubrist-restore-$(date +%s)"
@@ -197,7 +214,9 @@ are written for this recipe but have **not** been exercised against a Coolify
 Service; the qualified drill uses the Compose installation above. Identify the
 Service's API container yourself rather than relying on Coolify naming or labels:
 list running API containers, pick the one Coolify shows for this Service, and
-confirm which volumes are actually mounted into it.
+confirm which volumes are actually mounted into it. Start a dedicated shell
+with `bash` before pasting these blocks: a failed `|| exit 1` check then ends
+only that shell, not your login session, and later blocks reuse its variables.
 
 ```sh
 umask 077
@@ -221,6 +240,7 @@ Back up the running Service. Always remove the container's recovery copy,
 including after a failed backup:
 
 ```sh
+umask 077
 name="backup-$(date -u +%Y%m%dT%H%M%SZ)"
 docker cp ./auth-recovery.json "$api":/tmp/rubrist-auth-recovery.json
 docker exec "$api" node tools/storage/sqlite-backup.mjs backup \
@@ -235,12 +255,17 @@ auth secret from the API container while it still exists. The secret goes only
 into a private `--env-file`; it is not printed or placed on a command line:
 
 ```sh
+umask 077
+api=CONTAINER_NAME_FROM_THE_LIST
+name=BACKUP_DIRECTORY_TO_RESTORE
+test -f "./$name/manifest.json" || exit 1
 image="$(docker inspect --format '{{.Config.Image}}' "$api")"
 data_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/rubrist"}}{{if eq .Type "volume"}}type=volume,src={{.Name}}{{else}}type=bind,src={{.Source}}{{end}},dst=/var/lib/rubrist{{end}}{{end}}' "$api")"
-test -n "$data_mount"
+test -n "$data_mount" || exit 1
 docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api" \
   | grep '^BETTER_AUTH_SECRET=' > rubrist-restore.env
-test "$(wc -l < rubrist-restore.env)" -eq 1
+chmod 600 rubrist-restore.env
+test "$(wc -l < rubrist-restore.env)" -eq 1 || exit 1
 ```
 
 Stop the Service in Coolify. `docker inspect --format '{{.State.Running}}' "$api"`
