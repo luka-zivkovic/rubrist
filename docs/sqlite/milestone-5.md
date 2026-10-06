@@ -2,8 +2,9 @@
 
 **CURRENT (2026-10-06):** implementation, independent audits and complete local
 qualification pass. At the user's instruction, an independent Claude Code review
-replaced Copilot review for this PR; its corrections await the user's
-independent audit and PR CI. This is not a published release or an
+replaced Copilot review for this PR. Corrections passed independent audit and
+Claude follow-up; PR CI and integration of the remaining M4 corrections are
+pending. This is not a published release or an
 authorization to deploy an existing installation.
 
 The two fixed templates select PostgreSQL or SQLite for all state. SQLite has
@@ -52,7 +53,8 @@ are pinned by version and manifest digest.
 ## Claude Code PR review
 
 CURRENT: Claude Code reviewed exactly `fda3f95..9eb3a4c` read-only and found no
-blocking issue. Corrections made in the working tree for the user's audit:
+Blocker/High issue. The following corrections were committed in `cb9bb01`
+and independently audited:
 
 - Shutdown is staged again: HTTP and poller drains (at most 15 of the 30
   seconds) finish before the queue closes pg-boss's send path, and queue,
@@ -74,10 +76,20 @@ blocking issue. Corrections made in the working tree for the user's audit:
 
 Correction evidence (Node 24.15.0, `maxWorkers=1`): the API typecheck passes;
 focused staged-shutdown, readiness, restore-boundary and route-manifest tests
-pass 16/16; operations tooling tests pass 4/4. The installer CLI was run from a
-checkout using the image's `/repo` relative path and copy list, not inside a
-built image. No build, container, Coolify, full-suite or benchmark run was
-repeated for these corrections, so the container results below predate them.
+pass 16/16; operations tooling tests pass 4/4. After merging M3 `aefad36`,
+Claude independently reviewed merge `14cdd14`: typecheck and 24/24 focused
+tests passed, with no runtime blockers. Three follow-up documentation findings
+were corrected: private restore-environment permissions, explicit backup and
+container selection in a fresh shell, and a distinct recovery installation
+directory.
+
+Independent container requalification of `14cdd14` built API image
+`9f51a7a963c4`: both SQLite and PostgreSQL installation/restart/replacement
+drills passed; SQLite backup and fresh-volume restore preserved exact receipt
+bytes. The documented in-image installer passed for both backends and for a
+fresh recovery installation with the original secret and private files.
+Coolify itself, the full suite and benchmarks were not repeated in this check.
+The earlier qualification below remains historical evidence for its pinned image.
 
 ## Validation record
 
