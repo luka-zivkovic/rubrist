@@ -160,9 +160,15 @@ it('upgrades M2 verdicts without changing any existing row, receipt BLOB, or mig
   const path=join(dir,'db.sqlite'),migrations=join(dir,'migrations');mkdirSync(migrations);
   const source=fileURLToPath(new URL('../../../packages/db/sqlite-migrations/',import.meta.url));
   for(const file of readdirSync(source).filter(name=>name.endsWith('.sql')&&name<'0007'))copyFileSync(join(source,file),join(migrations,file));
-  const db=openSqlite(path);cleanup.push(()=>db.close());migrateSqlite(db,migrations);const c=sqliteCommands(db),auth=createAuth(db);
+  let db=openSqlite(path);cleanup.push(()=>db.close());migrateSqlite(db,migrations);const c=sqliteCommands(db),auth=createAuth(db);
   const {user}=await auth.api.signUpEmail({body:{email:'owner@example.test',password:'synthetic-long-password',name:'Owner'}});
   const {projectId}=c.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+  // Current command wrappers require a clock; this TEMP fixture clock is not
+  // part of historical storage and is removed before migration qualification.
+  db.exec('CREATE TEMP TABLE rubrist_command_clock(singleton INTEGER PRIMARY KEY,last_ms INTEGER NOT NULL); INSERT INTO rubrist_command_clock VALUES(1,0)');
+  // M2 only had native evaluators: this temporary projection lets current
+  // fixture authoring read the same native eligibility without adding schema.
+  db.exec('CREATE TEMP VIEW evaluator_lifecycle_contexts AS SELECT project_id,id skill_version_id,NULL state,NULL lifecycle_event_id,NULL calibration_artifact_id,1 implicit_allowed,1 explicit_allowed FROM skill_versions');
   const created=c.createCriterion(projectId,definition,{}),version=created.evaluator.currentVersion.id;
   const trace=c.importTrace(projectId,'release_evidence',{input:'Unicode 😀',output:'Evidence',metadata:{}},{ingestionPurpose:'release_evidence'});
   // Seed using the applied M2 schema, independently of newer command columns.
@@ -174,8 +180,10 @@ it('upgrades M2 verdicts without changing any existing row, receipt BLOB, or mig
   const run=c.getEvalRunDetail(projectId,runId)!;
   const v=c.recordVerdict({projectId,caseId:trace.caseId,skillVersionId:version,source:'llm_judge',payload:{kind:'binary',pass:true,rationale:'Unicode 😀'},observed:{model:'mock',requestId:null,responseId:null,systemFingerprint:null,upstreamProvider:null,thinkingReturned:null,reasoningTokens:null}});
   const execution={projectId,evalRunId:run.id,evalRunItemId:run.items[0]!.id,executionToken:'one'};c.claimEvalRunItemExecution(execution);c.beginEvalRunItemProviderCall(execution);c.markEvalRunItemProviderCallReturned(execution);c.completeEvalRunItem({...execution,verdictId:v.id,resultLabel:'pass'});
+  db.exec('DROP TABLE temp.rubrist_command_clock; DROP VIEW temp.evaluator_lifecycle_contexts');
   const tables=db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT GLOB 'sqlite_*'").all().map(row=>String(row.name));
   const snapshots=tables.map(table=>({table,rows:db.prepare(`SELECT rowid AS retained_rowid,* FROM "${table}" ORDER BY rowid`).all()}));
+  db.close();db=openSqlite(path); // Real idle migration connection, without domain UDFs.
   migrateSqlite(db,source);migrateSqlite(db,source);
   for(const {table,rows} of snapshots) {
     const after=db.prepare(`SELECT rowid AS retained_rowid,* FROM "${table}" ORDER BY rowid`).all();

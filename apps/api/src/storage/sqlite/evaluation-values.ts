@@ -1,3 +1,4 @@
+import { sqliteCommand, assertSqliteCommandOwnership } from './command-context.js';
 import { EvalRunSchema, EvalRunItemSchema, VerdictRecordSchema } from '@rubrist/shared';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 export type Row = Record<string, any>;
@@ -18,14 +19,11 @@ export function verdict(row: Row) {
 }
 export function evaluationDatabase(db: DatabaseSync) {
   return {
-    one:(sql:string,...args:SQLInputValue[])=>db.prepare(sql).get(...args) as Row|undefined,
-    all:(sql:string,...args:SQLInputValue[])=>db.prepare(sql).all(...args) as Row[],
-    run:(sql:string,...args:SQLInputValue[])=>db.prepare(sql).run(...args),
+    one:(sql:string,...args:SQLInputValue[])=>{assertSqliteCommandOwnership(db);return db.prepare(sql).get(...args) as Row|undefined;},
+    all:(sql:string,...args:SQLInputValue[])=>{assertSqliteCommandOwnership(db);return db.prepare(sql).all(...args) as Row[];},
+    run:(sql:string,...args:SQLInputValue[])=>{assertSqliteCommandOwnership(db);return db.prepare(sql).run(...args);},
     transaction<T>(work:(now:number)=>T):T {
-      if(db.isTransaction) throw new Error('Nested SQLite evaluation command');
-      db.exec('BEGIN IMMEDIATE');
-      try { const result=work(Date.now()); db.exec('COMMIT'); return result; }
-      catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
+      return sqliteCommand(db,context=>work(context.milliseconds));
     }
   };
 }

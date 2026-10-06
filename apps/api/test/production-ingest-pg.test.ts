@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "@rubrist/db";
 import { createAuth } from "../src/lib/auth.js";
 import { createApp } from "../src/app.js";
@@ -29,6 +29,7 @@ run("production ingest through the app and PostgreSQL", () => {
   });
 
   beforeAll(async () => {
+    vi.stubEnv("BETTER_AUTH_SECRET", "synthetic-production-ingest-secret-not-for-deployment");
     ({ pool, cleanup } = await openPostgresTestDatabase("production_ingest"));
     await runMigrations(pool);
     repository = new PgRepository(pool);
@@ -41,7 +42,7 @@ run("production ingest through the app and PostgreSQL", () => {
   });
 
   afterAll(async () => {
-    await cleanup?.();
+    try { await cleanup?.(); } finally { vi.unstubAllEnvs(); }
   });
 
   it("stores a batch sent with an ingest key, names the key, and treats a retry as duplicates", async () => {

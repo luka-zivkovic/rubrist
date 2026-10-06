@@ -1,0 +1,2586 @@
+{
+  "format": "rubrist-sqlite-invariant-port-map/v1",
+  "status": "CURRENT implementation and test navigation; per-predicate audit and consolidated qualification required before milestone completion",
+  "inventory": "docs/sqlite/invariant-inventory.json",
+  "groups": {
+    "command-and-digest": {
+      "boundary": "Private serialized command time/token and trigger-only pure/scoped validators; missing functions fail closed. Exact JSON numbers, UTF-16 ordering and historical digests use versioned contract helpers.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0026_governed_command_context.sql",
+        "packages/db/sqlite-migrations/0028_analysis_populations.sql",
+        "packages/db/sqlite-migrations/0029_analysis_study_drafts.sql",
+        "packages/db/sqlite-migrations/0030_analysis_study_events.sql",
+        "packages/db/sqlite-migrations/0031_analysis_study_item_events.sql",
+        "packages/db/sqlite-migrations/0032_analysis_study_item_views.sql",
+        "packages/db/sqlite-migrations/0033_analysis_taxonomies.sql",
+        "packages/db/sqlite-migrations/0034_analysis_assignments.sql",
+        "packages/db/sqlite-migrations/0035_analysis_study_closures.sql",
+        "packages/db/sqlite-migrations/0056_analysis_promotions.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/command-context.ts",
+        "apps/api/src/storage/sqlite/governed-functions.ts",
+        "apps/api/src/storage/sqlite/governed-json-text.ts",
+        "apps/api/src/storage/sqlite/governed-timestamp.ts",
+        "apps/api/src/storage/sqlite/study-support.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-command-context.test.ts",
+        "apps/api/test/sqlite-dataset-exact-payload.test.ts",
+        "apps/api/test/sqlite-validator-context.test.ts"
+      ]
+    },
+    "populations": {
+      "boundary": "Serialized full-frame freeze, exact source identity/content, exclusions, deterministic draw and mandatory reciprocal finalization. Plain SQL views/maintenance need no validator functions.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0027_governed_input_claims.sql",
+        "packages/db/sqlite-migrations/0028_analysis_populations.sql",
+        "packages/db/sqlite-migrations/0056_analysis_promotions.sql",
+        "packages/db/sqlite-migrations/0057_analysis_promotion_handoff.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/population-build.ts",
+        "apps/api/src/storage/sqlite/population-commands.ts",
+        "apps/api/src/storage/sqlite/population-validator.ts",
+        "apps/api/src/storage/sqlite/population-values.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-populations.test.ts"
+      ]
+    },
+    "studies": {
+      "boundary": "Immutable ordered event histories, owner/member checks, exact retained closure bundles, deadline retry, and scoped payload rederivation; current projections derive from committed evidence.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0029_analysis_study_drafts.sql",
+        "packages/db/sqlite-migrations/0030_analysis_study_events.sql",
+        "packages/db/sqlite-migrations/0031_analysis_study_item_events.sql",
+        "packages/db/sqlite-migrations/0032_analysis_study_item_views.sql",
+        "packages/db/sqlite-migrations/0035_analysis_study_closures.sql",
+        "packages/db/sqlite-migrations/0036_analysis_closure_finalization.sql",
+        "packages/db/sqlite-migrations/0037_analysis_deadline_retries.sql",
+        "packages/db/sqlite-migrations/0038_analysis_view_identity.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/study-assignment-commands.ts",
+        "apps/api/src/storage/sqlite/study-closure.ts",
+        "apps/api/src/storage/sqlite/study-commands.ts",
+        "apps/api/src/storage/sqlite/study-deadlines.ts",
+        "apps/api/src/storage/sqlite/study-item-commands.ts",
+        "apps/api/src/storage/sqlite/study-projections.ts",
+        "apps/api/src/storage/sqlite/study-read-commands.ts",
+        "apps/api/src/storage/sqlite/study-support.ts",
+        "apps/api/src/storage/sqlite/study-taxonomy-commands.ts",
+        "apps/api/src/storage/sqlite/study-write.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-populations.test.ts",
+        "apps/api/test/sqlite-study-closure-writer.test.ts",
+        "apps/api/test/sqlite-study-closures.test.ts",
+        "apps/api/test/sqlite-study-commands.test.ts",
+        "apps/api/test/sqlite-study-deadlines.test.ts",
+        "apps/api/test/sqlite-study-item-commands.test.ts",
+        "apps/api/test/sqlite-study-projections.test.ts",
+        "apps/api/test/sqlite-study-read-commands.test.ts",
+        "apps/api/test/sqlite-study-runtime.test.ts",
+        "apps/api/test/sqlite-study-taxonomy-commands.test.ts"
+      ]
+    },
+    "taxonomy": {
+      "boundary": "Complete successor code sets, permanent retirements, exact observation assignments and shared coverage reducer; per-command finalization rejects trailing writes.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0033_analysis_taxonomies.sql",
+        "packages/db/sqlite-migrations/0034_analysis_assignments.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/study-assignment-commands.ts",
+        "apps/api/src/storage/sqlite/study-projections.ts",
+        "apps/api/src/storage/sqlite/study-taxonomy-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-populations.test.ts",
+        "apps/api/test/sqlite-study-projections.test.ts",
+        "apps/api/test/sqlite-study-taxonomy-commands.test.ts",
+        "apps/api/test/sqlite-taxonomies.test.ts"
+      ]
+    },
+    "promotion": {
+      "boundary": "Closed-study/current-taxonomy support, complete criterion/development exposure/handoff bundles, one exact candidate truth/regression copy; finalizers rederive retained lineage.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0056_analysis_promotions.sql",
+        "packages/db/sqlite-migrations/0057_analysis_promotion_handoff.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/lifecycle-candidate.ts",
+        "apps/api/src/storage/sqlite/lifecycle-validator.ts",
+        "apps/api/src/storage/sqlite/promotion-commands.ts",
+        "apps/api/src/storage/sqlite/promotion-values.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts",
+        "apps/api/test/sqlite-promotion.test.ts"
+      ]
+    },
+    "lifecycle": {
+      "boundary": "Exact candidate/transition raw digests, live owner, predecessor CAS, activation evidence and reciprocal replacement finalization; revocation changes the current head atomically. Consumer authorizations bind the exact current head.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0024_regression_execution.sql",
+        "packages/db/sqlite-migrations/0062_evaluator_lifecycle_storage.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql",
+        "packages/db/sqlite-migrations/0064_evaluator_lifecycle_transitions.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/lifecycle-authorization.ts",
+        "apps/api/src/storage/sqlite/lifecycle-candidate.ts",
+        "apps/api/src/storage/sqlite/lifecycle-commands.ts",
+        "apps/api/src/storage/sqlite/lifecycle-reads.ts",
+        "apps/api/src/storage/sqlite/lifecycle-transition-validator.ts",
+        "apps/api/src/storage/sqlite/lifecycle-transition.ts",
+        "apps/api/src/storage/sqlite/lifecycle-validator.ts",
+        "apps/api/src/storage/sqlite/lifecycle-values.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts",
+        "apps/api/test/sqlite-lifecycle-numerics.test.ts",
+        "apps/api/test/sqlite-lifecycle-storage.test.ts",
+        "apps/api/test/sqlite-lifecycle-transitions.test.ts",
+        "apps/api/test/sqlite-lifecycle-upgrade.test.ts"
+      ]
+    },
+    "calibration": {
+      "boundary": "Fenced durable run/attempt ownership; protected-revision lease; complete immutable public/private artifact bundle. Application eligibility semantics match PG; database checks snapshot digests/ownership and rederives terminal bytes.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0058_binary_calibration_storage.sql",
+        "packages/db/sqlite-migrations/0059_binary_calibration_claims.sql",
+        "packages/db/sqlite-migrations/0060_binary_calibration_authorization.sql",
+        "packages/db/sqlite-migrations/0061_binary_calibration_mint.sql",
+        "packages/db/sqlite-migrations/0068_binary_calibration_terminal_recovery.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/calibration-claim-commands.ts",
+        "apps/api/src/storage/sqlite/calibration-commands.ts",
+        "apps/api/src/storage/sqlite/calibration-eligibility.ts",
+        "apps/api/src/storage/sqlite/calibration-evidence.ts",
+        "apps/api/src/storage/sqlite/calibration-execution-commands.ts",
+        "apps/api/src/storage/sqlite/calibration-identity.ts",
+        "apps/api/src/storage/sqlite/calibration-mint-commands.ts",
+        "apps/api/src/storage/sqlite/calibration-mint-validator.ts",
+        "apps/api/src/storage/sqlite/calibration-run-commands.ts",
+        "apps/api/src/storage/sqlite/calibration-validator.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-calibration-claims.test.ts",
+        "apps/api/test/sqlite-calibration-execution.test.ts",
+        "apps/api/test/sqlite-calibration-mint.test.ts",
+        "apps/api/test/sqlite-calibration-runtime.test.ts",
+        "apps/api/test/sqlite-calibration-typed.test.ts",
+        "apps/api/test/sqlite-calibration.test.ts",
+        "apps/api/test/sqlite-calibration-recovery.test.ts"
+      ]
+    },
+    "governed-subjects": {
+      "boundary": "Durable per-project human identity; account erasure removes account linkage but retains governed subject evidence.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0003_evaluator_definitions.sql",
+        "packages/db/sqlite-migrations/0026_governed_command_context.sql",
+        "packages/db/sqlite-migrations/0065_governed_parity_guards.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-functions.ts",
+        "apps/api/src/storage/sqlite/governed-subject-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-definitions.test.ts",
+        "apps/api/test/sqlite-governed-subjects.test.ts"
+      ]
+    },
+    "identity-claims": {
+      "boundary": "Permanent tenant-scoped input-class claims and reverse overlap checks. Competing serialized commands cannot place one input in sealed and nonsealed classes.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0027_governed_input_claims.sql",
+        "packages/db/sqlite-migrations/0042_governed_review_items.sql",
+        "packages/db/sqlite-migrations/0051_governed_sealed_intake.sql",
+        "packages/db/sqlite-migrations/0053_governed_sealed_drafts.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-review-items.ts",
+        "apps/api/src/storage/sqlite/governed-sealed-intake-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-review-items.test.ts",
+        "apps/api/test/sqlite-governed-sealed-drafts.test.ts",
+        "apps/api/test/sqlite-governed-sealed-intake.test.ts",
+        "apps/api/test/sqlite-input-claims.test.ts"
+      ]
+    },
+    "instructions": {
+      "boundary": "Immutable authored instruction version binds an exact criterion and known subject with retained content digest.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0039_governed_review_instructions.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-instruction-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-instructions.test.ts"
+      ]
+    },
+    "imported-truth": {
+      "boundary": "Immutable imported annotations retain provenance and known/unknown author status; do not imply governed independent truth.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0040_governed_imported_truth.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-imported-truth-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-imported-truth.test.ts"
+      ]
+    },
+    "development": {
+      "boundary": "Evaluator authorship and durable development events are exact immutable evidence; missing/unspecified identities cannot become recorded by projection.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0041_governed_development_events.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/definition-commands.ts",
+        "apps/api/src/storage/sqlite/governed-functions.ts",
+        "apps/api/src/storage/sqlite/lifecycle-candidate.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-development.test.ts",
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts"
+      ]
+    },
+    "capabilities": {
+      "boundary": "Live independent-identity and content-exposure eligibility, exact scoped snapshot/digests; rejected checks commit evidence while protected operations remain blocked.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0052_governed_capability_checks.sql",
+        "packages/db/sqlite-migrations/0054_governed_sealed_access.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-capability-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-capability.test.ts",
+        "apps/api/test/sqlite-governed-sealed-access.test.ts"
+      ]
+    },
+    "review-items": {
+      "boundary": "Projected safe payloads, exact criterion/input identity and permanent structural claims; unsafe or cross-bound items fail before commit.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0042_governed_review_items.sql",
+        "packages/db/sqlite-migrations/0051_governed_sealed_intake.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-review-items.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-review-items.test.ts",
+        "apps/api/test/sqlite-governed-sealed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-sealed-intake.test.ts"
+      ]
+    },
+    "review-drafts": {
+      "boundary": "Exact sampled batch/frame/tasks; actor/source/selection lineage and complete per-command bundle. Sealed intake has dedicated exposure and successor checks.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0043_governed_review_drafts.sql",
+        "packages/db/sqlite-migrations/0051_governed_sealed_intake.sql",
+        "packages/db/sqlite-migrations/0053_governed_sealed_drafts.sql",
+        "packages/db/sqlite-migrations/0067_governed_sealed_intake_parity.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-draft-commands.ts",
+        "apps/api/src/storage/sqlite/governed-sealed-intake-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-drafts.test.ts",
+        "apps/api/test/sqlite-governed-sealed-drafts.test.ts",
+        "apps/api/test/sqlite-governed-sealed-intake.test.ts",
+        "apps/api/test/sqlite-governed-sealed-parity.test.ts"
+      ]
+    },
+    "review-streams": {
+      "boundary": "Immutable batch/task CAS streams and blind views; protected reads rederive live separation before replay; current SQL head views preserve event order.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0044_governed_review_view_streams.sql",
+        "packages/db/sqlite-migrations/0045_governed_review_labels.sql",
+        "packages/db/sqlite-migrations/0046_governed_review_labeling_barrier.sql",
+        "packages/db/sqlite-migrations/0047_governed_review_alignment.sql",
+        "packages/db/sqlite-migrations/0048_governed_review_adjudication.sql",
+        "packages/db/sqlite-migrations/0049_governed_dataset_truth.sql",
+        "packages/db/sqlite-migrations/0050_governed_review_truth_freeze.sql",
+        "packages/db/sqlite-migrations/0054_governed_sealed_access.sql",
+        "packages/db/sqlite-migrations/0055_governed_sealed_truth.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-read-commands.ts",
+        "apps/api/src/storage/sqlite/governed-view-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-barrier.test.ts",
+        "apps/api/test/sqlite-governed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-labels.test.ts",
+        "apps/api/test/sqlite-governed-reads.test.ts",
+        "apps/api/test/sqlite-governed-runtime.test.ts",
+        "apps/api/test/sqlite-governed-sealed-access.test.ts",
+        "apps/api/test/sqlite-governed-views.test.ts"
+      ]
+    },
+    "labels": {
+      "boundary": "Exact active independent labels and reciprocal submission event; withdrawals cannot remove revealed evidence. Common barrier is a complete current label set.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0045_governed_review_labels.sql",
+        "packages/db/sqlite-migrations/0046_governed_review_labeling_barrier.sql",
+        "packages/db/sqlite-migrations/0048_governed_review_adjudication.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-label-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-barrier.test.ts",
+        "apps/api/test/sqlite-governed-labels.test.ts"
+      ]
+    },
+    "alignment": {
+      "boundary": "Complete exact label-set links and histories; no omitted/forged labels or post-finalization mutation.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0047_governed_review_alignment.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-alignment-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-alignment.test.ts",
+        "apps/api/test/sqlite-governed-child-guards.test.ts"
+      ]
+    },
+    "adjudication": {
+      "boundary": "Supersession chain and exact complete supporting label set, authorized independent decision and retained immutable history.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0048_governed_review_adjudication.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-adjudication-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-adjudication.test.ts",
+        "apps/api/test/sqlite-governed-child-guards.test.ts"
+      ]
+    },
+    "truth": {
+      "boundary": "Exact resolved truth links and full frozen revision finalization; protected sealed successor rules; candidate copies have a narrowly claimed byte-identical variant.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0049_governed_dataset_truth.sql",
+        "packages/db/sqlite-migrations/0050_governed_review_truth_freeze.sql",
+        "packages/db/sqlite-migrations/0055_governed_sealed_truth.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql",
+        "packages/db/sqlite-migrations/0065_governed_parity_guards.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/governed-freeze-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-governed-child-guards.test.ts",
+        "apps/api/test/sqlite-governed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-sealed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-truth-links.test.ts",
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts"
+      ]
+    },
+    "datasets": {
+      "boundary": "Immutable finalized revision/item/exposure evidence, tenant/criterion ownership and exact digests; protected source payloads survive retention; project erasure is explicit.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0011_dataset_revisions.sql",
+        "packages/db/sqlite-migrations/0015_golden_registry.sql",
+        "packages/db/sqlite-migrations/0016_revision_evaluations.sql",
+        "packages/db/sqlite-migrations/0027_governed_input_claims.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/dataset-revision-commands.ts",
+        "apps/api/src/storage/sqlite/golden-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-dataset-exact-payload.test.ts",
+        "apps/api/test/sqlite-dataset-revisions.test.ts",
+        "apps/api/test/sqlite-golden.test.ts",
+        "apps/api/test/sqlite-dataset-source-parity.test.ts"
+      ]
+    },
+    "definitions": {
+      "boundary": "Exact criterion/version and authorship binding. Native and promoted paths remain distinct; mutable status/current pointers do not mutate immutable version content.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0003_evaluator_definitions.sql",
+        "packages/db/sqlite-migrations/0023_evaluator_version_authoring.sql",
+        "packages/db/sqlite-migrations/0041_governed_development_events.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/definition-commands.ts",
+        "apps/api/src/storage/sqlite/skill-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-definitions.test.ts",
+        "apps/api/test/sqlite-governed-development.test.ts",
+        "apps/api/test/sqlite-skills.test.ts"
+      ]
+    },
+    "evaluation": {
+      "boundary": "Tenant-bound immutable assessment receipt bytes/lineage and revision membership; fenced execution and reciprocal terminal receipt release; corrections remain append-only.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0006_evaluation.sql",
+        "packages/db/sqlite-migrations/0007_collection_attribution_guards.sql",
+        "packages/db/sqlite-migrations/0008_evaluation_membership_guard.sql",
+        "packages/db/sqlite-migrations/0009_evaluation_terminal_time.sql",
+        "packages/db/sqlite-migrations/0010_receipt_correction_reason.sql",
+        "packages/db/sqlite-migrations/0016_revision_evaluations.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/eval-commands.ts",
+        "apps/api/src/storage/sqlite/eval-execution.ts",
+        "apps/api/src/storage/sqlite/eval-exposure.ts",
+        "apps/api/src/storage/sqlite/receipt-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-dispatch.test.ts",
+        "apps/api/test/sqlite-evaluation.test.ts",
+        "apps/api/test/sqlite-workflow.test.ts"
+      ]
+    },
+    "suites": {
+      "boundary": "Retained exact manifest BLOB contains all ordered members; SQLite has no separate mutable member table. Publication rechecks current lifecycle eligibility; immutable comparisons bind exact revisions.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0012_suites_comparisons.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/suite-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts",
+        "apps/api/test/sqlite-suites.test.ts"
+      ]
+    },
+    "regression": {
+      "boundary": "Exact regression revision and evaluator identity; fenced provider-start uncertainty, retained immutable result, activation requires full passed coverage without override.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0024_regression_execution.sql",
+        "packages/db/sqlite-migrations/0064_evaluator_lifecycle_transitions.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/regression-commands.ts",
+        "apps/api/src/storage/sqlite/regression-service.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts",
+        "apps/api/test/sqlite-lifecycle-transitions.test.ts",
+        "apps/api/test/sqlite-skills.test.ts"
+      ]
+    },
+    "legacy-review": {
+      "boundary": "Pinned historical review queue/run/criterion evidence and verdict scope; immutable context pins prevent pairing unrelated evidence.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0014_legacy_reviews.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/review-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-reviews.test.ts"
+      ]
+    },
+    "imports": {
+      "boundary": "Import jobs bind immutable evaluator versions within the tenant; implicit selection uses current lifecycle eligibility.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0019_integration_imports.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/import-job-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-integrations.test.ts"
+      ]
+    },
+    "production": {
+      "boundary": "Ungoverned monitoring remains separate from governed evidence; immutable decision/snapshot/tombstone records and exact digest/time provenance with explicit erasure obligations.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0025_production_monitoring.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/production-commands.ts",
+        "apps/api/src/storage/sqlite/production-time.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-production.test.ts"
+      ]
+    },
+    "shared-immutability": {
+      "boundary": "Common PG append-only functions are implemented by table-specific UPDATE/DELETE triggers. Per-table inventory entries below identify concrete suites; project/user erasure exceptions are deliberate.",
+      "sqliteMigrations": [
+        "packages/db/sqlite-migrations/0003_evaluator_definitions.sql",
+        "packages/db/sqlite-migrations/0006_evaluation.sql",
+        "packages/db/sqlite-migrations/0007_collection_attribution_guards.sql",
+        "packages/db/sqlite-migrations/0008_evaluation_membership_guard.sql",
+        "packages/db/sqlite-migrations/0009_evaluation_terminal_time.sql",
+        "packages/db/sqlite-migrations/0010_receipt_correction_reason.sql",
+        "packages/db/sqlite-migrations/0011_dataset_revisions.sql",
+        "packages/db/sqlite-migrations/0012_suites_comparisons.sql",
+        "packages/db/sqlite-migrations/0014_legacy_reviews.sql",
+        "packages/db/sqlite-migrations/0015_golden_registry.sql",
+        "packages/db/sqlite-migrations/0016_revision_evaluations.sql",
+        "packages/db/sqlite-migrations/0019_integration_imports.sql",
+        "packages/db/sqlite-migrations/0023_evaluator_version_authoring.sql",
+        "packages/db/sqlite-migrations/0024_regression_execution.sql",
+        "packages/db/sqlite-migrations/0025_production_monitoring.sql",
+        "packages/db/sqlite-migrations/0026_governed_command_context.sql",
+        "packages/db/sqlite-migrations/0027_governed_input_claims.sql",
+        "packages/db/sqlite-migrations/0028_analysis_populations.sql",
+        "packages/db/sqlite-migrations/0029_analysis_study_drafts.sql",
+        "packages/db/sqlite-migrations/0030_analysis_study_events.sql",
+        "packages/db/sqlite-migrations/0031_analysis_study_item_events.sql",
+        "packages/db/sqlite-migrations/0032_analysis_study_item_views.sql",
+        "packages/db/sqlite-migrations/0033_analysis_taxonomies.sql",
+        "packages/db/sqlite-migrations/0034_analysis_assignments.sql",
+        "packages/db/sqlite-migrations/0035_analysis_study_closures.sql",
+        "packages/db/sqlite-migrations/0036_analysis_closure_finalization.sql",
+        "packages/db/sqlite-migrations/0037_analysis_deadline_retries.sql",
+        "packages/db/sqlite-migrations/0038_analysis_view_identity.sql",
+        "packages/db/sqlite-migrations/0039_governed_review_instructions.sql",
+        "packages/db/sqlite-migrations/0040_governed_imported_truth.sql",
+        "packages/db/sqlite-migrations/0041_governed_development_events.sql",
+        "packages/db/sqlite-migrations/0042_governed_review_items.sql",
+        "packages/db/sqlite-migrations/0043_governed_review_drafts.sql",
+        "packages/db/sqlite-migrations/0044_governed_review_view_streams.sql",
+        "packages/db/sqlite-migrations/0045_governed_review_labels.sql",
+        "packages/db/sqlite-migrations/0046_governed_review_labeling_barrier.sql",
+        "packages/db/sqlite-migrations/0047_governed_review_alignment.sql",
+        "packages/db/sqlite-migrations/0048_governed_review_adjudication.sql",
+        "packages/db/sqlite-migrations/0049_governed_dataset_truth.sql",
+        "packages/db/sqlite-migrations/0050_governed_review_truth_freeze.sql",
+        "packages/db/sqlite-migrations/0051_governed_sealed_intake.sql",
+        "packages/db/sqlite-migrations/0052_governed_capability_checks.sql",
+        "packages/db/sqlite-migrations/0053_governed_sealed_drafts.sql",
+        "packages/db/sqlite-migrations/0054_governed_sealed_access.sql",
+        "packages/db/sqlite-migrations/0055_governed_sealed_truth.sql",
+        "packages/db/sqlite-migrations/0056_analysis_promotions.sql",
+        "packages/db/sqlite-migrations/0057_analysis_promotion_handoff.sql",
+        "packages/db/sqlite-migrations/0058_binary_calibration_storage.sql",
+        "packages/db/sqlite-migrations/0059_binary_calibration_claims.sql",
+        "packages/db/sqlite-migrations/0060_binary_calibration_authorization.sql",
+        "packages/db/sqlite-migrations/0061_binary_calibration_mint.sql",
+        "packages/db/sqlite-migrations/0062_evaluator_lifecycle_storage.sql",
+        "packages/db/sqlite-migrations/0063_evaluator_candidate_commands.sql",
+        "packages/db/sqlite-migrations/0064_evaluator_lifecycle_transitions.sql",
+        "packages/db/sqlite-migrations/0065_governed_parity_guards.sql"
+      ],
+      "implementation": [
+        "apps/api/src/storage/sqlite/project-commands.ts"
+      ],
+      "tests": [
+        "apps/api/test/sqlite-calibration-claims.test.ts",
+        "apps/api/test/sqlite-calibration-execution.test.ts",
+        "apps/api/test/sqlite-calibration-mint.test.ts",
+        "apps/api/test/sqlite-calibration-runtime.test.ts",
+        "apps/api/test/sqlite-calibration-typed.test.ts",
+        "apps/api/test/sqlite-calibration.test.ts",
+        "apps/api/test/sqlite-command-context.test.ts",
+        "apps/api/test/sqlite-dataset-exact-payload.test.ts",
+        "apps/api/test/sqlite-dataset-revisions.test.ts",
+        "apps/api/test/sqlite-definitions.test.ts",
+        "apps/api/test/sqlite-dispatch.test.ts",
+        "apps/api/test/sqlite-evaluation.test.ts",
+        "apps/api/test/sqlite-golden.test.ts",
+        "apps/api/test/sqlite-governed-adjudication.test.ts",
+        "apps/api/test/sqlite-governed-alignment.test.ts",
+        "apps/api/test/sqlite-governed-barrier.test.ts",
+        "apps/api/test/sqlite-governed-capability.test.ts",
+        "apps/api/test/sqlite-governed-child-guards.test.ts",
+        "apps/api/test/sqlite-governed-development.test.ts",
+        "apps/api/test/sqlite-governed-drafts.test.ts",
+        "apps/api/test/sqlite-governed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-imported-truth.test.ts",
+        "apps/api/test/sqlite-governed-instructions.test.ts",
+        "apps/api/test/sqlite-governed-labels.test.ts",
+        "apps/api/test/sqlite-governed-reads.test.ts",
+        "apps/api/test/sqlite-governed-review-items.test.ts",
+        "apps/api/test/sqlite-governed-runtime.test.ts",
+        "apps/api/test/sqlite-governed-sealed-access.test.ts",
+        "apps/api/test/sqlite-governed-sealed-drafts.test.ts",
+        "apps/api/test/sqlite-governed-sealed-freeze.test.ts",
+        "apps/api/test/sqlite-governed-sealed-intake.test.ts",
+        "apps/api/test/sqlite-governed-subjects.test.ts",
+        "apps/api/test/sqlite-governed-truth-links.test.ts",
+        "apps/api/test/sqlite-governed-views.test.ts",
+        "apps/api/test/sqlite-input-claims.test.ts",
+        "apps/api/test/sqlite-integrations.test.ts",
+        "apps/api/test/sqlite-lifecycle-candidate.test.ts",
+        "apps/api/test/sqlite-lifecycle-numerics.test.ts",
+        "apps/api/test/sqlite-lifecycle-storage.test.ts",
+        "apps/api/test/sqlite-lifecycle-transitions.test.ts",
+        "apps/api/test/sqlite-lifecycle-upgrade.test.ts",
+        "apps/api/test/sqlite-populations.test.ts",
+        "apps/api/test/sqlite-production.test.ts",
+        "apps/api/test/sqlite-promotion.test.ts",
+        "apps/api/test/sqlite-reviews.test.ts",
+        "apps/api/test/sqlite-skills.test.ts",
+        "apps/api/test/sqlite-study-closure-writer.test.ts",
+        "apps/api/test/sqlite-study-closures.test.ts",
+        "apps/api/test/sqlite-study-commands.test.ts",
+        "apps/api/test/sqlite-study-deadlines.test.ts",
+        "apps/api/test/sqlite-study-item-commands.test.ts",
+        "apps/api/test/sqlite-study-projections.test.ts",
+        "apps/api/test/sqlite-study-read-commands.test.ts",
+        "apps/api/test/sqlite-study-runtime.test.ts",
+        "apps/api/test/sqlite-study-taxonomy-commands.test.ts",
+        "apps/api/test/sqlite-suites.test.ts",
+        "apps/api/test/sqlite-taxonomies.test.ts",
+        "apps/api/test/sqlite-validator-context.test.ts",
+        "apps/api/test/sqlite-workflow.test.ts"
+      ]
+    }
+  },
+  "entries": [
+    {
+      "inventoryId": "sqlite:analysis_actor_has_role_v1:0001_baseline",
+      "sourceSha256": "f48406d60eb3126cddac45816d3bfa328e7df2ffd828e823c6d00ceb3b2319d8",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_actor_role_exact_v1:0001_baseline",
+      "sourceSha256": "21c883d373659f620c60485a4fb41d62bc8874fadebccde9f50646bed55080db",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_assignment_event_digest_v1:0001_baseline",
+      "sourceSha256": "284da288aca2f94b6c963d376ab61cc5d9ba05f588ab17e3027119a1bc2c75a6",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_assignment_request_digest_v1:0001_baseline",
+      "sourceSha256": "9d4284e49b23091d10554bc6c672e846a3d1c3388b8857cec05904150ce48fb8",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_clear_deadline_retry_v1:0001_baseline",
+      "sourceSha256": "886b6b606a346b24d94d0b6e328c54e40d78221ec55ab9f9711d07b59322a34a",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_authoring_exposure_details_v1:0001_baseline",
+      "sourceSha256": "2136e1c102f76b4bf378d72d9a012ba9e8a9d92615af98223606b639e8969489",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_promotion_content_digest_v1:0001_baseline",
+      "sourceSha256": "fb6a340c77f367830b776fed4821b994f3dab950b1e32ea83a5a0e3f8e97235e",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_promotion_handoff_digest_v1:0001_baseline",
+      "sourceSha256": "634a1b159ca9f664437eb603f66896580f70c35d559d04618a234e6838e9475c",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_promotion_request_digest_v1:0001_baseline",
+      "sourceSha256": "3036e4c56f2b7f2b337198d9f0e9522d69addb045e64215162db6d5bf1fd69f9",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_promotion_support_digest_v1:0001_baseline",
+      "sourceSha256": "fa600b108df8ac586264a1cc1f4fcfe494221986cfa09161d20df53444f4aaaa",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_promotion_support_set_digest_v1:0001_baseline",
+      "sourceSha256": "5d5c926e87d614fbe29e61c2afa1ce6d23abb9fb59b7d66643e1f5ac3b9e43c2",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_criterion_support_exposure_details_v1:0001_baseline",
+      "sourceSha256": "1102b6b95c24b9035702c076367eb78d45c2b19b6e1dc7666c9e5b01da3eac61",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:analysis_dataset_revision_content_digest_v1:0001_baseline",
+      "sourceSha256": "adbd886dc88c2261b9960664963aedf72c3c5c0088fadc01e484d41d211f9962",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_dataset_revision_digest_v1:0001_baseline",
+      "sourceSha256": "e71fc9acf714c9df2b9192ec86d7c510591b1b63176c685d9e3263f8aa0b81e3",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_dataset_revision_item_digest_v1:0001_baseline",
+      "sourceSha256": "e104c689312656c74fed3b63426a506bb00f84b088bb7bb1255f6b5085bc2a7d",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_failure_code_content_digest_v1:0001_baseline",
+      "sourceSha256": "0c2f68ae3e4a8d587414dfb5a57eb128d0424ba06dac464d63b6a6f59af5ac1e",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:governed_canonical_json_v1:0001_baseline",
+      "sourceSha256": "be3857eecf49c39fae2e273cc73e00e45ef1a0b13a71ab176a2f5439c5adb0d8",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_failure_taxonomy_content_digest_v1:0001_baseline",
+      "sourceSha256": "4edff83eb34e4629e43a598425ce9f581f70fdeab7c94ad6d85de1385b9265e7",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_linearization_clock_v1:0001_baseline",
+      "sourceSha256": "75e41b9a5889cade3aa7da51167ca44aa3353fcc67423dbd4456a28487afbdeb",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_observation_assignment_head_v1:0001_baseline",
+      "sourceSha256": "431ab4a824860bfbeb3c199d8acfe372f96438ba74a1cf309b6f5b1035c8ff87",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_population_content_digest_v1:0001_baseline",
+      "sourceSha256": "e95e54dcb5f30c10e832d3f2eb618750dd45a41d082b7023113f420a1f0b3c24",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:analysis_population_draw_content_digest_v1:0001_baseline",
+      "sourceSha256": "2ae528734a1349eeeaf85a5f1df75a2da962324c5014d8efcae95aff964fc2d5",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:analysis_population_draw_digest_v1:0001_baseline",
+      "sourceSha256": "b1878695e5be9537a7b984ec26463a411e60b0c4020a0e63e3da2504740a0abb",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:analysis_population_frame_digest_v1:0001_baseline",
+      "sourceSha256": "e804ee6a97550c048638b038be541be072df244df1c6ac2b7a952812a3653d2b",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:analysis_recomputed_population_frame_digest_v1:0001_baseline",
+      "sourceSha256": "67241f291dbf19cbc03bc9b788d89a38f453ac2137c65a9a9f8dd389bfc3f958",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:analysis_record_deadline_retry_v1:0001_baseline",
+      "sourceSha256": "847a1a1c392e9cfd93db815a0f02d06c41938e88a8a32cae38f213010eb4505c",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_sha256_v1:0001_baseline",
+      "sourceSha256": "df05313a1595647bf4c9e1dd98e429347b0808c1a18969f2e0a990c9837a4d19",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_assessment_digest_v1:0001_baseline",
+      "sourceSha256": "37d94ff618c73a3ab45ff0faa3b1ab04723903575331a8599af8f62e11ffb6d6",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_closure_content_digest_v1:0001_baseline",
+      "sourceSha256": "f6ab5788bb18d609f052703e419c0fd615450bcd15d9e09122d4ec63f58f0502",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_closure_digest_v1:0001_baseline",
+      "sourceSha256": "985e7b4ccf0662da99c862a539afd2182ee95a70071c7690cff1fe6428782a12",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_closure_item_digest_v1:0001_baseline",
+      "sourceSha256": "50deaa09da10840ad747ee2ba53769d7c0b0535171c96619af55a7aec9810803",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_content_digest_v1:0001_baseline",
+      "sourceSha256": "1d825cc71cda53adf7cb9f7c9f4e809a0803c86dc269e1408f8dab70fa45d04e",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_event_digest_v1:0001_baseline",
+      "sourceSha256": "d758fa2431257db6bd3d2b1e97cdbce33ab4777a5845e360a82ccbcf5aad7954",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_event_request_digest_v1:0001_baseline",
+      "sourceSha256": "6554f7949d6fb016e56297a6367ab2dc51b7a66de580fe4f6c6fb9c64fbf976a",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_content_digest_v1:0001_baseline",
+      "sourceSha256": "1d622cd7c01ee9aee63ccfb465eca7e0583280663b7b9f54ae548ccab110095b",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_event_digest_v1:0001_baseline",
+      "sourceSha256": "87e3bfb7d21797e23e0794177068d3ea78622d90f4f062bc091ac7f1e3a2e896",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_event_request_digest_v1:0001_baseline",
+      "sourceSha256": "e99ead36f0fe1055def6deeadec28ec3db897393f1349b2f6f121ce422213906",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_projection_v1:0001_baseline",
+      "sourceSha256": "e381f229ee797abf586f8aa35b2f6ed2225e924d7969668216002b80dc734d5f",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_view_digest_v1:0001_baseline",
+      "sourceSha256": "b085b6a95f31013d8ea8bdcf02c8719de38152206c54768f8ba25d7955abe3e3",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_item_view_request_digest_v1:0001_baseline",
+      "sourceSha256": "ddd95a1d8ed8943043ec5f015334ab2366e16f2f72b1cf0534d82d7aa2581281",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_lock_v1:0001_baseline",
+      "sourceSha256": "993633ec69b921694ed3276c6c4029a656b41bc8b718c7b63051add050a0bd0f",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_projection_v1:0001_baseline",
+      "sourceSha256": "769721c9399bd2a2f0995ceb476206cb694882848ee25642459e009fc1cceb50",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_request_digest_v1:0001_baseline",
+      "sourceSha256": "0d41a48faf4ca0306a90d894d5439889963fd274a4aac780b3881b8a19b8db7b",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_state_v1:0001_baseline",
+      "sourceSha256": "0bad3b39134f52c1dc1fe602818b03ac107ed20504b81bacf72b45d975312c16",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_study_view_set_digest_v1:0001_baseline",
+      "sourceSha256": "0306d7b4dce1f103aa58cb35e8d58f1d224c1cd8efaba5ea670d4fccd1c6f23e",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_content_digest_v1:0001_baseline",
+      "sourceSha256": "0979c512de0e46c47ad663041ae9540510c1124bda30166c4c94e14a7fe12727",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_coverage_v1:0001_baseline",
+      "sourceSha256": "4e17ed06a943a11aec186e466b1445f6661384c0c652b564f0ec9d258dfae8c8",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_lock_v1:0001_baseline",
+      "sourceSha256": "0ee42b70b0d207e42ee10d4d12051fd439d3751c7eda09ecc67659247be67c1f",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_request_digest_v1:0001_baseline",
+      "sourceSha256": "d1e93051812c412de240e416a1c3fa27cdf885c4144d898fc67058ffa72435c8",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_revision_code_digest_v1:0001_baseline",
+      "sourceSha256": "3a5e9de1b246b9401801e1564791fd1be7ea9bb7bcce1d56ab6856a0c363e3de",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_taxonomy_revision_digest_v1:0001_baseline",
+      "sourceSha256": "1e0c759da0cc1fb72f751a24192e0d853f0f941843b4add23802edbfb646400b",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:analysis_timestamp_v1:0001_baseline",
+      "sourceSha256": "6b5f21b9a26de722ec0fc34227d14bc8977e0e9ec32a9f5a56b31aa931b4f5f7",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:append_evaluator_needs_review_on_revocation_v1:0001_baseline",
+      "sourceSha256": "7559124d20bd9fc6b9c939253d9305b5a572a5196579a6e7a57181b96d42b41b",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:append_skill_version_development_event:0001_baseline",
+      "sourceSha256": "80b180cff6c829233c7fc74918f3ee81014ea82e0362dc4dd0ede5706ed9abc1",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:claim_case_input_identity_nonsealed:0001_baseline",
+      "sourceSha256": "d4ffce3fd54bf55900f57b1fd83247fb1b5d0dfecb37750f7023ab61a64af554",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:claim_dataset_revision_item_identity:0001_baseline",
+      "sourceSha256": "1a42ae2f22c5dd64ccef35d98556f32d47558fc8a62ee80f655ee35d6599bf9b",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:claim_governed_input_identity:0001_baseline",
+      "sourceSha256": "0983d467fb26e2fb5f4a780e818b79aa900dd202d80d82f5aa13c8de2d53366e",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:claim_governed_sealed_review_identity:0001_baseline",
+      "sourceSha256": "d197b4c050d0c857db83ed98af42ebc70eca8264eedd286e1c3e91685a892d24",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:criterion_v1_digest:0001_baseline",
+      "sourceSha256": "40223ab81c3bc703d69787b5a8fed63e555e7a02023895983d94425e2fe1f7c9",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:ensure_dataset_revision_criterion_scope:0001_baseline",
+      "sourceSha256": "9be4572f77bc5d1d144117c68506d0dc71dc57afe09dd149c1337217549ca5e1",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:ensure_golden_criterion_binding:0001_baseline",
+      "sourceSha256": "bb71389fbcf08e8f7e44c2bad8e9e76d29e68845f41ec718811417f266139e45",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:ensure_human_verdict_criterion_binding:0001_baseline",
+      "sourceSha256": "0a59f9cf9be00a1bb878a70f65fc5c3aab112f701b5c33ab3ae2b00da112c957",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:ensure_import_job_skill_version_binding:0001_baseline",
+      "sourceSha256": "9664f92ecce71adc775a1145ca663ab6b168920f114b32cf2b5f8d8ffd94eeec",
+      "group": "imports"
+    },
+    {
+      "inventoryId": "sqlite:ensure_regression_run_criterion_binding:0001_baseline",
+      "sourceSha256": "146f502fde19bf11b87a2046c19353dd8eaeddf2fb10517ff253fdc098cc6b8c",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:ensure_review_queue_item_criterion_binding:0001_baseline",
+      "sourceSha256": "88334526a368f0606cb902f7495bd5d2ac6dfb1d71dbae9c4c107325d0f31466",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:ensure_skill_criterion_binding:0001_baseline",
+      "sourceSha256": "1a8236792e20dac8be6ea2094dbf08755dc3a129e31c65887ebb5149e97ff987",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:ensure_skill_version_criterion_binding:0001_baseline",
+      "sourceSha256": "363235a52a8ec4639590b4066d471a58ae8961b86191bfb749d29cde0d03165e",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_calibration_admissibility_v1:0001_baseline",
+      "sourceSha256": "251929ccff349fff83ead33a06957591a8d6ea355a3758659bcf3bdd0cd7cfb9",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_content_digest_v1:0001_baseline",
+      "sourceSha256": "0bb4f553bb3ae4b9bd919cae8a2d43986acd62a935e3a4815937b7cedcbf2e8a",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_event_content_digest_v1:0001_baseline",
+      "sourceSha256": "a34f5ba778c99a79f4c9d613b8362bcc54d2a39656bb34977e01c30b2c47afaf",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_event_request_digest_v1:0001_baseline",
+      "sourceSha256": "e11895deedcbda780baf48517b91484ad635d091aff0c57dc976b00d14821545",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_head_v1:0001_baseline",
+      "sourceSha256": "14974746df84cb81e37d455a61561eb66ca8330ea9b9c2abf62c6a947365d524",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_request_digest_v1:0001_baseline",
+      "sourceSha256": "4c73ea904198136a1441340a0d0ab51bde1555ff2309bbbba75be92a6d93c7f3",
+      "group": "lifecycle",
+      "superseded": true
+    },
+    {
+      "inventoryId": "sqlite:evaluator_skill_version_context_allowed_v1:0001_baseline",
+      "sourceSha256": "cd6b7ae1b191aa2f525596fc33a6163ac2bb591df2fc77e805c9611d1c98d668",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_suite_manifest_v1_canonical_json:0001_baseline",
+      "sourceSha256": "42350fe4507b84a9abe3c0ff461f3fd01660b5ba478ad087ab5d0da05e31f76a",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:governed_bounded_text_array:0001_baseline",
+      "sourceSha256": "62768f804730779b590d5c64b052bc45b42a6d1771e89f9bb3b30d15c716a9f7",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:governed_bytes_v1_digest:0001_baseline",
+      "sourceSha256": "730583cd7c3b58c1160cfa424315cc7ac127e7a62cdff9b457579f316c120ac9",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:governed_content_v1_digest:0001_baseline",
+      "sourceSha256": "cc72bd89233ae80dd9fd378e1bdf2128dc1627028a880f1d101812aa56310cb5",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:governed_nonempty_text_array:0001_baseline",
+      "sourceSha256": "4b7a016e14a6399a6b49b33ce24ea18750eab5537d1b34e7f11aa3977a2c4436",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_current_batch_state:0001_baseline",
+      "sourceSha256": "d7a41c5d7eb25f634c6c2c17be932a794ac03946c134c47ccd56fbe815c59610",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_current_task_state:0001_baseline",
+      "sourceSha256": "6b5f89f8264ac138070848d00829f38508688db9928ef7f63c1b477d074ba3ec",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_draw_digest:0001_baseline",
+      "sourceSha256": "e8e076353a8da9639b1da2e6e110f955dd655cee8750d27292c476c208f04588",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_has_eligible_capability_check:0001_baseline",
+      "sourceSha256": "27f5b7b52b40e4222bb96fabf82afc5882b66250fdf625bb63fc7543df87728d",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_item_label_set_digest:0001_baseline",
+      "sourceSha256": "0aa48e87a22ff2bfb93026b167027b1a78da890da6a4dea5f2df670626219b09",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_item_resolution:0001_baseline",
+      "sourceSha256": "27e01de30e7e83dbc7a20880a90ff75dd3ecc03c67b1f0def31fd3b24465c724",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_label_set_digest:0001_baseline",
+      "sourceSha256": "ccd62d3d57f4348cd5db5a29eeeaaa802b986c1306ada3c7905ef807fb29784d",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:governed_review_payload_v1_is_safe:0001_baseline",
+      "sourceSha256": "3c522fff1e9af2a76860fbe0c3a6c2381c9bfa8663c05b56cd91e3685837f42c",
+      "group": "review-items"
+    },
+    {
+      "inventoryId": "sqlite:governed_sealed_intake_frame_digest:0001_baseline",
+      "sourceSha256": "86c4d26f8b12cedcf7c17761088411be1944d5227b1fa16118434e52a1516310",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:governed_utf16_sort_key_v1:0001_baseline",
+      "sourceSha256": "d54c59895f0f6962dffdd6ad6d0dfcc6de27650f42e4aa8b93a485a99d76954b",
+      "group": "command-and-digest"
+    },
+    {
+      "inventoryId": "sqlite:guard_activated_regression_run_immutable_v1:0001_baseline",
+      "sourceSha256": "04874a99b76c50a6d296b6cb65025cdba6cc80e164b545976b77b84596625dab",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_6b2_append_only:0001_baseline",
+      "sourceSha256": "8c631cd213f6657da270f534ec39c62bebaedccab03e573de55cf506ab1a1718",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_6b3_append_only:0001_baseline",
+      "sourceSha256": "b74444bc0c765fc53429d1b195bc89c08d72aa4ff3af8a41a78b9113ae606d3d",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_criterion_promotion:0001_baseline",
+      "sourceSha256": "bd5669dce4b0e7c07006daecb713ecb67a16b3f603c6345efc00aec750fa0881",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_criterion_promotion_complete:0001_baseline",
+      "sourceSha256": "17dac679a92cd4a4cc68cfa0b6bd5bcd3591c6308217a3e4e376d2873f649ac6",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_criterion_promotion_support:0001_baseline",
+      "sourceSha256": "0dd3e20bed2d25578f89954df811773388010e550211b8e3e50895635039369d",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_evidence_append_only:0001_baseline",
+      "sourceSha256": "423e0d7e4a5fbe7458d4b14cfd2a1802b5d7d79d16a67dace08a1f1bb0cb8b9f",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_failure_code:0001_baseline",
+      "sourceSha256": "e7b77d9631d18717b4b54b437eb4ea8d3a590ef4d19619a91c70c55788a634ad",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_failure_taxonomy:0001_baseline",
+      "sourceSha256": "81082fea2c65630967bd70f3384a138156b1821b8288c921b1aa900402950ae8",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_failure_taxonomy_complete:0001_baseline",
+      "sourceSha256": "7aad7ac1a0f5f861c9e2e7d69a572054fe9dba88507c387bf89f02174934e1b1",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_failure_taxonomy_revision:0001_baseline",
+      "sourceSha256": "d3cbcdae156e5b8551459362a7855220180c4ca7aa459dd6f85da8d13cc0e48e",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_observation_assignment_event:0001_baseline",
+      "sourceSha256": "46841e6b1b8e533414e1dbdb3cd8da046f73b0bb4a38e45fc595304c239109fa",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_bundle_complete:0001_baseline",
+      "sourceSha256": "7f7f41962f8f4b4c22cceb4cf59ca3b73aeda51addd08a15e988bd0721a374e2",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_draw:0001_baseline",
+      "sourceSha256": "9fd18f894c42db7ca215920faac0db207749168e9b3696e279ac514d5e99f100",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_draw_item:0001_baseline",
+      "sourceSha256": "fcc62838cd26ed6318ba303e2b25bbf55ef46c95fc537c3edec1edcd09f2b833",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_eval_run_boundary:0001_baseline",
+      "sourceSha256": "b7ebefc2bb513565fc9916c70eab90ba647cc8f4b2acd0ad48b45164a43ceb16",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_exclusion:0001_baseline",
+      "sourceSha256": "110dd316f1834f2cbaa45273d036a9c5eac2d9dada6f4d645d5932b1a46ee119",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_member:0001_baseline",
+      "sourceSha256": "e01d5842e891a9b274ff53feb57379a5c6e5d30d67c224175e666d56df438515",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_request:0001_baseline",
+      "sourceSha256": "7b8f48a444e9d4e592c1427b201c891090a6a0aa01402f14a73add0fc2995485",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_review_batch_boundary:0001_baseline",
+      "sourceSha256": "3f6e67da731fdd2b97c9bb46707502e7daf0d074cf32719756d731d4f9e31199",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_review_item_boundary:0001_baseline",
+      "sourceSha256": "09b6ef046887f5378081883318078d54ed4663e529b9b01329745c976f5a563d",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_population_row:0001_baseline",
+      "sourceSha256": "41e4add54b1e7c610da712b02cfe20daf8d9d898eef3a44f68ee56d897c4d59f",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_criterion_batch:0001_baseline",
+      "sourceSha256": "8e612b44534ef249dcd9f101a5cbe1ad546d0776f8fbc863b5f7b2ce91319661",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_criterion_complete:0001_baseline",
+      "sourceSha256": "79a052e5848b032f3e2e82065d3ff40480d42c0a3951e4c10922b5c70cc62c7d",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_criterion_source:0001_baseline",
+      "sourceSha256": "95376d22c4e2a394b2658c665d86b3a1f38a42460b3245e6656422797bfd9f97",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_criterion_version_complete:0001_baseline",
+      "sourceSha256": "392313d04eb61535e1d6934036afc3894fe9eee7e7899779409c6bafd92e49c1",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_evaluator_complete_v1:0001_baseline",
+      "sourceSha256": "93401557405e3108e5ce28108a34ace3a2750edb2623b13f137bae6fa2d0cf3c",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_handoff_batch:0001_baseline",
+      "sourceSha256": "7fbf4ff51abd6e0b89c59db3f1210512a9e4d94da9ed2fc7da9ddde4b4594756",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_promotion_handoff_batch_item:0001_baseline",
+      "sourceSha256": "ccfc2b2a3da834f1779689df274c2e00b0377b6182fcd8225b1b22cff9b06166",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study:0001_baseline",
+      "sourceSha256": "22fbd34de6e4283a35d5e97cc245ec3c0bc9b9ab9b348769f0b16e51ed4d5f99",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_bundle_complete:0001_baseline",
+      "sourceSha256": "ff3c3201a12efb8d776e1636d8c305763500149f9b4920d20d231dcd6b2a35aa",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_closure:0001_baseline",
+      "sourceSha256": "f4dbcb5075a0b7ab2f80619980b4a3539985bbe4d5340440a7cca23a7418f4cd",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_closure_complete:0001_baseline",
+      "sourceSha256": "75cec859bfb758be5f079ff9adb8f79cae06faa837f1730bc1ca2e97ab91308a",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_closure_item:0001_baseline",
+      "sourceSha256": "54c0a259253eaa702e6e631c88e9eb40f9818a2ddbe3f8695aa7856e8795d8ea",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_event:0001_baseline",
+      "sourceSha256": "0add23c152b112a11ebe64a80f6288d4f6307b18be42fb8088c44ee7ff7356a7",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_item:0001_baseline",
+      "sourceSha256": "bea562392ad862446ced4ae0be0954b1294cd34a28b3117a07152a201abce215",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_item_event:0001_baseline",
+      "sourceSha256": "3263b9eccf6e3b31c090ab987e2642dfd3922bdbf93d5ce3cf65803f9318d7b6",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_study_item_view:0001_baseline",
+      "sourceSha256": "e8c0037d384200264dd898d54580d4638ede11c95b26635267ee993bce262240",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_taxonomy_revision_code:0001_baseline",
+      "sourceSha256": "14beac9d91d2bad91b1d05d0e7cab34261ec863b28bdbcf4f3f9ed07b59ddc24",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_analysis_taxonomy_revision_complete:0001_baseline",
+      "sourceSha256": "ca4490d4a2b165c77d320e7e5a93437d6fc52ba790d9352378bca0e694349aff",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:guard_assessment_receipt_append_only:0001_baseline",
+      "sourceSha256": "8c607d7a3beb9ff1e679830f31257829bc279eef37c4698db7a71ec26a2f70b9",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:guard_assessment_receipt_comparison_owner:0001_baseline",
+      "sourceSha256": "649794e987c92955a90a1d882bc4b9446d86740448c866f98f5602a30aa65e32",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:guard_assessment_receipt_lineage:0001_baseline",
+      "sourceSha256": "964f25681a49b0baa05cc9f7bbcda9ad459fef43c96dfda710bd79db6ca29923",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:guard_batch3_evidence_append_only:0001_baseline",
+      "sourceSha256": "cf167acb3a834a596ad1340e9422eccfba7125322feb3d596221d36eb0e7d8b9",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_append_only:0001_baseline",
+      "sourceSha256": "7566335ee9eae96fb5dfd1f6b4e66b3b15f390ab7ea1764a48adbbb630b7483a",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_attempt:0001_baseline",
+      "sourceSha256": "f0cdb1798c0b4d185aea994f96ab09ced4354b96171026d559ff74179dd0a0a5",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_evidence_insert:0001_baseline",
+      "sourceSha256": "38d55d4a93d6859613ba57a86550ec6c2942f45dea83bf07a0f8fe8a738db1e2",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_exposure_during_lease:0001_baseline",
+      "sourceSha256": "614fa79b9d27b4f02e25b82d6ea7501515c64a753acb17094991e29745531be4",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_revision_lease:0001_baseline",
+      "sourceSha256": "eec804f666a922a5acc2423fae8e8caa174c9ec320169ba2c1ad4b63d77b7f6f",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_binary_calibration_run:0001_baseline",
+      "sourceSha256": "eeb183e48cb94214515e30133d6f99037d79c42b98459fba1a8a95ab78534e84",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:guard_case_ingestion_purpose_update:0001_baseline",
+      "sourceSha256": "d8a140c83f71ee5a53e51e611bcfaac482229cd938b715a1110e4ec44c5e0365",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_criterion_regression_revision:0001_baseline",
+      "sourceSha256": "a6287b368af3781f66175d8274a6d92ba4ddb0e7e62598470af78e928e5e0817",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:guard_criterion_version_owner:0001_baseline",
+      "sourceSha256": "61da7a5797e689a438863e6a2e234ac16c267bb14bacb1bba8431cd691dc4e39",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:guard_dataset_evidence_append_only:0001_baseline",
+      "sourceSha256": "d091bbc24a3875a2273cb5edd9e5ca593b0e0150e4c103d7aefd28281366d701",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_dataset_exposure_owner:0001_baseline",
+      "sourceSha256": "77c9aca4a5a531be259733c997acd9ca5af5b3e31a0e07a2cd038126083aef53",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_dataset_revision_item_owner:0001_baseline",
+      "sourceSha256": "e3ec97794175de41ce6852920fedc6c024c731578ebf3307ac7116955b0e544c",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_dataset_revision_owner:0001_baseline",
+      "sourceSha256": "c25b9b5ea603b166b48559e1072070c4619a1281d62d2b3b5a47e386489260f8",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_eval_run_revision_binding:0001_baseline",
+      "sourceSha256": "a09728939527940c18cc662120a6d9e0e03e6b876fe3753d2f7a24f1fc78613a",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:guard_eval_run_revision_item:0001_baseline",
+      "sourceSha256": "b088cb4d48493336e40948c6dfd1e8d2d3836797e2b16a5021009765f139f6b1",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_execution_authorization_v1:0001_baseline",
+      "sourceSha256": "cba8746a52bfea3781995c5342384eb7cea9619c6e17d03f603ce0f99fa850ff",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_lifecycle_append_only_v1:0001_baseline",
+      "sourceSha256": "ab894d0c1bb83296df57c52ca4c7e8c0a98647df43e64265715dbac62e9449ab",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_lifecycle_complete_v1:0001_baseline",
+      "sourceSha256": "e1fe18578a22a30fb1dfb2035429a11b3e6d821d8dd47d49535dc9b7b4c82ccf",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_lifecycle_event_v1:0001_baseline",
+      "sourceSha256": "ecf91ef57568fbaef176bc36636748e41a823eaff6e6cb57de8499a9e67b85ad",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_lifecycle_row_v1:0001_baseline",
+      "sourceSha256": "aa121bd9a8df6f09964276bbdbaad603787a79d04f6ff611034f07aba0dec8ee",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_lineage_state_v1:0001_baseline",
+      "sourceSha256": "51d99822834608f9e6a450f813eb3e063e95b0601f7a2ee5862c7a91a83adefd",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_suite_manifest:0001_baseline",
+      "sourceSha256": "a816050e1cb09e34110b8d9fb0447d61a8a47f6e4b1e4b8e91abee9e1b43997a",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_suite_member:0001_baseline",
+      "sourceSha256": "7bec501c76f26f2e038c2cb57926379270b3e9fdb4e8d15c134d7350a161b12e",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_suite_member_lifecycle_v1:0001_baseline",
+      "sourceSha256": "bc54d934b17ea200542da86267770404cea880c55b6d3c89fc043e066f7acf32",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_evaluator_suite_members_complete:0001_baseline",
+      "sourceSha256": "4c020e272a8b787a3d3b06d20006128a523b0807cbd839b7c8677fe08832f10d",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:guard_golden_revision_item_criterion:0001_baseline",
+      "sourceSha256": "045cbee76c41e102ea571668516440b743c57d314d80eff898fe5db70af38449",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_adjudication:0001_baseline",
+      "sourceSha256": "4e3a3cc1e730bcc1d026eed844b4de4ed17fbb1db4362f27c1edaf7f37e94cba",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_adjudication_label:0001_baseline",
+      "sourceSha256": "195a960341f3097f6170f76b64bfbb63b19c50c7444c79ebd82ea3bca17911a6",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_adjudication_label_set_complete:0001_baseline",
+      "sourceSha256": "0f2d2f7feaced86b6465ac2df261bcef183ac63409499b3f910bf2a0d29159c8",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_alignment_event:0001_baseline",
+      "sourceSha256": "2f56028ca22bc33ced87ccaa5d6d20520998dafdfe980ed7f048f28db2292955",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_alignment_event_label:0001_baseline",
+      "sourceSha256": "68429d9d8fcdc3c70d7b8860e3bf5a1da089d6cfbd0e115db8726860ba85bc64",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_alignment_label_set_complete:0001_baseline",
+      "sourceSha256": "96ef291d98a1c4493fb218b2ed5a5ca740da5e6ff022a9e98175e2e19764ae86",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_capability_check:0001_baseline",
+      "sourceSha256": "f75b5b027499ebf01b4d9f510de13955d730d2439e95a6f8d2bdde4be0984f44",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_capability_development_subject_v1:0001_baseline",
+      "sourceSha256": "4026cf30f0d17981c5b17086e3adfb2cd8c7194d2e7482e14c3cfaf895d47314",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_dataset_truth_link:0001_baseline",
+      "sourceSha256": "b9c8fa374e4b7899fb193e9874f062b47e66c75a0b97772ea23646166a4f063b",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_development_event:0001_baseline",
+      "sourceSha256": "0565b61722c59957db433e97fe324f321cbfb0d58b9648122ed4d201356c5ca7",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_evidence_append_only:0001_baseline",
+      "sourceSha256": "399cac20a6592f69a51892d32656d048ce237ed8a44fa9b31f13765f3912399b",
+      "group": "shared-immutability"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_imported_truth:0001_baseline",
+      "sourceSha256": "2551ee3d60039086a76933be916d4caf38324c4a1e12ddaa9f59e2f049cb3109",
+      "group": "imported-truth"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_input_identity_claim:0001_baseline",
+      "sourceSha256": "e52de948d13b624db188da2f9b3ead00f3c4194b4c1091a18ba0f72a91021c5d",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_label_submission_complete:0001_baseline",
+      "sourceSha256": "fc44f58e63cd488d23b530a97b337bfbb9f8c3138c6ab9e266581a48a0399e67",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_batch:0001_baseline",
+      "sourceSha256": "9a315833d0b6bcec2f4b2512c52d428f0889f80e58dec0988ee760d2fd34e741",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_batch_event:0001_baseline",
+      "sourceSha256": "8228f1755e3bba7ed8b4fa0b9a2e3530cd2af856cfd21b62b0a64f17e2a05b2b",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_batch_item:0001_baseline",
+      "sourceSha256": "a5cb92fa94828b8dbdf346f4db7597973d74203903dc8ee8494cf5a19f4304e8",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_item:0001_baseline",
+      "sourceSha256": "c8b716575c8d65da56e967868cb79f23ffc78f2701b72db8b728f04636c43a31",
+      "group": "review-items"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_label:0001_baseline",
+      "sourceSha256": "efb4bfc7ae8e448fb4db05353378c962e608b7ebc310cacd696d18e814a24343",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_task:0001_baseline",
+      "sourceSha256": "8d61b28d1f3687b4d66d165549d78824f2b12be6b77a1b088c03681ee0e1626e",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_review_task_event:0001_baseline",
+      "sourceSha256": "0ba2eb3e82825029bf2d473976be515e14d3fdedbc342253b8ee95e9bc6163a8",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_reviewer_subject:0001_baseline",
+      "sourceSha256": "3af24be3464e6eb97c226d60bed00139fbb9c66fc328d817aaf3bc8c286de2b7",
+      "group": "governed-subjects"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_sealed_identity_reverse_overlap:0001_baseline",
+      "sourceSha256": "87fae743c931035735e334ca7c9ea276bbc985125be73f4a751283c6e2a4993a",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_sealed_intake_population:0001_baseline",
+      "sourceSha256": "447c26afa02901c61b26dc500cc5f885907724cceacb84cccb5e0e743afcbb3c",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_sealed_population_complete:0001_baseline",
+      "sourceSha256": "d809c46dc638c017a8740255b074df27e4e5cfc565d8281e6edf873333110580",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_sealed_revision_reverse_overlap:0001_baseline",
+      "sourceSha256": "fcf131ad7a4fd2da8b0976554bb35378c524f378550a88dc1a091a87cacf97e5",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_subject_append_only:0001_baseline",
+      "sourceSha256": "80f3f2b35ddf69a993493b7aa532271afe2e8e83f6478ea4f5eb14a378015e12",
+      "group": "governed-subjects"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_truth_link_label:0001_baseline",
+      "sourceSha256": "5bb37af98da32c867dbe5c1a343ee11751da7b75fd7d2de6ed41e27cb9ec5714",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:guard_governed_truth_link_labels_complete:0001_baseline",
+      "sourceSha256": "4acfb61a60ee8d49e6cdcb1931773b76c8fd3776116c0bd666c912d80af72a75",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:guard_production_calibration_snapshot_append_only:0001_baseline",
+      "sourceSha256": "cf61c9f2fb90670510919692f8d45119ad23b45350b5047ebc9a5ab47c5aeb36",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:guard_production_calibration_snapshot_insert:0001_baseline",
+      "sourceSha256": "ad8f006a003decc9b3c64c747ad8efc630ffd1c800b26aa8bc2732cd94579593",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:guard_production_decision_record_append_only:0001_baseline",
+      "sourceSha256": "5b8eb3f0fbc0c497c712549c8b8633b17723e9f87d29c2bfaa243c0c91a041cf",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:guard_production_decision_record_insert:0001_baseline",
+      "sourceSha256": "56a8bbbdc94a3282cffe061d38585846e7730b321e66960769c5ac85384c5efb",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:guard_production_decision_tombstone_append_only:0001_baseline",
+      "sourceSha256": "9314f11e4008c995c6c00eca3a336aa1b88db5ed517ac0c470e2e6153735887e",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:guard_regression_run_revision_binding:0001_baseline",
+      "sourceSha256": "aa229cab4681f49dd4a4ed01dcfa185d4722dd6d7e409ce8def52f745571d3c2",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:guard_review_instruction_version:0001_baseline",
+      "sourceSha256": "64844598647faf2bd4f14921fea3ad5e2418eac15265310ea71bb49482d2f138",
+      "group": "instructions"
+    },
+    {
+      "inventoryId": "sqlite:guard_revision_bound_case_payload_immutable:0001_baseline",
+      "sourceSha256": "ec638ed9f5fc79a3381271474d4aa0facbfc69011f695fa5c90c48b0bfa90b3e",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:guard_run_comparison_revision:0001_baseline",
+      "sourceSha256": "a44781727284eb609f721d96aec1ffc046a07c67a88588358df24e49ae178963",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:guard_skill_version_developer_identity:0001_baseline",
+      "sourceSha256": "0bea2581d0f53574a3dcb4aeff4f6184f2c4ddd04db25a5467f7756fe6bb25de",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:guard_skill_version_revision_binding:0001_baseline",
+      "sourceSha256": "f7e7fda11c2b87a50609516dadae70eae6182f37890f68a1b0b561c083cf64fa",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:lock_evaluator_lineage_for_calibration_revocation_v1:0001_baseline",
+      "sourceSha256": "764e058c9a90821e799cf7761c4ec52965599f88df230ea18ad82e79e2e3b79b",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:guard_review_queue_evidence_pin:0002_review_queue_evidence_pins",
+      "sourceSha256": "4ac288627aeb3bdebee55fb9b43923bd0a6f70e795ee9da3c2687a7ea757d5ea",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:guard_review_verdict_context:0002_review_queue_evidence_pins",
+      "sourceSha256": "5dd16b207b44a166f05e1add4d496a4b50c2586a4e3261da26d695f5b66a1463",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:guard_reviewed_judge_run:0002_review_queue_evidence_pins",
+      "sourceSha256": "ba87c551da3b617edbdc797adf59d0c8a9437be3658037cc4064386cbfe9a264",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:guard_review_queue_project:0002_review_queue_evidence_pins",
+      "sourceSha256": "c21d2a83ea43b77bf1e442a792fd901e529627f9a89708984781399195636310",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:preserve_skill_version_authorship:0003_evaluator_authorship",
+      "sourceSha256": "5b5eaf0462feaf6663408b0e2794bc0d277f077101607684b1f8ab4fbcec73f3",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:evaluator_lifecycle_request_digest_v1:0003_evaluator_authorship",
+      "sourceSha256": "437e88d606ddfedb8f84a20c8b3bd195fd1b4ed645a9fde5c89b48a4209a74a0",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batches:aaa_analysis_promotion_criterion_batch_guard",
+      "sourceSha256": "14512be8ee94adb7784f4c671d4ee377f9c74fe339c954e236b33f733e7cd9db",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batches:aaa_analysis_promotion_handoff_batch_guard",
+      "sourceSha256": "e7be12d199eeade6b40caeddbc62aec08d8a713ed5d3e6d2bdaf413f977de1fc",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batch_items:aaa_analysis_promotion_handoff_batch_item_guard",
+      "sourceSha256": "91dfe32f7dc9d3d1a9c781196c411175a4cb8aadfab4681f0942dafbe1c1e737",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_revocation_events:aaa_binary_calibration_revocation_lifecycle_lock",
+      "sourceSha256": "9ef3d3214453d7018dddcc73d586d7ae2e89ceeb018975e909122cd393356419",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:case_input_identity_records:aaa_case_input_identity_records_structural_claim",
+      "sourceSha256": "4a7abebe1d853cbf18625c54ecf4721abd16443088e2b35b84be5828cf670e14",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criteria:aaa_criteria_analysis_promotion_source_guard",
+      "sourceSha256": "717f83df94c6500a0fd9973d19622fc97a73365b9241534d8dbf9847cbe1fb94",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revision_items:aaa_dataset_revision_items_structural_claim",
+      "sourceSha256": "ca6fb81f736417f6764b94516f3c5c3b8e08f71f736da1fe82002196ddd67fc5",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:eval_runs:aaa_eval_runs_analysis_population_boundary",
+      "sourceSha256": "73998bee8139a1b83a6d2da727226a1b03c4b394c6d1235a60e99ff3cd3ec60e",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_capability_checks:aaa_governed_capability_development_subject_guard",
+      "sourceSha256": "79a4383f52681d040ae4d387b8f967dbb919314899e864c0b50d73514765a5ba",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batches:aaa_governed_review_batches_analysis_population_boundary",
+      "sourceSha256": "74a597baa5836030fbc04bbcc65cd5d7e6389cd782de19759030c8ac8db0b1f9",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_items:aaa_governed_review_items_analysis_population_boundary",
+      "sourceSha256": "ca0fb97a5a562409b698e4164cff21f8f1f2b6996850069149fdfea439410a09",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_items:aaa_governed_review_items_structural_claim",
+      "sourceSha256": "56001b712c89111634f1fe03f14869c0d8c1f015ca8af723779d504bdfa5bad6",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_criterion_promotion_supports:analysis_criterion_promotion_supports_append_only",
+      "sourceSha256": "623730a125f11a978c19a2dc2bd7c862c8ee325065f5beac3257d51d451d603d",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_criterion_promotion_supports:analysis_criterion_promotion_supports_guard",
+      "sourceSha256": "63f29cca863081ced226e0974f6e362dfaa355e7e18495cbcf0d1bd0e4b95af4",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_criterion_promotions:analysis_criterion_promotions_append_only",
+      "sourceSha256": "f2ff44b86319ad5cccde8f4f8b2523ef038171d2c3441fa0bf646c31715e51af",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_criterion_promotions:analysis_criterion_promotions_complete",
+      "sourceSha256": "1b918e81658c0540f154c1dc036f5d928623f98b1e57ec3da5e1444f2f86ce7d",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_criterion_promotions:analysis_criterion_promotions_guard",
+      "sourceSha256": "12b072555a2215652eeeec1a8c775d3919a06f80236aa03119794f62d1219575",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_codes:analysis_failure_codes_append_only",
+      "sourceSha256": "6350215f74e69900550d7de676bda8ab9b449d496dbef24bf0b55fb54e7a54d5",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_codes:analysis_failure_codes_guard",
+      "sourceSha256": "9ee0c87574694e1a69e05bd01de9f73ac3537a974808b0cafdfb9d2850e0a303",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomies:analysis_failure_taxonomies_append_only",
+      "sourceSha256": "9f9f437899c942c3d0135a34e40e99260943306216441de938078e423b9f8ada",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomies:analysis_failure_taxonomies_complete",
+      "sourceSha256": "46fddc158e05829d35899357c79697b497ea571dc4245093c5d558e14af79580",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomies:analysis_failure_taxonomies_guard",
+      "sourceSha256": "d44acd1742aea77ac522cc380658e051a52ac0fc91b1961af85c4e5a361afff7",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomy_revision_codes:analysis_failure_taxonomy_revision_codes_append_only",
+      "sourceSha256": "271f40129dabad5c154a52f136a68fac36a5e36be39d0080e9495d4e5e911ce9",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomy_revision_codes:analysis_failure_taxonomy_revision_codes_guard",
+      "sourceSha256": "7648d5a97c8bf8723b3c420bfc9240b9210f3a3c4438a4608712a7a2e2a4878c",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomy_revisions:analysis_failure_taxonomy_revisions_append_only",
+      "sourceSha256": "db6f24025085b6e6a5051771628f9df5f9abdf4f919beb0bc73800f7018413e9",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomy_revisions:analysis_failure_taxonomy_revisions_complete",
+      "sourceSha256": "3a3607dd941d210db9b9d40d3b1fc1801da910713cb4e91a912d326e40ab9f98",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_failure_taxonomy_revisions:analysis_failure_taxonomy_revisions_guard",
+      "sourceSha256": "1ed84276945e2cd5d08204700c062c001dcf6ff34bf175679091ec87fe64b2e5",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_observation_assignment_events:analysis_observation_assignment_events_append_only",
+      "sourceSha256": "d7cfdec576a5c9a1ecbd834683e72db9531ac95d4ee0e9dc7ba07f2ac3de42ea",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_observation_assignment_events:analysis_observation_assignment_events_guard",
+      "sourceSha256": "2a5595dad19890d0f38ee30033b88a2cce5dc901e761c4aacf6af2383c25da35",
+      "group": "taxonomy"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_draw_items:analysis_population_draw_items_append_only",
+      "sourceSha256": "70901e3eb4bd44d1db5976aeab840fea1c9d767d6e83886708147dedee4dda80",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_draw_items:analysis_population_draw_items_guard",
+      "sourceSha256": "ba61ea80c6b437ad1e1b0228ff6b60d70e7b2bed9911708502128cd08f5bb78c",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_draws:analysis_population_draws_append_only",
+      "sourceSha256": "92b3aa667da761eee54e3d64e7db8ee86bc98fcefaff03c262713cb5350d442e",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_draws:analysis_population_draws_guard",
+      "sourceSha256": "b3b6a5b9b14f162b2bcaab0bf17b192c72a97e57f1ffacd9401bc81a5cd1ae8a",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_exclusions:analysis_population_exclusions_append_only",
+      "sourceSha256": "3efe86927073474a423ff8227bbc2a33eb8ad80773719b9627b6c986fab98ba6",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_exclusions:analysis_population_exclusions_guard",
+      "sourceSha256": "664db3bab38ef2eedb8c9766f0dd1d1a2325d06a701b546e6277c817d81dd1ec",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_members:analysis_population_members_append_only",
+      "sourceSha256": "d75ecdea28dba8e859b70ff863db0a6fcb5a95476d29cb6193be1878dd239618",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_members:analysis_population_members_guard",
+      "sourceSha256": "c836d098d92784381ed5848c22aa661850304dec409a97f08e9ae8da7e981ece",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_requests:analysis_population_requests_append_only",
+      "sourceSha256": "b17dcec0934f6a7d67249e6bc5729afbf4a646467cc3bf98b8afe5004b0d2315",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_population_requests:analysis_population_requests_guard",
+      "sourceSha256": "4ccf8c82f9916c5a8a56bd85c5011e8c40b5b14442931c703a510d8c0bbe898f",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_populations:analysis_populations_append_only",
+      "sourceSha256": "9aaf684f714687843f08cbc9867aac2b494eed949260cd2c348b037a171c0b79",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_populations:analysis_populations_bundle_complete",
+      "sourceSha256": "6a4c091af7cf5f9d276032c3f71e07b31ad0bc61c8a488aafb9f0818c9063cc7",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_populations:analysis_populations_guard",
+      "sourceSha256": "d61bf4ec2076046a3904e60ed854c96d103ad7e40909899c831bd285ea80e16f",
+      "group": "populations"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_studies:analysis_studies_append_only",
+      "sourceSha256": "b2aba2ab0e683020284f55ccba69d8bde65e27746bd040c9a614fe3bc17927cf",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_studies:analysis_studies_bundle_complete",
+      "sourceSha256": "d3a311edfc8e14f9e64077815ce081529b00ce922f40ef250df5a76a481c013c",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_studies:analysis_studies_guard",
+      "sourceSha256": "6e6a08b95e3a1544c7d62829c235b9a5e74f0f99193be5f97c927a0a218ec3a5",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_closure_items:analysis_study_closure_items_append_only",
+      "sourceSha256": "3bc1c039d903258d5f060dd1beaac545e392a6740438eda834d8d854e37f3df4",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_closure_items:analysis_study_closure_items_guard",
+      "sourceSha256": "963191343c45e984bd5ea55699ad7fb319605bc190d8bd969e1c4e12dead4a78",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_closures:analysis_study_closures_append_only",
+      "sourceSha256": "6e798e73f8fdb6a092ef4c0477e2e6609bde96056b782a700b25ddd16bc3e1d0",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_closures:analysis_study_closures_complete",
+      "sourceSha256": "5567dd85f08dd4b13f976ccb1a64e0ecf542feb09998c25bc5e1234e614d7af0",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_closures:analysis_study_closures_guard",
+      "sourceSha256": "ef1be4cacb346d851b4c40cdeebeaf2e86a15589698c3c2d4e154b8a09f2fcf4",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_events:analysis_study_events_append_only",
+      "sourceSha256": "b5ca6386e8c12df40236077770823c9507b7a1b19206592fa9e3e717a63ff7ba",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_events:analysis_study_events_guard",
+      "sourceSha256": "492ecd34d9de4a9812df1d575495cff5f7ee3f04e789e1075df75fc119392903",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_item_events:analysis_study_item_events_append_only",
+      "sourceSha256": "88d38ef30372b9571434e8007e101d24ee82555983e319c0da170cc1899fb9ab",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_item_events:analysis_study_item_events_guard",
+      "sourceSha256": "11b8910d3ac9235ab7caaedcdf67f4347db3063732beefb130fc8601ea26d8a5",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_item_views:analysis_study_item_views_append_only",
+      "sourceSha256": "ba7e8e9998f6680cfcaf5b252e2404f36c9c2062d2354fce83cb2e96fddd5d31",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_item_views:analysis_study_item_views_guard",
+      "sourceSha256": "c2765e0668864e3d689572261f575f9b6937f22e0526467f8029f74b595709cc",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_items:analysis_study_items_append_only",
+      "sourceSha256": "3fb7b66a0437c28cc9709e70b7039d51b4bd9a8fe6a3cbe1be98f74ae87d5e86",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:analysis_study_items:analysis_study_items_guard",
+      "sourceSha256": "ef120082ed2c7c65c587901f09a37a04e40a7c6ccd56e0507c2e22e08f2c7d0a",
+      "group": "studies"
+    },
+    {
+      "inventoryId": "sqlite:trigger:assessment_receipt_artifacts:assessment_receipt_artifacts_append_only",
+      "sourceSha256": "824ce710d98d7f731ae74b0dc952867f4209e99c72f9bfc9591076a8cadd60ac",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:assessment_receipt_artifacts:assessment_receipt_artifacts_lineage_guard",
+      "sourceSha256": "67dc4b0005aeaf7f5c5f8e2d0106040e1b597885f01396afea19e93486ace1d5",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:assessment_receipt_comparisons:assessment_receipt_comparisons_append_only",
+      "sourceSha256": "f9b4351df1e7bca7e5a0bdaae4755299b2afe6e791b6a0b5e65e24756ef44392",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:assessment_receipt_comparisons:assessment_receipt_comparisons_owner_guard",
+      "sourceSha256": "e577ebd3139bb19ddf19946c389e9034e2c60b023f44af711999d31729063ec5",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_artifacts:binary_calibration_artifacts_append_only",
+      "sourceSha256": "7d0cec13273616ee6fb55fbacb78f4d1b1fdaa12ba134fa755006052ee4be372",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_artifacts:binary_calibration_artifacts_insert_guard",
+      "sourceSha256": "013dc9cef7ae77b5a98e03324e122f61fafaf4b1e1c713e92d4cf3ba7743286f",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_attempts:binary_calibration_attempts_guard",
+      "sourceSha256": "9cdd82faf355d97015bb4c0aa546b5b03d28fd6a51e37e5dd7622c680a792c2e",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_exposure_events:binary_calibration_dataset_exposure_lease_guard",
+      "sourceSha256": "3daac94e42a01a10fa2ff72fa34142d2dfb83e3d8f65ec1e6633e00644c51a8c",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_exposure_checks:binary_calibration_exposure_checks_append_only",
+      "sourceSha256": "f9b14c19a0c1a18556b610afa175a02806c964837c86361ab91fbdd80332620d",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_exposure_checks:binary_calibration_exposure_checks_insert_guard",
+      "sourceSha256": "6931d4048ca1bd7abeedde2bfa621df3269a00c5459fded518a06582d2a27b87",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_private_ledgers:binary_calibration_private_ledgers_append_only",
+      "sourceSha256": "cd710eb69ba4883f178a2193b620f75d3ccdf529ed22c3142dba5cdbbe2866d7",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_private_ledgers:binary_calibration_private_ledgers_insert_guard",
+      "sourceSha256": "6db302b88ddec31609c944daeaac798ef4af4d245b87ea97cd243bba6c04cdbb",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_revision_leases:binary_calibration_revision_leases_guard",
+      "sourceSha256": "1eeaff3155388081891c2b1b36a235807f150580325bb56410060be4f477cf50",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_revocation_events:binary_calibration_revocation_events_append_only",
+      "sourceSha256": "e84a6d00e447679de76e194ccf8a8861b77dc2afdf83aeb918fea992410f12f2",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_revocation_events:binary_calibration_revocation_events_insert_guard",
+      "sourceSha256": "60260550b7588da88dbed1d01032eeb41686204710e18e6237977215dc949f2d",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_runs:binary_calibration_runs_guard",
+      "sourceSha256": "8e58ceb57749182c6a5a35bb1d0f09784cd0e90bf58eec929adccd8d55aed0d9",
+      "group": "calibration"
+    },
+    {
+      "inventoryId": "sqlite:trigger:case_input_identity_records:case_input_identity_records_append_only",
+      "sourceSha256": "b5bb45043eacad2c858c42b878a83a55a4d3daf8134db273902b05ab627298a7",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:case_input_identity_records:case_input_identity_records_governed_sealed_overlap_guard",
+      "sourceSha256": "1bd415f9732fac7bb243c2ba830c053004c4b943180d57007c2d9edbca1932ae",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:cases:cases_ingestion_purpose_update_guard",
+      "sourceSha256": "f6850fec8897a8986ba4e766a85d3c7d65ae2101e8e14f720aec0d5600848c24",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:cases:cases_revision_payload_immutable_guard",
+      "sourceSha256": "afe212b95202cf0138cf5cc85cc02655aa3ad70c570175ebff846eec79def4db",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criteria:criteria_analysis_promotion_complete",
+      "sourceSha256": "e451ca217f7026aee75f9f8df24f7b94e831df7ae525cb5945092a4208374bfe",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criteria:criteria_append_only",
+      "sourceSha256": "d56f91d05f08ad32128f0d5841f7aac2818e10f229eaf5f7d18315f371c604cd",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criterion_regression_revisions:criterion_regression_revisions_owner_guard",
+      "sourceSha256": "c94d9dec1a1f29bc8ba17399da415d5ab14179c8b286b82049830b5edbe82012",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criterion_versions:criterion_versions_analysis_promotion_complete",
+      "sourceSha256": "536b883c1baacd6fdda3ae1e0ec51cb31d22da062f88310c9245958f771b25f5",
+      "group": "promotion"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criterion_versions:criterion_versions_append_only",
+      "sourceSha256": "580150b96be44ba9ea7611eeb8a0bd06a05cedbdf5a2eadd6a16d7c752e9d011",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:criterion_versions:criterion_versions_owner_guard",
+      "sourceSha256": "deabe3af381ab2f60fb2c888dc2b7eb66e8ddd1af3be9d08b320c10300ad79c0",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_exposure_events:dataset_exposure_events_append_only",
+      "sourceSha256": "223d06764a9f6f0bb8a3a02aadcaf972fe3123bb4a815ef20479b1ad33a3a36b",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_exposure_events:dataset_exposure_events_owner_guard",
+      "sourceSha256": "18a4276cf49f9786acac1a75ff3b22120564a33ea679fba90070a496be3388e8",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revision_items:dataset_revision_items_append_only",
+      "sourceSha256": "592264472c25fed8415ed9769e0394d11ff6481aa2ea711f2006b99e4d03128f",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revision_items:dataset_revision_items_criterion_guard",
+      "sourceSha256": "7b960494c579a4e72e4db6a15deba7daea80ffc4a989648daa8d8c15c316e974",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revision_items:dataset_revision_items_governed_sealed_overlap_guard",
+      "sourceSha256": "150f67732bf95d170077bda8a887d275a53e4b48378c919a5f04610959de7d8c",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revision_items:dataset_revision_items_owner_guard",
+      "sourceSha256": "98e7bd3011027b802a9d7d3624cbd96824b3ff8b16b43be7051c45536ec2a05b",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revisions:dataset_revisions_append_only",
+      "sourceSha256": "b58a6815a1208beb0fb8586ed1c559b3af474143712e5368cc02327de93fe249",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revisions:dataset_revisions_criterion_guard",
+      "sourceSha256": "e212a312cc6a66179c08793cc2c943162251a76842b9167aa25b1b29629665b7",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:dataset_revisions:dataset_revisions_owner_guard",
+      "sourceSha256": "5aaff864a0cb82fea6d37f627ce9aad1db78874fa63e2ee8ba4a44373d31e617",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:eval_run_items:eval_run_items_revision_guard",
+      "sourceSha256": "3cda0629314a5b398b3f51b3a17c3fb6313a3477ac336766cbe794ec2e39a3d8",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:eval_runs:eval_runs_revision_guard",
+      "sourceSha256": "c7a324c6b3d21850195c4b6bb6b5b020510d2392fb5f41f986ba3aae1cc9d137",
+      "group": "evaluation"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_execution_authorizations:evaluator_execution_authorizations_append_only",
+      "sourceSha256": "341f6ed73ace34682bdb8263736ac91def09e7a7ac219f7f2a569a49ebd8ade4",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_resolution_attempts:evaluator_resolution_attempts_append_only",
+      "sourceSha256": "14b267b75379e653ac295f58c0d433ea2c029cc4df3c2b7fc055a2788d4520fc",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_execution_authorizations:evaluator_execution_authorizations_guard",
+      "sourceSha256": "22e314d24d6fb26ef9bdcd8a108ce23f9dfdf15b611b7751f7dc2fc3a0ace1ca",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycle_events:evaluator_lifecycle_events_append_only",
+      "sourceSha256": "e7f3955a645bc724e72e4cbd143bd087d8b571c7bcd7a3066b33cff69be62736",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycle_events:evaluator_lifecycle_events_guard",
+      "sourceSha256": "70abcc703496e6f34fea367c6c7b9bc530eca77ef5d255c9846d0d9fe920ccb9",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycle_events:evaluator_lifecycle_lineage_complete",
+      "sourceSha256": "df5e5407829dec533bd5d34223608269e38904b101e46083a83c2cb46bc22834",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycles:evaluator_lifecycles_append_only",
+      "sourceSha256": "4678da96007c7edf2d3500899c8c0d816dce10505e84ec319ba7b3d28cbc53e3",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycles:evaluator_lifecycles_complete",
+      "sourceSha256": "3ccf910bf868ab5ba3ef33b8a00fa226b469dc2c79fcaa063db793af3c3c3122",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_lifecycles:evaluator_lifecycles_guard",
+      "sourceSha256": "45aae25cfa34218e90794eedaf4e13bd7b755bb5aa7e68fa503dc6ec3968e114",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifests:evaluator_suite_manifest_complete",
+      "sourceSha256": "9419010247ad4cfccc7225613f099d617d4b474adb6e4fabf15ad703b7f29a2c",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifests:evaluator_suite_manifests_append_only",
+      "sourceSha256": "610668f6d23d93e19bfc259a86e703336567c223b036e3e2c79d888dfcfcff4c",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifests:evaluator_suite_manifests_guard",
+      "sourceSha256": "1800b6d161c91084087e1d76aa99afba160e92fedd6435b69266188eb2c49b36",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifest_members:evaluator_suite_member_complete",
+      "sourceSha256": "d55d7a74e66349d69841c0b88c79849dc30dfe4f42f4113e9d82f32b89b81417",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifest_members:evaluator_suite_member_lifecycle_guard",
+      "sourceSha256": "27a2e5bcff25110c27927e69feabe66947305add2d0f75690c9be1613783e3cb",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifest_members:evaluator_suite_members_append_only",
+      "sourceSha256": "3359d252907d787d9b12e3c6cfd73353564fdc58023b32c25a2c990716c12a61",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suite_manifest_members:evaluator_suite_members_guard",
+      "sourceSha256": "e88f26e5a7831b7807373e951aff59c85ad8d3e2c6064a14626c470cb134a238",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:evaluator_suites:evaluator_suites_append_only",
+      "sourceSha256": "e2c35c4f6c04374cf6d079a4532a32a039bbac69c838f9dce0c7fc20ff15ecbe",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:golden_set_entries:golden_set_entries_criterion_guard",
+      "sourceSha256": "81681b809b768429bc4ed97406e6efa904b023065fd6e194ea5ba519bc50d7bc",
+      "group": "datasets"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_dataset_truth_link_labels:governed_dataset_truth_link_labels_append_only",
+      "sourceSha256": "9cda296c0b9f140bb26969d4c5af2fb685d9064d08f337ce83df6d062a8d0a1b",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_dataset_truth_links:governed_dataset_truth_link_labels_complete",
+      "sourceSha256": "0ed6c6554dcf5e65c47e3eb639460d192c641274fe1dfc6981f8100c1ea93637",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_dataset_truth_link_labels:governed_dataset_truth_link_labels_guard",
+      "sourceSha256": "5302cd45c112996c4f81f5fc0890efbed6087e35f3c87a296500e8518d3649d5",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_dataset_truth_links:governed_dataset_truth_links_append_only",
+      "sourceSha256": "934ebed61cb956fd5a1af99639e3725ad36b5a3946e800020ba7279c647a8072",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_dataset_truth_links:governed_dataset_truth_links_guard",
+      "sourceSha256": "44fdebca93734cefdeb6b96ee629e1ac4cdaf6b750620f389bc8dea3ef3eaf7f",
+      "group": "truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_evaluator_development_events:governed_evaluator_development_events_append_only",
+      "sourceSha256": "8de67dcd51783a9a1a0f4ba15b5bd88e42d4d3877e103420f561191d37beb0fe",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_evaluator_development_events:governed_evaluator_development_events_guard",
+      "sourceSha256": "9ba7e5ec93b17a56d616c8e427e2c2946efd90c12b747d9389e8c54a37dec3a1",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_imported_truth:governed_imported_truth_append_only",
+      "sourceSha256": "c8e092b70cd7855a87415b9a42df6ee667b8e068a7ebca8086b340405cd589fc",
+      "group": "imported-truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_imported_truth:governed_imported_truth_guard",
+      "sourceSha256": "589c41d3fe5f190a5dad38c59205b0e313a562daec57662179fd306647e8728b",
+      "group": "imported-truth"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_input_identity_claims:governed_input_identity_claims_append_only",
+      "sourceSha256": "4bbf81d748de72747285ddd445998bc1c888bae476ba9790190f89c0d33e52c2",
+      "group": "identity-claims"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_adjudications:governed_review_adjudication_label_set_complete",
+      "sourceSha256": "5f4ee01014443aa5a0d119ca2bfa166146fd36d892b9a821425051eb3c271afb",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_adjudication_labels:governed_review_adjudication_labels_append_only",
+      "sourceSha256": "852a25dd0689701706634eb532a6db8ec41989b2aa9a2c72f3280536073eae74",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_adjudication_labels:governed_review_adjudication_labels_guard",
+      "sourceSha256": "87b29ae2ce799fd8f9ba94b62c53af8856eeedd4e664932ddb7dd135ba3e79a4",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_adjudications:governed_review_adjudications_append_only",
+      "sourceSha256": "19f1fcb604dd4780367441ad6ceaaf0f2c0ef6952635b7eac764afaf0f1c3128",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_adjudications:governed_review_adjudications_guard",
+      "sourceSha256": "157516dfdb5b73380a60b946a288bf2281fe8f64b9abeb7c262cb7dbd7384b0b",
+      "group": "adjudication"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_alignment_event_labels:governed_review_alignment_event_labels_append_only",
+      "sourceSha256": "5ade7cf440862b1dcc443cd6380d428e1c7477651215c65b9d0f829188b80af4",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_alignment_event_labels:governed_review_alignment_event_labels_guard",
+      "sourceSha256": "94f2360ee3aabfccc8ef11021f30098b3d1d6790a4d40e0ea0649d0038e53421",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_alignment_events:governed_review_alignment_events_append_only",
+      "sourceSha256": "3f546fe8fb5f534ccb36a54752aef12c3fded72cfeff4a5ff7ed79d35efe19b6",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_alignment_events:governed_review_alignment_events_guard",
+      "sourceSha256": "b1ec334befb4e295bd1b50e8f9016b25c6787ef74f1bd0face28e7dc324813ff",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_alignment_events:governed_review_alignment_label_set_complete",
+      "sourceSha256": "672a73452c5d24fdc1b672fba340aa182598eaa95d3e1652d3a26a3fcdb1e0d0",
+      "group": "alignment"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batch_events:governed_review_batch_events_append_only",
+      "sourceSha256": "7d8a6546f689a8dfc337cee631d50b1b830557f0893f7e9ecde56e6e34177bd2",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batch_events:governed_review_batch_events_guard",
+      "sourceSha256": "a183dbc8eb1bb2b840d3bf3f4cc61875d54e08e919f46f8753560b26d8bbca7a",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batch_items:governed_review_batch_items_append_only",
+      "sourceSha256": "897d34b5de624499fa39a650ac34d3e1e7b981d065219693429628f676ff2eb0",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batch_items:governed_review_batch_items_guard",
+      "sourceSha256": "3ddd8f555e973172d48915a6fdea130e6e62a066b5b5b8d92fd3dac927ac23db",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batches:governed_review_batches_append_only",
+      "sourceSha256": "ad50e6de13e7ca82f8e9fecc1f26f65fefb36d84685daf3b0f15e4ef4bf47b51",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_batches:governed_review_batches_guard",
+      "sourceSha256": "260d8531bd48155b39f43e60ac2044515bbeacebf88581c3e77bdb9d5c457c9f",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_capability_checks:governed_review_capability_checks_append_only",
+      "sourceSha256": "c37b928325de9ad61dd15d094c6eb1241ca09e92e10a5f17a9c882ce83c1306f",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_capability_checks:governed_review_capability_checks_guard",
+      "sourceSha256": "98e0a78c553193d23be6afd247bdf1d0fd091fef8a838182e6ecc21505db0677",
+      "group": "capabilities"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_items:governed_review_items_append_only",
+      "sourceSha256": "1f03b2ada356620919b7d6feb7fdd3a544a315fce5db43418fd307e937b174e2",
+      "group": "review-items"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_items:governed_review_items_guard",
+      "sourceSha256": "633beb65501684f0fc33b8b1a1afe80b7ab12f6d8b9841b9d3054896063fc14c",
+      "group": "review-items"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_labels:governed_review_labels_append_only",
+      "sourceSha256": "7927aa4f9aec7fa1107e5d6302118448f9882d7cb1f86bab8b8b401541b10644",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_labels:governed_review_labels_guard",
+      "sourceSha256": "b3e7e39876af349f78f89ae2c04bb85864082d970a6fec7ef0cc5e4cd883430c",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_labels:governed_review_labels_submission_complete",
+      "sourceSha256": "ab6f3fadddaf2373dc73883477377368ebfe5170db068d372a935d1c3ffc769f",
+      "group": "labels"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_task_events:governed_review_task_events_append_only",
+      "sourceSha256": "9b16ca801f8d64bfaee2e0f1a969e40719a5158ed3d1799ff431aa3a0cc4cb23",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_task_events:governed_review_task_events_guard",
+      "sourceSha256": "b41a7aab8975a1172536ce72ce9c1cd4bd1da6b1bcf6de6a94f963694dcb5c44",
+      "group": "review-streams"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_tasks:governed_review_tasks_append_only",
+      "sourceSha256": "5c72ac2dcc82ea0fd3de0bf725af2913afdc60ca380abccf50436590ab15524f",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_review_tasks:governed_review_tasks_guard",
+      "sourceSha256": "b17e2f63c2bf9562f54095bb914de16d2052b338d72651c9002204740dc752ad",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_reviewer_subjects:governed_reviewer_subjects_append_only",
+      "sourceSha256": "7bea08bbbdd82fb000436fe309068d4f06518d5fc5bc8e026d7f225b87b7e059",
+      "group": "governed-subjects"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_reviewer_subjects:governed_reviewer_subjects_guard",
+      "sourceSha256": "6c9388e7d469a2542c06e243afe1da13ff34d3c6148624a5b0357a0806192201",
+      "group": "governed-subjects"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_sealed_intake_populations:governed_sealed_intake_populations_append_only",
+      "sourceSha256": "cb257da3c3e3c5eeb65c36c241b2e3e454f61a17caa12a0e4363cac5e18e195a",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_sealed_intake_populations:governed_sealed_intake_populations_complete",
+      "sourceSha256": "f632b9d0b6a9fcb9df28b9b961e373c92f422f6164b24f2b1515a05d9f1dd585",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:governed_sealed_intake_populations:governed_sealed_intake_populations_guard",
+      "sourceSha256": "c10090f7f9f8820897545b1d512459447b44cc23d49fa76925edc4f3020381ed",
+      "group": "review-drafts"
+    },
+    {
+      "inventoryId": "sqlite:trigger:import_jobs:import_jobs_skill_version_guard",
+      "sourceSha256": "35db14defc9a3eb60add3931cb3da3265e4855d9d221d78113695ac4e6e106f7",
+      "group": "imports"
+    },
+    {
+      "inventoryId": "sqlite:trigger:production_calibration_snapshots:production_calibration_snapshots_append_only",
+      "sourceSha256": "3eeb6e77ea8ca62c4ebc03738cde5f16170b9384db89cc38a0ef2139e2c4cac5",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:trigger:production_calibration_snapshots:production_calibration_snapshots_insert_guard",
+      "sourceSha256": "0422918489adf15a6cdd2cfd406a211b0aba553993af839c9f96ed408cfb0813",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:trigger:production_decision_records:production_decision_records_append_only",
+      "sourceSha256": "f4f69693b037900cf31540ff96e835961074d9c56442503c494f75964c252d20",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:trigger:production_decision_records:production_decision_records_insert_guard",
+      "sourceSha256": "b9477342b791942561664cf743cd9b7d24a436741ccdea952d7ab3e2f567b713",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:trigger:production_decision_tombstones:production_decision_tombstones_append_only",
+      "sourceSha256": "a7f7a7fc40a550071ce97b71eeca68fd737d63d562872879c348ddb4b4177196",
+      "group": "production"
+    },
+    {
+      "inventoryId": "sqlite:trigger:regression_runs:regression_runs_activated_evidence_immutable",
+      "sourceSha256": "ba64f936000da7039f97fcc74e9ce0ed638a82e2a3c9b8af49f7f04ccd1e7e67",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:trigger:regression_runs:regression_runs_criterion_guard",
+      "sourceSha256": "be763938fe906ecdab88c8965bf7c6344f690d76806fdae08d674475a5a6afcb",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:trigger:regression_runs:regression_runs_revision_guard",
+      "sourceSha256": "1efab88c99804bcf3f2f7f661e5482a95fc4613add09cc3eb57819020e2a5c7f",
+      "group": "regression"
+    },
+    {
+      "inventoryId": "sqlite:trigger:review_instruction_versions:review_instruction_versions_append_only",
+      "sourceSha256": "beebd99462d3b4b1c34bfbf17039dce61b7e65a81e7381182816d2d9193c7603",
+      "group": "instructions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:review_instruction_versions:review_instruction_versions_guard",
+      "sourceSha256": "e4a1a3667d38e345a0b0d3259f919c5946fbb46303e6a43bccda86f5df668853",
+      "group": "instructions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:review_queue_items:review_queue_items_criterion_guard",
+      "sourceSha256": "2c828efc47c27c690805469f26aa7e1a02dd5ca2a6e3513e270118e5ec643a99",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:run_comparisons:run_comparisons_revision_guard",
+      "sourceSha256": "96e17265f21129240ab10c6b0524cb66d94532dd5bee5e07d3c68c66651e7d9a",
+      "group": "suites"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_analysis_promotion_lifecycle_complete",
+      "sourceSha256": "a7ebd9eb5f465f4741fdefd8bc17ae2c9d53d6efd59c1fff976d485aa64ccd2b",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_criterion_guard",
+      "sourceSha256": "ec33c69a186fb809df509dc95e36356ea41a7aa03e210a6ecec745295b005c9a",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_developer_identity_guard",
+      "sourceSha256": "afb64067d3c8f12f1f0d24ea127928add456275700d1a9f106cc5ae8075bc726",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_development_event_append",
+      "sourceSha256": "fda1bbeb03cff936fc7111952e7f8fecf9aea8d90337b7c67b0617b31bfaf3cb",
+      "group": "development"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_revision_guard",
+      "sourceSha256": "e04e79cbe6210c2a18bd99833e20ad3f5f902b8a43f1df67f0e70691de3b26f6",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skills:skills_analysis_promotion_lifecycle_complete",
+      "sourceSha256": "d6360cdd4053f5d535f64af427b58ca6d4bf635f9304ef36f39828fc131dd8cd",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skills:skills_criterion_guard",
+      "sourceSha256": "b122ebae1f5ff1ff9c4370cc407f255164395b403b0f788673eaf80da750de1d",
+      "group": "definitions"
+    },
+    {
+      "inventoryId": "sqlite:trigger:verdicts:verdicts_human_criterion_guard",
+      "sourceSha256": "56f2b0577982036f52b02afbe3f7869fee92f76ebb9236d7255f45f9f280b60f",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:binary_calibration_revocation_events:zzz_binary_calibration_revocation_lifecycle_event",
+      "sourceSha256": "26775b6a0f60e64bde9f399456c93edf8b19eb1777a499bcca122cd8e322ce4a",
+      "group": "lifecycle"
+    },
+    {
+      "inventoryId": "sqlite:trigger:review_queue_items:review_queue_evidence_pin_guard",
+      "sourceSha256": "b84c02808d09f5ed151a147e3f8ec9b365e2405a637360c0bdc59e4b02fecfed",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:verdicts:verdict_review_context_guard",
+      "sourceSha256": "3065e75b2df67a638ccc02ac3d38f3c4e0d08afb33e709b8db8711bdcdadeaa8",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:judge_runs:reviewed_judge_run_guard",
+      "sourceSha256": "8947e57b6f8385f852de4814f0f52367638e537921239c44f93c8e4267b7a2d2",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:review_queues:review_queue_project_guard",
+      "sourceSha256": "82e74ac7df74b2fc76695fdd6361da804479ae5fe7e00fd372ba4ca0a00a0996",
+      "group": "legacy-review"
+    },
+    {
+      "inventoryId": "sqlite:trigger:skill_versions:skill_versions_preserve_authorship",
+      "sourceSha256": "78e40cf57f544979edba5b68560e291949306777b3814f1081252e005d41eb85",
+      "group": "development"
+    }
+  ]
+}

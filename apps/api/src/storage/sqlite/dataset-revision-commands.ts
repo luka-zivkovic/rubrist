@@ -1,10 +1,13 @@
+import { canonicalJson } from '../../lib/canonical-json.js';
+import { assertBlindProjectionSafe } from '../../governed-review/projection.js';
+import { canonicalGovernedJsonText, analysisPayloadSnapshotText } from './governed-json-text.js';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { DatabaseSync } from 'node:sqlite';
-import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision } from '@rubrist/shared';
+import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, GovernedReviewPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision, type DatasetRevisionPayloadSnapshot } from '@rubrist/shared';
 import type { RubristRepository } from '../../repository.js';
 import { DatasetNotFoundError, DatasetRevisionConflictError, DatasetRevisionNotFoundError, SealedValidationUnavailableError } from '../../repository/errors.js';
 import { datasetRevisionContentDigest, datasetRevisionDigest, datasetRevisionItemDigest, decidePublicDatasetRevisionCreation } from '../../lib/dataset-revision.js';
-import { canonicalJson } from '../../lib/canonical-json.js';
 import { evaluationDatabase, camel, json, parse, verdict, type Row } from './evaluation-values.js';
 type Args<K extends keyof RubristRepository> = Parameters<RubristRepository[K]>;
 function snapshot(raw:unknown) {
@@ -12,15 +15,36 @@ function snapshot(raw:unknown) {
   if(!value||!('input' in value)||!('output' in value)) throw new DatasetRevisionConflictError('Case has no complete retained normalized payload to freeze');
   return DatasetRevisionPayloadSnapshotSchema.parse({input:value.input,output:value.output,metadata:value.metadata??{},...(Array.isArray(value.steps)?{steps:value.steps}:{})});
 }
+/** PostgreSQL normalizedPayloadSnapshot: the exact retained source projection, never schema-normalized. */
+function sourceSnapshot(raw:unknown):DatasetRevisionPayloadSnapshot {
+  const value=parse(raw);
+  if(!value||!('input' in value)||!('output' in value)) throw new DatasetRevisionConflictError('Case has no complete retained normalized payload to freeze');
+  return {input:value.input,output:value.output,metadata:value.metadata??{},...(value.steps?{steps:value.steps}:{})};
+}
+// Ordinary items carry the exact source steps PostgreSQL freezes; only metadata-free governed payloads are step-canonical.
+const OrdinaryPayloadSnapshotSchema=DatasetRevisionPayloadSnapshotSchema.extend({steps:z.array(z.unknown()).optional()}).strict();
 function revision(row:Row) { return DatasetRevisionSchema.parse({...camel(row),exposureState:row.role==='sealed_validation'?(row.has_development_exposure?'exposed':'protected'):'visible_by_design',semanticLeakageDetection:'unsupported'}); }
-function item(row:Row) { return DatasetRevisionItemSchema.parse({...camel(row),payloadSnapshot:snapshot(row.payload_snapshot),referenceProvenance:parse(row.reference_provenance)}); }
+function item(row:Row) { return {...DatasetRevisionItemSchema.omit({payloadSnapshot:true}).parse({...camel(row),referenceProvenance:parse(row.reference_provenance)}),payloadSnapshot:sourceSnapshot(row.payload_snapshot)}; }
 function exposure(row:Row) { return DatasetExposureEventSchema.parse({...camel(row),details:parse(row.details)}); }
 export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
   const {one,all,run,transaction}=evaluationDatabase(db);
-  db.function('sqlite_json_equal',{deterministic:true},(left,right)=>{try{return canonicalJson(parse(left))===canonicalJson(parse(right))?1:0;}catch{return 0;}});
-  db.function('sqlite_dataset_payload_equal',{deterministic:true},(left,right)=>{try{return canonicalJson(snapshot(left))===canonicalJson(snapshot(right))?1:0;}catch{return 0;}});
+  db.function('sqlite_json_equal',{deterministic:true},(left,right)=>{try{return canonicalGovernedJsonText(String(left))===canonicalGovernedJsonText(String(right))?1:0;}catch{return 0;}});
+  db.function('sqlite_dataset_payload_equal',{deterministic:true},(left,right)=>{try{return analysisPayloadSnapshotText(String(left))===canonicalGovernedJsonText(String(right))?1:0;}catch{return 0;}});
   db.function('sqlite_dataset_item_valid',{deterministic:true},(inputDigest,digest,payload,label,step,provenance,note)=> {
     try {return datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:String(inputDigest)},redactedPayload:snapshot(payload),referenceLabel:label,expectedFailStep:step as number|null,reviewProvenance:DatasetReferenceProvenanceSchema.parse(parse(provenance)),note})===digest?1:0;}catch{return 0;}
+  });
+  db.function('sqlite_dataset_item_valid_v2',{deterministic:true},(inputDigest,digest,payload,label,step,provenance,note)=> {
+    try {
+      // Validate without normalizing the immutable digest input. Blind
+      // snapshots omit metadata; ordinary snapshots retain their full shape.
+      const exactPayload=parse(payload),governed=exactPayload!==null&&typeof exactPayload==='object'&&!Object.hasOwn(exactPayload,'metadata');
+      const validated=governed?GovernedReviewPayloadSnapshotSchema.parse(exactPayload):OrdinaryPayloadSnapshotSchema.parse(exactPayload);
+      if(canonicalJson(validated)!==canonicalJson(exactPayload))return 0;
+      if(governed)assertBlindProjectionSafe(exactPayload);
+      const exactProvenance=parse(provenance),validatedProvenance=DatasetReferenceProvenanceSchema.parse(exactProvenance);
+      if(canonicalJson(validatedProvenance)!==canonicalJson(exactProvenance))return 0;
+      return datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:String(inputDigest)},redactedPayload:exactPayload,referenceLabel:label,expectedFailStep:step as number|null,reviewProvenance:exactProvenance,note})===digest?1:0;
+    }catch{return 0;}
   });
   db.function('sqlite_dataset_content_digest',{deterministic:true},digests=>datasetRevisionContentDigest(parse(digests)));
   db.function('sqlite_dataset_revision_digest',{deterministic:true},(role,digests)=>datasetRevisionDigest({role:String(role) as DatasetRevision['role'],itemDigests:parse(digests)}));
@@ -45,7 +69,7 @@ export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
       const prepared=members.map(row=> {
         const identity=one('SELECT input_digest FROM case_input_identity_records WHERE project_id=? AND source_case_id=? ORDER BY created_at,id LIMIT 1',input.projectId,row.case_id);
         if(!identity) throw new DatasetRevisionConflictError('Case has no retained pre-redaction input identity');
-        const payloadSnapshot=snapshot(row.normalized_payload),referenceLabel=row.expected_label;
+        const payloadSnapshot=sourceSnapshot(row.normalized_payload),referenceLabel=row.expected_label;
         const matching=referenceLabel?all("SELECT * FROM verdicts WHERE project_id=? AND case_id=? AND source IN ('human','adjudicated') ORDER BY created_at,id",input.projectId,row.case_id).map(verdict).filter(value=>verdictLabelFromPayload(value.payload)===referenceLabel):[];
         const adjudicated=matching.filter(value=>value.source==='adjudicated'),supporting=adjudicated.length?adjudicated:matching.filter(value=>value.source==='human');
         const provenance:DatasetReferenceProvenance=referenceLabel===null?{kind:'unlabeled',sourceId:row.id,verdictIds:[],actorUserIds:[],basis:'No reference label was present when the collection was frozen.'}:
@@ -88,14 +112,14 @@ export function getOrCreateSqliteRegressionRevision(db:DatabaseSync,projectId:st
   const prepared=rows.map(row=> {
     const identity=one('SELECT input_digest FROM case_input_identity_records WHERE project_id=? AND source_case_id=? ORDER BY created_at,id LIMIT 1',projectId,row.case_id);
     if(!identity)throw new DatasetRevisionConflictError('Case has no retained pre-redaction input identity');
-    const payloadSnapshot=snapshot(row.normalized_payload),matching=all("SELECT v.* FROM verdicts v JOIN skill_versions s ON s.project_id=v.project_id AND s.id=v.skill_version_id WHERE v.project_id=? AND v.case_id=? AND s.criterion_version_id=? AND v.source IN ('human','adjudicated') ORDER BY v.created_at,v.id",projectId,row.case_id,criterionVersionId).map(verdict).filter(v=>verdictLabelFromPayload(v.payload)===row.agreed_label);
+    const payloadSnapshot=sourceSnapshot(row.normalized_payload),matching=all("SELECT v.* FROM verdicts v JOIN skill_versions s ON s.project_id=v.project_id AND s.id=v.skill_version_id WHERE v.project_id=? AND v.case_id=? AND s.criterion_version_id=? AND v.source IN ('human','adjudicated') ORDER BY v.created_at,v.id",projectId,row.case_id,criterionVersionId).map(verdict).filter(v=>verdictLabelFromPayload(v.payload)===row.agreed_label);
     const provenance:DatasetReferenceProvenance={kind:'golden_promotion',sourceId:row.id,verdictIds:matching.map(v=>v.id),actorUserIds:matching.flatMap(v=>v.actorUserId?[v.actorUserId]:[]),basis:'Visible golden promotion; known-failure governance, not sealed validation.'};
     return {row,payloadSnapshot,provenance,inputDigest:identity.input_digest,itemDigest:datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:identity.input_digest},redactedPayload:payloadSnapshot,referenceLabel:row.agreed_label,expectedFailStep:null,reviewProvenance:provenance,note:row.reason})};
   });
   const digests=prepared.map(value=>value.itemDigest),revisionDigest=datasetRevisionDigest({role:'regression_golden',itemDigests:digests});
   const pointer=one('SELECT r.id,r.revision_digest FROM criterion_regression_revisions p JOIN dataset_revisions r ON r.id=p.revision_id WHERE p.project_id=? AND p.criterion_version_id=?',projectId,criterionVersionId);
   if(pointer?.revision_digest===revisionDigest)return pointer.id;
-  const id=`dsr_${randomUUID()}`,series=`golden:${projectId}:${criterionVersionId}`,stamp=new Date().toISOString();
+  const id=`dsr_${randomUUID()}`,series=`golden:${projectId}:${criterionVersionId}`,stamp=String(one('SELECT sqlite_command_time() stamp')!.stamp);
   const parent=one('SELECT id,revision_number FROM dataset_revisions WHERE project_id=? AND series_id=? ORDER BY revision_number DESC LIMIT 1',projectId,series);
   run(`INSERT INTO dataset_revisions(id,project_id,series_id,revision_number,parent_revision_id,role,source_kind,identity_basis,content_digest,revision_digest,item_count,provenance_level,created_by_user_id,created_at,criterion_version_id) VALUES(?,?,?,?,?,'regression_golden','golden_snapshot','input-identity/v1',?,?,?,?,?,?,?)`,id,projectId,series,(parent?.revision_number??0)+1,parent?.id??null,datasetRevisionContentDigest(digests),revisionDigest,prepared.length,prepared.length&&prepared.every(value=>value.provenance.verdictIds.length)?'reviewed_unblinded':'legacy',actorUserId??null,stamp,criterionVersionId);
   for(const [position,value] of prepared.entries())run('INSERT INTO dataset_revision_items VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,NULL,?,?,?)',`dsri_${randomUUID()}`,id,projectId,position,value.row.case_id,value.row.trace_id,value.row.id,value.inputDigest,value.itemDigest,json(value.payloadSnapshot),value.row.agreed_label,json(value.provenance),value.row.reason,stamp);

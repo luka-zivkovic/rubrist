@@ -143,8 +143,10 @@ is configured.
 SQLite development work now includes [ordinary workflows](docs/sqlite/milestone-3-progress.md):
 accounts, evaluations and receipts, collections/reviews, evaluator regression,
 all three trace integrations, and production monitoring. It requires explicit
-backend selection and Node 24.15+. Advanced governed workflows and installation
-qualification are still being ported; use PostgreSQL for a complete installation.
+backend selection and Node 24.15+. The [specialist SQLite repositories](docs/sqlite/milestone-4.md) now include
+Analyze, governed truth, calibration, evaluator lifecycle and measurement.
+Installation packaging and release qualification remain in progress; use
+PostgreSQL for a released installation.
 
 ### d. Zero-infrastructure demo mode
 

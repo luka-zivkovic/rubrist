@@ -1,3 +1,4 @@
+import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
@@ -108,7 +109,7 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     expect(comparison.comparisonStatus).toBe('match');expect(comparison.consumerCanonicalBytes.equals(root.canonicalBytes)).toBe(true);
     await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());
     expect(await restarted.repository.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id)).toEqual(root);
-    f.db.prepare('DELETE FROM cases WHERE id=?').run(f.trace.caseId);
+    sqliteCommand(f.db,c=>c.db.prepare('DELETE FROM cases WHERE id=?').run(f.trace.caseId));
     expect(await restarted.repository.getOrFreezeAssessmentReceipt(f.projectId,f.owner.id)).toEqual(root);
     await restarted.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
     expect(f.db.prepare('SELECT count(*) n FROM assessment_receipt_artifacts').get()?.n).toBe(0);

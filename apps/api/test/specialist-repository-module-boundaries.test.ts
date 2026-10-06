@@ -56,6 +56,7 @@ const BINARY_METHODS = [
   "recordProviderCallStarted",
   "completeAttempt",
   "finalizeRun",
+  "finalizeLifecycleForbiddenRun",
   "markRecoveryRequired"
 ] as const;
 
@@ -535,6 +536,7 @@ describe("specialist PostgreSQL repository module boundaries", () => {
     expect(memberInventory(parseSource(PATHS.binary), "PgBinaryCalibrationRepository")).toEqual([
       "Constructor",
       ...BINARY_METHODS.map((name) => `Method:${name}`),
+      "Method:terminalize",
       "Method:transaction"
     ]);
     const pool = {} as Pool;
@@ -702,13 +704,6 @@ describe("specialist PostgreSQL repository module boundaries", () => {
         "binary-calibration/repository.pg.ts:completeAttempt:requireClaim:client",
         "binary-calibration/repository.pg.ts:createRun:deriveRunIdentity:client",
         "binary-calibration/repository.pg.ts:createRun:requireProjectOwner:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:databaseClock:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:databaseClock:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:evaluateEligibility:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:insertExposureCheck:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:loadExposureCheck:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:requireActiveRevisionLease:client",
-        "binary-calibration/repository.pg.ts:finalizeRun:requireClaim:client",
         "binary-calibration/repository.pg.ts:getNextAttempt:requireClaim:this.pool",
         "binary-calibration/repository.pg.ts:getRecheckTarget:requireClaim:this.pool",
         "binary-calibration/repository.pg.ts:recordProviderCallStarted:requireActiveRevisionLease:client",
@@ -718,6 +713,14 @@ describe("specialist PostgreSQL repository module boundaries", () => {
         "binary-calibration/repository.pg.ts:recoverStartedAttempts:requireClaim:client",
         "binary-calibration/repository.pg.ts:rejectBeforeAuthorization:databaseClock:client",
         "binary-calibration/repository.pg.ts:rejectBeforeAuthorization:requireClaim:client",
+        "binary-calibration/repository.pg.ts:terminalize:databaseClock:client",
+        "binary-calibration/repository.pg.ts:terminalize:databaseClock:client",
+        "binary-calibration/repository.pg.ts:terminalize:evaluateEligibility:client",
+        "binary-calibration/repository.pg.ts:terminalize:insertEvaluatorExecutionAuthorization:client",
+        "binary-calibration/repository.pg.ts:terminalize:insertExposureCheck:client",
+        "binary-calibration/repository.pg.ts:terminalize:loadExposureCheck:client",
+        "binary-calibration/repository.pg.ts:terminalize:requireActiveRevisionLease:client",
+        "binary-calibration/repository.pg.ts:terminalize:requireClaim:client",
       ]
     `);
 

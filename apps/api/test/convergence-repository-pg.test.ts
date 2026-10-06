@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "@rubrist/db";
 import { MinimumVerdictOutputSchema } from "@rubrist/shared";
 import { PgBossQueue, type Queue, type QueueJob, type QueueName, type QueueSendOptions } from "@rubrist/queue";
@@ -18,6 +18,8 @@ if ((process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") && !dat
 const run = databaseUrl ? describe : describe.skip;
 
 run("PostgreSQL convergence audit", () => {
+  beforeEach(() => vi.stubEnv("BETTER_AUTH_SECRET", "synthetic-convergence-secret-not-for-deployment"));
+  afterEach(() => vi.unstubAllEnvs());
   it("uses exact latest per-case heads after the former 50k scan boundary", async () => {
     const { pool, cleanup } = await openPostgresTestDatabase("convergence_exact");
     try {

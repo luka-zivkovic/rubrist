@@ -1,3 +1,19 @@
+import {sqliteMeasurementCommands} from './measurement-commands.js';
+import {initializeLifecycleTransitionValidator} from './lifecycle-transition-validator.js';
+import {sqliteLifecycleCommands} from './lifecycle-commands.js';
+import {initializeLifecycleValidator} from './lifecycle-validator.js';
+import {sqliteCalibrationCommands} from './calibration-commands.js';
+import {initializeCalibrationValidator} from './calibration-validator.js';
+import {sqlitePromotionCommands} from './promotion-commands.js';
+import { sqliteGovernedCommands } from './governed-commands.js';
+import { sqliteStudyCommands } from './study-commands.js';
+import { sqliteStudyReadCommands } from './study-read-commands.js';
+import { sqliteStudyItemCommands } from './study-item-commands.js';
+import { sqliteStudyTaxonomyCommands } from './study-taxonomy-commands.js';
+import { sqliteStudyAssignmentCommands } from './study-assignment-commands.js';
+import { initializePopulationFrameValidator } from './population-validator.js';
+import { sqlitePopulationCommands } from './population-commands.js';
+import { initializeSqliteCommandContext, sqliteCommand } from './command-context.js';
 import { seedSqliteStarterEvaluator } from './starter-evaluator.js';
 import { sqliteProductionCommands } from './production-commands.js';
 import { sqliteRegressionCommands } from './regression-commands.js';
@@ -39,6 +55,11 @@ const future = (ms: number) => new Date(Date.now()+ms).toISOString();
 const openPairing = 'consumed_at IS NULL AND revoked_at IS NULL';
 
 export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?:boolean}={}) {
+  initializeSqliteCommandContext(db);
+  initializeCalibrationValidator(db);
+  initializeLifecycleValidator(db);
+  initializeLifecycleTransitionValidator(db);
+  initializePopulationFrameValidator(db);
   const one = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params);
   const all = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params);
   const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);
@@ -183,7 +204,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
       });
     },
     deleteProject(projectId: string, input: Parameters<RubristRepository['deleteProject']>[1]) {
-      transaction(() => {
+      sqliteCommand(db,() => {
         if (settings(projectId).name !== input.confirmProjectName) throw new Error('Project name confirmation did not match');
         run("UPDATE audit_logs SET metadata=json_set(metadata,'$.deletedProjectId',?),project_id=NULL WHERE project_id=?",projectId,projectId);
         audit(projectId,input.actorUserId ?? null,'project.delete','project',projectId,{deletedProjectId:projectId,projectName:input.confirmProjectName});
@@ -213,7 +234,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqliteMeasurementCommands(db), ...sqliteLifecycleCommands(db), ...sqliteCalibrationCommands(db), ...sqlitePromotionCommands(db), ...sqliteGovernedCommands(db), ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

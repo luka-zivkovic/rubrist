@@ -1,3 +1,4 @@
+import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -69,10 +70,12 @@ describe('SQLite native trace ingestion',()=>{
     expect(db.prepare('SELECT count(*) n FROM raw_traces').get()?.n).toBe(0);
     expect(db.prepare('SELECT imported_trace_count FROM projects WHERE id=?').get(f.projectId)?.imported_trace_count).toBe(0);
     const imported=await r.importTrace(f.projectId,'manual',input,{ingestionPurpose:'judge_api'});
-    expect(()=>db.exec("UPDATE cases SET ingestion_purpose='analysis_eligible_manual'")).toThrow(/immutable/);
+    expect(()=>sqliteCommand(db,c=>c.db.exec("UPDATE cases SET ingestion_purpose='analysis_eligible_manual'"))).toThrow(/immutable/);
     expect(()=>db.exec('DELETE FROM case_input_identity_records')).toThrow(/erasure/);
-    db.prepare('DELETE FROM cases WHERE id=?').run(imported.caseId);
-    db.prepare('DELETE FROM raw_traces WHERE id=?').run(imported.rawTraceId);
+    sqliteCommand(db,c=>{
+      c.db.prepare('DELETE FROM cases WHERE id=?').run(imported.caseId);
+      c.db.prepare('DELETE FROM raw_traces WHERE id=?').run(imported.rawTraceId);
+    });
     expect(db.prepare('SELECT count(*) n FROM case_input_identity_records').get()?.n).toBe(1);
     await r.deleteProject(f.projectId,{confirmProjectName:'Default Project'});
     expect(db.prepare('SELECT count(*) n FROM case_input_identity_records').get()?.n).toBe(0);

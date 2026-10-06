@@ -1,3 +1,10 @@
+import {AnalysisMeasurementRepositoryError} from '../../analysis-measurement/repository.js';
+import {EvaluatorLifecycleRepositoryError} from '../../evaluator-lifecycle/repository.js';
+import {BinaryCalibrationRepositoryError} from '../../binary-calibration/repository.js';
+import {AnalysisPromotionRepositoryError} from '../../analysis-promotion/repository.js';
+import { GovernedReviewDomainError } from '../../governed-review/errors.js';
+import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
+import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { GoldenSetRetirementContextSchema } from '@rubrist/shared';
 import * as repositoryErrors from '../../repository/errors.js';
@@ -30,6 +37,24 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
     result.details=Object.fromEntries(['line','bytes','maximum','records','decisionId','from','to','bound'].flatMap(key=>{
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
+  }
+  if(value instanceof AnalysisPopulationRepositoryError){
+    result.code=value.code;
+    result.details=Object.fromEntries(['limit','observed','fixedBudget','existingFixedBudget','requestedFixedBudget'].flatMap(key=>{
+      const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
+    }));
+  }
+  if(value instanceof EvaluatorLifecycleRepositoryError){result.code=value.code;result.details=Object.fromEntries(['modelId','alias','rule','problems','providerMessage','suggestion'].flatMap(key=>{const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];}));}
+  if(value instanceof AnalysisMeasurementRepositoryError){result.code=value.code;result.details={};}
+  if(value instanceof BinaryCalibrationRepositoryError)result.code=value.code;
+  if(value instanceof AnalysisPromotionRepositoryError){result.code=value.code;result.details={};}
+  if(value instanceof AnalysisStudyRepositoryError){
+    result.code=value.code;
+    result.details=typeof value.details.studyId==='string'?{studyId:value.details.studyId}:{};
+  }
+  if(value instanceof GovernedReviewDomainError){
+    result.code=value.code;result.status=value.status;
+    if(value.details)result.details=Object.fromEntries(['currentState','currentVersion','attemptedAction','maxBytes'].flatMap(key=>{const item=value.details![key];return typeof item==='string'||typeof item==='number'?[[key,item]]:[];}));
   }
   return result;
 }

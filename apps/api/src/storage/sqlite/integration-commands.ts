@@ -22,7 +22,7 @@ export function sqliteIntegrationCommands(db:DatabaseSync) {
   let versionId:string;
   if(requested) {if(!definitions.getSkillVersion(projectId,requested))throw new errors.DatasetRevisionConflictError(`Unknown import skillVersionId for this project: ${requested}`);versionId=requested;}
   else {try{versionId=definitions.getCurrentSkill(projectId).currentVersion.id;}catch(error){if(allowEmpty&&error instanceof errors.NoCurrentSkillError)return null;throw error;}}
-  if(!one("SELECT 1 FROM skill_versions v JOIN criteria c ON c.project_id=v.project_id AND c.id=v.criterion_id WHERE v.project_id=? AND v.id=? AND c.source_kind='native'",projectId,versionId))throw new errors.DatasetRevisionConflictError('Evaluator version is not eligible for scheduled import');
+  if(!one("SELECT 1 FROM skill_versions v JOIN criteria c ON c.project_id=v.project_id AND c.id=v.criterion_id WHERE v.project_id=? AND v.id=? AND EXISTS(SELECT 1 FROM evaluator_lifecycle_contexts lc WHERE lc.project_id=v.project_id AND lc.skill_version_id=v.id AND lc.implicit_allowed=1)",projectId,versionId))throw new errors.DatasetRevisionConflictError('Evaluator version is not eligible for scheduled import');
   return versionId;
  }
  function create<P extends 'langsmith'|'langfuse'>(provider:P,projectId:string,input:Args<'createLangSmithIntegration'>[1]|Args<'createLangfuseIntegration'>[1]) {return transaction(now=>{

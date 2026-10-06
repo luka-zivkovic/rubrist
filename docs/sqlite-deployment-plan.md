@@ -2,10 +2,11 @@
 
 Prepared on 2026-10-04 for implementation in a separate session.
 
-Status: Milestone 3 ordinary workflows under final qualification (2026-10-05). The
+Status: Milestone 4 specialist workflows locally qualified; PR review pending (2026-10-06). The
 user agreed to two fixed deployment options for the same application. Isolated
-integrity/recovery prototypes, persistent accounts, native evaluations and ordinary workflows are implemented;
-full application parity is not. This document
+integrity/recovery prototypes, persistent accounts, native evaluations, ordinary
+workflows and specialist repositories are implemented; installation/release
+qualification remains incomplete. This document
 records that TARGET, the audited CURRENT state, and proposed implementation
 choices. It does not replace `PRODUCT.md` or accepted evidence contracts.
 

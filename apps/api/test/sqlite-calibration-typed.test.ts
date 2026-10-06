@@ -1,0 +1,22 @@
+import {expect,it} from 'vitest';
+import {CreateSkillVersionInputSchema,TypedQuestionOutputSchema,type ExecutionBinding} from '@rubrist/shared';
+import {calibrationFixture} from './helpers/sqlite-calibration.js';
+import {bindingInput,resolvedRecordFor} from './fixtures/execution-binding.js';
+import {sqliteSkillCommands} from '../src/storage/sqlite/skill-commands.js';
+import {sqliteResolutionStore} from '../src/storage/sqlite/resolution-commands.js';
+import {sqliteCommand} from '../src/storage/sqlite/command-context.js';
+import {processBinaryCalibrationRun} from '../src/binary-calibration/worker.js';
+import {createBinaryCalibrationProviderExecutor} from '../src/binary-calibration/provider.js';
+const binding:ExecutionBinding={provider:'typesafe',endpoint:{kind:'managed'},modelId:'jev-1.13.0',modelVersion:'jev-1.13.0',sampling:{temperature:null,topP:null},reasoning:null,outputTokenLimit:null,verdictProtocol:'typed-question/v1',routing:null};
+it('calibrates an exact typed-question threshold with mocked transport and no question in evidence',async()=>{
+ const f=await calibrationFixture(),question={type:'noul' as const,instructions:'QUESTION_CANARY: Is the response supported?',criteria:{true:'Supported',false:'Unsupported'}},threshold=0.12345678901234566;
+ const version=sqliteSkillCommands(f.db).insertPendingSkillVersion(f.version.skillId,CreateSkillVersionInputSchema.parse({criterionVersionId:f.criterionVersionId,typedQuestion:question,decisionThreshold:threshold,outputSchema:TypedQuestionOutputSchema,executionBinding:bindingInput(binding),verdictKind:'binary'}),{projectId:f.projectId,actorUserId:f.userId});
+ const resolution=await resolvedRecordFor(binding);sqliteCommand(f.db,()=>sqliteResolutionStore(f.db).save(f.projectId,version.id,binding,resolution));
+ const run=await f.runtime.binaryCalibration.createRun(f.actor,{...f.calibrationInput,skillVersionId:version.id}),sent:string[]=[];
+ const execute=createBinaryCalibrationProviderExecutor({resolveProjectCredential:async()=>'SYNTHETIC_KEY',fetch:async(_url,init)=>{sent.push(init.body);return new Response(JSON.stringify({model:binding.modelId,answers:{verdict:{type:'noul',noul:threshold}},usage:{input_tokens:9,output_tokens:1}}),{status:200,headers:{'x-typesafe-request-id':'REQUEST_CANARY'}});}});
+ const minted=await processBinaryCalibrationRun({repository:f.runtime.binaryCalibrationExecution,runId:run.runId,workerId:'typed-fixture',executeProvider:async args=>{expect(args.authorizedRun.evaluator).toEqual({kind:'typed-question',question,threshold});return execute(args);}});
+ expect(sent).toHaveLength(1);expect(sent[0]).toContain('QUESTION_CANARY');
+ expect(minted!.artifact.trials[0]!.outcomes).toMatchObject({planned:1,classified:1,providerCalls:1});
+ const ledger=JSON.parse(Buffer.from(f.db.prepare('SELECT canonical_bytes FROM binary_calibration_private_ledgers WHERE run_id=?').get(run.runId)!.canonical_bytes as Uint8Array).toString('utf8'));
+ expect(ledger.records[0].result).toEqual({state:'outcome',outcome:'pass'});expect(JSON.stringify({artifact:minted!.artifact,ledger})).not.toMatch(/CANARY|SYNTHETIC_KEY|0\.123456789/);
+});

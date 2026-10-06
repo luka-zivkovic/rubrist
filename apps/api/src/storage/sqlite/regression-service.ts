@@ -28,7 +28,7 @@ export function sqliteRegressionService(storage:SqliteStorage,repository:Pick<Ru
    const token=randomUUID(),deadline=Date.now()+10*60_000;
    let claim=await storage.command('claimRegressionAttempt',job,token);
    while(claim.state==='busy'&&Date.now()<deadline) {await new Promise(resolve=>setTimeout(resolve,1000));claim=await storage.command('claimRegressionAttempt',job,token);}
-   if(claim.state==='terminal')return {version:claim.version,regressionRun:claim.regressionRun};
+   if(claim.state==='terminal'){const retained=await result(job);if(!retained)throw new Error('Regression result vanished');return retained;}
    if(claim.state!=='claimed')throw new Error('Regression execution is busy');
    const attempt={projectId:job.projectId,skillVersionId:job.skillVersionId,token,epoch:claim.epoch},version=claim.version;
    const controller=new AbortController();

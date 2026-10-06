@@ -1,3 +1,9 @@
+import type {AnalysisMeasurementRepository} from '../../analysis-measurement/repository.js';
+import type {BinaryCalibrationControlRepository,BinaryCalibrationExecutionRepository} from '../../binary-calibration/repository.js';
+import type {AnalysisPromotionRepository} from '../../analysis-promotion/repository.js';
+import type { GovernedReviewRepository } from '../../governed-review/repository.js';
+import type { AnalysisStudyRepository } from '../../analysis-study/repository.js';
+import type { AnalysisPopulationRepository } from '../../analysis-population/repository.js';
 import type { ProductionDecisionRecordRepository } from '../../production-calibration/repository.js';
 import { sqliteRegressionService } from './regression-service.js';
 import { createStrictJudgeProvider, JudgeProviderUnavailableError, type JudgeProviderFactory } from '../../lib/judge-provider.js';
@@ -14,6 +20,90 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const evaluatorLifecycle:EvaluatorLifecycleRepository={
+    createCandidate:(...args)=>storage.command('lifecycleCreate',...args),candidateExists:(...args)=>storage.command('lifecycleCandidateExists',...args),
+    getLifecycle:(...args)=>storage.command('lifecycleGet',...args),listLifecycles:(...args)=>storage.command('lifecycleList',...args),
+    getGovernedBinding:(...args)=>storage.command('lifecycleBinding',...args),recordResolution:(...args)=>storage.command('lifecycleResolution',...args),
+    authorizeExecution:(...args)=>storage.command('lifecycleAuthorize',...args),activate:(...args)=>storage.command('lifecycleActivate',...args),retire:(...args)=>storage.command('lifecycleRetire',...args)
+  };
+  const binaryCalibration:BinaryCalibrationControlRepository={
+    createRun:(...args)=>storage.command('calibrationCreate',...args),
+    listRuns:(...args)=>storage.command('calibrationList',...args),
+    getRun:(...args)=>storage.command('calibrationGet',...args),
+    getArtifact:(...args)=>storage.command('calibrationGetArtifact',...args),
+    getArtifactStatus:(...args)=>storage.command('calibrationGetArtifactStatus',...args),
+    getGovernedBinding:(...args)=>storage.command('calibrationGetGovernedBinding',...args),
+    recordResolution:(...args)=>storage.command('calibrationRecordResolution',...args),
+  };
+  const binaryCalibrationExecution:BinaryCalibrationExecutionRepository={
+    listRunnableRunIds:(...args)=>storage.command('calibrationListRunnable',...args),
+    claimRun:(...args)=>storage.command('calibrationClaim',...args),
+    heartbeatClaim:(...args)=>storage.command('calibrationHeartbeat',...args),
+    getRecheckTarget:(...args)=>storage.command('calibrationRecheckTarget',...args),
+    recordRecheck:(...args)=>storage.command('calibrationRecordRecheck',...args),
+    rejectBeforeAuthorization:(...args)=>storage.command('calibrationReject',...args),
+    authorizeRun:(...args)=>storage.command('calibrationAuthorize',...args),
+    recoverStartedAttempts:(...args)=>storage.command('calibrationRecover',...args),
+    getNextAttempt:(...args)=>storage.command('calibrationNextAttempt',...args),
+    recordProviderCallStarted:(...args)=>storage.command('calibrationProviderStarted',...args),
+    completeAttempt:(...args)=>storage.command('calibrationCompleteAttempt',...args),
+    finalizeRun:(...args)=>storage.command('calibrationFinalize',...args),
+    finalizeLifecycleForbiddenRun:(...args)=>storage.command('calibrationFinalizeLifecycleForbidden',...args),
+    markRecoveryRequired:(...args)=>storage.command('calibrationMarkRecovery',...args),
+  };
+  const analysisMeasurement:AnalysisMeasurementRepository={getReport:(...args)=>storage.command('measurementReport',...args)};
+  const analysisPromotions:AnalysisPromotionRepository={createPromotion:(...args)=>storage.command('promotionCreate',...args),listPromotions:(...args)=>storage.command('promotionList',...args),getPromotion:(...args)=>storage.command('promotionGet',...args),listCandidates:(...args)=>storage.command('promotionCandidates',...args),listSupports:(...args)=>storage.command('promotionSupports',...args)};
+  const governedReview:GovernedReviewRepository={
+    listInstructions:(...args)=>storage.command('governedInstructions',...args),
+    createInstruction:(...args)=>storage.command('governedInstructionCreate',...args),
+    listAssignableSubjects:(...args)=>storage.command('governedAssignableSubjects',...args),
+    createSealedIntake:(...args)=>storage.command('governedSealedIntake',...args),
+    createBatchDraft:(...args)=>storage.command('governedDraft',...args),
+    listBatches:(...args)=>storage.command('governedBatchList',...args),
+    getBatchSummary:(...args)=>storage.command('governedBatchSummary',...args),
+    transitionBatch:(...args)=>storage.command('governedTransition',...args),
+    listReviewerTasks:(...args)=>storage.command('governedReviewerTasks',...args),
+    getOrCreateBlindTaskView:(...args)=>storage.command('governedBlindView',...args),
+    appendTaskAction:(...args)=>storage.command('governedTaskAction',...args),
+    getPostBarrierItemView:(...args)=>storage.command('governedPostBarrierView',...args),
+    appendAlignmentEvent:(...args)=>storage.command('governedAlignment',...args),
+    appendAdjudication:(...args)=>storage.command('governedAdjudication',...args),
+    createImportedTruth:(...args)=>storage.command('governedImportedTruthCreate',...args),
+    listImportedTruth:(...args)=>storage.command('governedImportedTruthList',...args),
+  };
+  const analysisStudies:AnalysisStudyRepository={
+    createStudy:(...args)=>storage.command('studyCreate',...args),
+    listStudies:(...args)=>storage.command('studyList',...args),
+    getStudy:(...args)=>storage.command('studyGet',...args),
+    openStudy:(...args)=>storage.command('studyOpen',...args),
+    closeStudy:(...args)=>storage.command('studyClose',...args),
+    completeStudy:(...args)=>storage.command('studyComplete',...args),
+    abandonStudy:(...args)=>storage.command('studyAbandon',...args),
+    listStudyItems:(...args)=>storage.command('studyItems',...args),
+    listStudyItemEvents:(...args)=>storage.command('studyItemEvents',...args),
+    getStudyItem:(...args)=>storage.command('studyItemGet',...args),
+    appendStudyItemEvent:(...args)=>storage.command('studyItemAppend',...args),
+    getStudyItemContent:(...args)=>storage.command('studyItemContent',...args),
+    createTaxonomy:(...args)=>storage.command('studyTaxonomyCreate',...args),
+    getTaxonomy:(...args)=>storage.command('studyTaxonomyGet',...args),
+    listTaxonomyRevisions:(...args)=>storage.command('studyTaxonomyRevisions',...args),
+    getTaxonomyRevision:(...args)=>storage.command('studyTaxonomyRevisionGet',...args),
+    createTaxonomyRevision:(...args)=>storage.command('studyTaxonomyRevise',...args),
+    listObservationAssignments:(...args)=>storage.command('studyAssignments',...args),
+    appendObservationAssignment:(...args)=>storage.command('studyAssignmentAppend',...args),
+    getTaxonomyCoverage:(...args)=>storage.command('studyCoverage',...args),
+    closeDueStudies:(...args)=>storage.command('studyCloseDue',...args),
+  };
+  const analysisPopulations:AnalysisPopulationRepository={
+    createPopulation:(...args)=>storage.command('populationCreate',...args),
+    listPopulations:(...args)=>storage.command('populationList',...args),
+    getPopulation:(...args)=>storage.command('populationGet',...args),
+    listMembers:(...args)=>storage.command('populationMembers',...args),
+    listSelections:(...args)=>storage.command('populationSelections',...args),
+    listExclusions:(...args)=>storage.command('populationExclusions',...args),
+    listOverlaps:(...args)=>storage.command('populationOverlaps',...args),
+    getSelectedContent:(...args)=>storage.command('populationSelectedContent',...args)
+  };
   const productionRecords:ProductionDecisionRecordRepository={
     appendRecords:(...args)=>storage.command('productionAppendRecords',...args),
     loadRecords:(...args)=>storage.command('productionLoadRecords',...args),
@@ -249,5 +339,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,analysisMeasurement,evaluatorLifecycle,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

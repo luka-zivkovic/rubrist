@@ -17,6 +17,7 @@ import type {
   BinaryCalibrationRecheckTarget,
   CompleteBinaryCalibrationAttemptInput
 } from "../src/binary-calibration/repository.js";
+import { BinaryCalibrationRepositoryError } from "../src/binary-calibration/repository.js";
 import {
   BinaryCalibrationWorkerError,
   processBinaryCalibrationRun
@@ -110,6 +111,7 @@ class FakeExecutionRepository implements BinaryCalibrationExecutionRepository {
     claim: BinaryCalibrationExecutionClaim
   ): Promise<BinaryCalibrationAuthorizedRun> {
     this.authorizeCalls += 1;
+    if (this.authorizeError) throw this.authorizeError;
     return this.evaluator === null ? authorized(claim) : { ...authorized(claim), evaluator: this.evaluator };
   }
 
@@ -162,9 +164,18 @@ class FakeExecutionRepository implements BinaryCalibrationExecutionRepository {
     return MINT;
   }
 
+  async finalizeLifecycleForbiddenRun(): Promise<BinaryCalibrationMintResult | null> {
+    this.lifecycleRecoveryCalls += 1;
+    return this.lifecycleRecovery;
+  }
+
   async markRecoveryRequired(): Promise<void> {
     this.recoveryMarks += 1;
   }
+
+  authorizeError: Error | null = null;
+  lifecycleRecovery: BinaryCalibrationMintResult | null = null;
+  lifecycleRecoveryCalls = 0;
 
   authorized = false;
   msSinceUnknownRecheck: number | null = null;
@@ -214,6 +225,42 @@ function successfulExecutor(onPhysicalCall: () => void): BinaryCalibrationProvid
 }
 
 describe("sealed binary calibration worker", () => {
+  it("ends a lifecycle-refused authorized run by the repository's incomplete mint without dispatch", async () => {
+    const repository = new FakeExecutionRepository();
+    repository.authorizeError = new BinaryCalibrationRepositoryError("ineligible", "lifecycle refused");
+    repository.lifecycleRecovery = MINT;
+    let physicalCalls = 0;
+    const executeProvider = successfulExecutor(() => {
+      physicalCalls += 1;
+    });
+
+    await expect(processBinaryCalibrationRun({
+      repository, executeProvider, runId: "cal_run_1", workerId: "worker_1", claimTtlMs: 1_000
+    })).resolves.toBe(MINT);
+    expect(repository.lifecycleRecoveryCalls).toBe(1);
+    expect(physicalCalls).toBe(0);
+    expect(repository.physicalProviderCalls).toBe(0);
+    expect(repository.finalizeCalls).toBe(0);
+    expect(repository.recoveryMarks).toBe(0);
+
+    // Not authorized yet, or still authorized by its lifecycle: no recovery,
+    // and the refusal still requires recovery as before.
+    repository.lifecycleRecovery = null;
+    await expect(processBinaryCalibrationRun({
+      repository, executeProvider, runId: "cal_run_1", workerId: "worker_2", claimTtlMs: 1_000
+    })).rejects.toBeInstanceOf(BinaryCalibrationWorkerError);
+    expect(repository.recoveryMarks).toBe(1);
+
+    // Only the typed lifecycle refusal is eligible for terminal recovery.
+    repository.authorizeError = new BinaryCalibrationRepositoryError("state_conflict", "stale claim");
+    repository.lifecycleRecovery = MINT;
+    await expect(processBinaryCalibrationRun({
+      repository, executeProvider, runId: "cal_run_1", workerId: "worker_3", claimTtlMs: 1_000
+    })).rejects.toBeInstanceOf(BinaryCalibrationWorkerError);
+    expect(repository.lifecycleRecoveryCalls).toBe(2);
+    expect(physicalCalls).toBe(0);
+  });
+
   it("does not dispatch when durable pre-call persistence fails", async () => {
     const repository = new FakeExecutionRepository();
     repository.failCallStart = true;

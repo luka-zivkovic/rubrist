@@ -29,8 +29,8 @@ export function sqliteResolutionStore(db: DatabaseSync) {
         binding_digest=excluded.binding_digest,status=excluded.status,record=excluded.record,recorded_at=excluded.recorded_at`,versionId,projectId,digest,parsed.status,JSON.stringify(parsed),new Date().toISOString());
       return load(projectId,versionId,binding);
     },
-    append(attempt:ResolutionAttemptInput) {
-      run('INSERT INTO evaluator_resolution_attempts VALUES(?,?,?,?,?,?,?,?,?,?)',`era_${randomUUID()}`,attempt.projectId,attempt.skillVersionId,sha256Digest(attempt.executionBinding),attempt.kind,attempt.triggerKind,attempt.triggerRef,attempt.outcome,JSON.stringify(attempt.probes),new Date().toISOString());
+    append(attempt:ResolutionAttemptInput,recordedAt=new Date().toISOString()) {
+      run('INSERT INTO evaluator_resolution_attempts VALUES(?,?,?,?,?,?,?,?,?,?)',`era_${randomUUID()}`,attempt.projectId,attempt.skillVersionId,sha256Digest(attempt.executionBinding),attempt.kind,attempt.triggerKind,attempt.triggerRef,attempt.outcome,JSON.stringify(attempt.probes),recordedAt);
     },
     binding(projectId:string,versionId:string):GovernedBinding|null {
       const row=one('SELECT * FROM skill_versions WHERE project_id=? AND id=?',projectId,versionId);

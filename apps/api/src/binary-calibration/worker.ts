@@ -1,9 +1,11 @@
 import type { Queue } from "@rubrist/queue";
 import type { RecheckedBinding, RecheckOutcome } from "../lib/binding-resolution.js";
 import type { BinaryCalibrationMintResult } from "./repository.js";
-import type {
-  BinaryCalibrationExecutionClaim,
-  BinaryCalibrationExecutionRepository
+import {
+  BinaryCalibrationRepositoryError,
+  type BinaryCalibrationAuthorizedRun,
+  type BinaryCalibrationExecutionClaim,
+  type BinaryCalibrationExecutionRepository
 } from "./repository.js";
 import {
   BinaryCalibrationProviderError,
@@ -184,7 +186,19 @@ export async function processBinaryCalibrationRun(input: {
       }
     }
 
-    const authorizedRun = await input.repository.authorizeRun(claim);
+    let authorizedRun: BinaryCalibrationAuthorizedRun;
+    try {
+      authorizedRun = await input.repository.authorizeRun(claim);
+    } catch (error) {
+      // A lifecycle change after authorization forbids every further call, so
+      // the run can never finish by dispatch. The repository re-checks that
+      // inside one transaction, then accounts the remaining attempts without a
+      // call and mints the incomplete artifact, which releases the lease.
+      if (!(error instanceof BinaryCalibrationRepositoryError) || error.code !== "ineligible") throw error;
+      const terminal = await input.repository.finalizeLifecycleForbiddenRun(claim);
+      if (!terminal) throw error;
+      return terminal;
+    }
     assertAuthorizedClaim(claim, authorizedRun.claim);
 
     // This MUST precede getNextAttempt. A persisted `started` row means a call

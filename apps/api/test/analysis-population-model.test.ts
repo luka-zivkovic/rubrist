@@ -21,6 +21,8 @@ import {
   AnalysisPopulationExclusionsPageSchema,
   AnalysisPopulationMemberSchema,
   AnalysisPopulationSchema,
+  PostgresAnalysisPopulationSchema,
+  SqliteAnalysisPopulationSchema,
   AnalysisPopulationSummarySchema,
   AnalysisPopulationSelectedItemsPageSchema,
   DatasetRevisionSourceKindSchema
@@ -222,9 +224,29 @@ describe("analysis population strict contracts", () => {
   it("accepts a long PostgreSQL snapshot projection up to the migration byte bound", () => {
     const snapshot = `1:20000:${Array.from({ length: 4_000 }, (_, index) => index + 2).join(",")}`;
     expect(snapshot.length).toBeGreaterThan(10_000);
-    expect(AnalysisPopulationSchema.shape.snapshotXid8.parse(snapshot)).toBe(snapshot);
+    expect(PostgresAnalysisPopulationSchema.shape.snapshotXid8.parse(snapshot)).toBe(snapshot);
     const oversizedSnapshot = `1:2:${"3,".repeat(Math.ceil(ANALYSIS_POPULATION_MAX_SNAPSHOT_XID8_BYTES / 2))}3`;
-    expect(AnalysisPopulationSchema.shape.snapshotXid8.safeParse(oversizedSnapshot).success).toBe(false);
+    expect(PostgresAnalysisPopulationSchema.shape.snapshotXid8.safeParse(oversizedSnapshot).success).toBe(false);
+  });
+
+  it("preserves PostgreSQL provenance and strictly separates serialized SQLite freezes", () => {
+    const summary = populationSummaryFixture();
+    const postgres = summary.population;
+    expect(PostgresAnalysisPopulationSchema.parse(postgres)).toEqual(postgres);
+    expect(AnalysisPopulationSchema.parse(postgres)).toEqual(postgres);
+    expect(JSON.stringify(AnalysisPopulationSchema.parse(postgres))).toBe(JSON.stringify(postgres));
+    const { snapshotXid8, ...common } = postgres;
+    const sqlite = { ...common, snapshotProvenance: "sqlite-serialized-freeze/v1" };
+    expect(SqliteAnalysisPopulationSchema.parse(sqlite)).toEqual(sqlite);
+    expect(AnalysisPopulationSchema.parse(sqlite)).toEqual(sqlite);
+    expect(PostgresAnalysisPopulationSchema.safeParse(sqlite).success).toBe(false);
+    expect(SqliteAnalysisPopulationSchema.safeParse(postgres).success).toBe(false);
+    for (const forged of [common, { ...sqlite, snapshotXid8 }, { ...sqlite, snapshotProvenance: "invented" }]) {
+      expect(AnalysisPopulationSchema.safeParse(forged).success).toBe(false);
+    }
+    expect(AnalysisPopulationSummarySchema.parse({ ...summary, population: sqlite }).population).toEqual(sqlite);
+    expect(AnalysisPopulationDetailSchema.parse({ ...summary, population: sqlite, overlapCount: "0" }).population).toEqual(sqlite);
+    expect(AnalysisPopulationCreateResultSchema.parse({ ...summary, population: sqlite, reusedPopulation: false, reusedDraw: false }).population).toEqual(sqlite);
   });
 
   it("models every explicit ineligible case shape without capping exclusion positions at eligible N", () => {

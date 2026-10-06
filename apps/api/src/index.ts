@@ -45,13 +45,13 @@ const auth = sqlite?.auth ?? (pool ? createAuth(pool) : undefined);
 // Demo mode seeds verdicts so κ / disagreement feeds / calibration render
 // without a worker or auth. Real mode (PgRepository) uses live data.
 const repository = sqlite?.repository ?? (pool ? new PgRepository(pool) : new DemoRepository(undefined, { seedVerdicts: true }));
-const binaryCalibrationRepository = pool
-  ? new PgBinaryCalibrationRepository(pool)
-  : null;
-const analysisStudyRepository = pool ? new PgAnalysisStudyRepository(pool) : null;
-const analysisPromotionRepository = pool ? new PgAnalysisPromotionRepository(pool) : null;
-const evaluatorLifecycleRepository = pool ? new PgEvaluatorLifecycleRepository(pool) : null;
-const analysisMeasurementRepository = pool ? new PgAnalysisMeasurementRepository(pool) : null;
+const pgBinaryCalibrationRepository = pool ? new PgBinaryCalibrationRepository(pool) : null;
+const binaryCalibrationRepository = sqlite?.binaryCalibration ?? pgBinaryCalibrationRepository;
+const binaryCalibrationExecutionRepository = sqlite?.binaryCalibrationExecution ?? pgBinaryCalibrationRepository;
+const analysisStudyRepository = sqlite?.analysisStudies ?? (pool ? new PgAnalysisStudyRepository(pool) : null);
+const analysisPromotionRepository = sqlite?.analysisPromotions ?? (pool ? new PgAnalysisPromotionRepository(pool) : null);
+const evaluatorLifecycleRepository = sqlite?.evaluatorLifecycle ?? (pool ? new PgEvaluatorLifecycleRepository(pool) : null);
+const analysisMeasurementRepository = sqlite?.analysisMeasurement ?? (pool ? new PgAnalysisMeasurementRepository(pool) : null);
 const productionDecisionRecordRepository=sqlite?.productionRecords ?? (pool?new PgProductionDecisionRecordRepository(pool):null);
 const resolutionRepository=sqlite?.resolution ?? evaluatorLifecycleRepository;
 const queue = sqlite?.queue ?? (pool ? createQueue() : undefined);
@@ -92,10 +92,10 @@ if (queue) {
   await registerLangfuseImportWorker(queue, repository);
   await registerIronsideImportWorker(queue, repository);
   pollers.push(await registerFeedbackSyncWorker(queue, repository));
-  if (binaryCalibrationRepository) {
+  if (binaryCalibrationExecutionRepository) {
     const binaryCalibrationOrchestrator = await registerBinaryCalibrationWorker(
       queue,
-      binaryCalibrationRepository,
+      binaryCalibrationExecutionRepository,
       createBinaryCalibrationProviderExecutor({
         resolveProjectCredential: (projectId, provider) =>
           repository.getJudgeProviderCredential(projectId, provider)
@@ -130,8 +130,11 @@ const server = serve({
     ...(sqlite ? {accounts:sqlite.accounts,capabilityChecks:sqlite.capabilityChecks} : {}),
     pool: pool ?? undefined,
     queue,
+    governedReviewRepository:sqlite?.governedReview,
+    analysisPopulationRepository:sqlite?.analysisPopulations,
     analysisStudyRepository,
     analysisPromotionRepository,
+    binaryCalibrationRepository,
     evaluatorLifecycleRepository,
     analysisMeasurementRepository,
     productionDecisionRecordRepository
@@ -139,7 +142,7 @@ const server = serve({
   port
 });
 
-console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite ordinary workflows)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
+console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`Received ${signal}; shutting down Rubrist API`);

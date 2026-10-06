@@ -28,11 +28,12 @@
     }
   ],
   "strategies": {
-    "finalization": "Mandatory reciprocal deferred foreign key to an immutable finalization row; immediate finalizer checks the complete joined bundle; later child changes rejected. Mutable event-head rules also need a per-command validation obligation, not a one-time finalizer.",
+    "finalization": "Mandatory reciprocal deferred foreign key to an immutable finalization row; immediate finalizer checks the complete joined bundle; later child changes and same-command source changes rejected. Mutable event-head rules also need a per-command validation obligation, not a one-time finalizer.",
     "immutability": "Immediate UPDATE/DELETE triggers; retain exact permitted project/user erasure exceptions and production deletion audit obligations; recursive triggers ON closes REPLACE bypass.",
     "transaction": "BEGIN IMMEDIATE with private per-command token/time functions; triggers validate context and previously committed evidence; no caller-supplied xmin, snapshot or session setting.",
     "locking": "Short BEGIN IMMEDIATE transaction serializes database mutations; durable fenced ownership replaces session locks across external calls; recheck eligibility in the write transaction.",
-    "digest": "Port exact canonicalization to deterministic connection-registered SQL functions called from constraints/triggers; joined aggregates assembled with explicit contract ordering. Missing functions fail closed.",
+    "digest": "Port exact canonicalization to deterministic connection-registered SQL functions called from triggers (not CHECKs); joined aggregates assembled with explicit contract ordering. Missing functions fail closed.",
+    "validator": "For payload-heavy set re-derivation only: versioned non-deterministic trigger UDF, managed context required, no reentry, read-only authorizer flag, prepare/iterate-only scoped reader and iterator cleanup. Return a verdict to RAISE(ABORT); never register from inside the UDF or use it in CHECK/index/generated/view expressions. Stream payloads without caches; test source changes after finalization and plain-connection maintenance.",
     "mutation": "Port side effect into an immediate trigger in the caller transaction; enforce project/identity scope and append-only history with the same rollback boundary.",
     "guard": "Immediate SQLite triggers with RAISE(ABORT), explicit NULL handling, strict columns, composite tenant foreign keys and unique indexes; port every predicate, not just its error message.",
     "query": "Backend-specific SQL query/view preserving selection, null semantics, ordering and exact integer handling; if consumed by a guard, run the equivalent query inside that database trigger."

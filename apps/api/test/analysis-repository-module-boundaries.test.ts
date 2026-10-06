@@ -293,6 +293,9 @@ function moduleEdges(program: ts.Program, targetPath: string): string[] {
 
 function assertSupportShape(source: ts.SourceFile, exports: readonly string[]): void {
   const exportedNames = source.statements.flatMap((statement): string[] => {
+    if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      return statement.exportClause.elements.map(element => element.name.text);
+    }
     const exported = ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some(
       (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
     ) === true;

@@ -1,3 +1,10 @@
+import {AnalysisMeasurementRepositoryError} from '../../analysis-measurement/repository.js';
+import {EvaluatorLifecycleRepositoryError} from '../../evaluator-lifecycle/repository.js';
+import {BinaryCalibrationRepositoryError} from '../../binary-calibration/repository.js';
+import {AnalysisPromotionRepositoryError} from '../../analysis-promotion/repository.js';
+import * as governedErrors from '../../governed-review/errors.js';
+import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
+import { AnalysisPopulationRepositoryError } from '../../analysis-population/repository.js';
 import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 import * as repositoryErrors from '../../repository/errors.js';
@@ -26,11 +33,19 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          if(message.error.name==='AnalysisMeasurementRepositoryError')Object.setPrototypeOf(error,AnalysisMeasurementRepositoryError.prototype);
+          if(message.error.name==='BinaryCalibrationRepositoryError')Object.setPrototypeOf(error,BinaryCalibrationRepositoryError.prototype);
+          if(message.error.name==='EvaluatorLifecycleRepositoryError')Object.setPrototypeOf(error,EvaluatorLifecycleRepositoryError.prototype);
+          if(message.error.name==='AnalysisPromotionRepositoryError')Object.setPrototypeOf(error,AnalysisPromotionRepositoryError.prototype);
+          if(message.error.name==='AnalysisStudyRepositoryError') Object.setPrototypeOf(error,AnalysisStudyRepositoryError.prototype);
+          if(message.error.name==='AnalysisPopulationRepositoryError') Object.setPrototypeOf(error,AnalysisPopulationRepositoryError.prototype);
           if(message.error.name==='ProductionRecordRepositoryError') Object.setPrototypeOf(error,ProductionRecordRepositoryError.prototype);
           if(message.error.name==='SqliteFeatureUnavailableError') Object.setPrototypeOf(error,SqliteFeatureUnavailableError.prototype);
           const domainError = Object.hasOwn(repositoryErrors,message.error.name)
             ? repositoryErrors[message.error.name as keyof typeof repositoryErrors] : undefined;
           if (typeof domainError === 'function' && domainError.prototype instanceof Error) Object.setPrototypeOf(error,domainError.prototype);
+          const governedError=Object.hasOwn(governedErrors,message.error.name)?governedErrors[message.error.name as keyof typeof governedErrors]:undefined;
+          if(typeof governedError==='function'&&(governedError===governedErrors.GovernedReviewDomainError||governedError.prototype instanceof governedErrors.GovernedReviewDomainError))Object.setPrototypeOf(error,governedError.prototype);
           caller.reject(error);
         } else caller.resolve(reviveBytes(message.result));
       });

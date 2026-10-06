@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson, taskEventContent } from "./storage-values.js";
+export { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson, taskEventContent } from "./storage-values.js";
 import type { Pool, PoolClient } from "pg";
 
 import { governedContentV1Digest } from "../lib/governed-content-digest.js";
@@ -25,16 +26,13 @@ import type { GovernedReviewActor } from "./repository.js";
 
 export type Db = Pool | PoolClient;
 
-export const ALLOWED_LABELS = ["pass", "fail", "cannot_determine"] as const;
-export const MAX_BLIND_VIEW_BYTES = 2 * 1024 * 1024;
+
+
 // Public idempotency keys are bounded to 200 bytes by contracts.ts. Keeping
 // internal stream keys outside that length domain makes collisions impossible
 // even when a caller deliberately chooses the old `view:<taskId>` shape.
 export const INTERNAL_VIEW_IDEMPOTENCY_KEY = `rubrist-internal/view/v1/${"0".repeat(200)}`;
-export const COVERED_CAPABILITIES = [
-  "criterion_authoring", "instruction_authoring", "evaluator_authoring",
-  "rubric_authoring", "prompt_authoring", "example_selection", "development_exposure"
-] as const;
+export { COVERED_CAPABILITIES } from './storage-values.js';
 
 export interface BatchRow {
   id: string;
@@ -62,40 +60,7 @@ export interface BatchRow {
   custodian_role_at_review: string | null;
   created_at: Date | string;
 }
-export function taskEventContent(input: {
-  actorRoleAtReview: string;
-  actorSubjectId: string;
-  eventKind: string;
-  taskId: string;
-  sequence: number;
-  previousEventDigest: string | null;
-  labelId?: string | null;
-  reason?: string | null;
-  canonicalViewBytesBase64?: string | null;
-  viewDigest?: string | null;
-  viewContractVersion?: string | null;
-  canonicalizationVersion?: string | null;
-  exposureClass?: string | null;
-  activity?: string | null;
-}) {
-  return {
-    activity: input.activity ?? null,
-    actorRoleAtReview: input.actorRoleAtReview,
-    actorSubjectId: input.actorSubjectId,
-    canonicalizationVersion: input.canonicalizationVersion ?? null,
-    eventKind: input.eventKind,
-    exposureClass: input.exposureClass ?? null,
-    labelId: input.labelId ?? null,
-    reason: input.reason ?? null,
-    canonicalViewBytesBase64: input.canonicalViewBytesBase64 ?? null,
-    previousEventDigest: input.previousEventDigest,
-    sequence: input.sequence,
-    stateVersion: input.sequence,
-    taskId: input.taskId,
-    viewContractVersion: input.viewContractVersion ?? null,
-    viewDigest: input.viewDigest ?? null
-  };
-}
+
 
 export async function loadAdjudication(
   db: Db,
@@ -239,9 +204,6 @@ export function sealedItemId(intakeId: string, clientItemId: string): string {
   return stableId("gri", intakeId, "sealed-client-item", clientItemId);
 }
 
-export function stableId(prefix: string, ...parts: string[]): string {
-  return `${prefix}_${createHash("sha256").update(parts.join("\u0000"), "utf8").digest("hex").slice(0, 48)}`;
-}
 
 export async function dbDigest(db: Db, kind: string, content: unknown): Promise<string> {
   const applicationDigest = governedContentV1Digest(kind, content);
@@ -262,18 +224,13 @@ export async function normalizedTimestamp(db: Db, value: string | null): Promise
   return String(row.value);
 }
 
-export function sha256Bytes(bytes: Uint8Array): string {
-  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
+
 
 export function assertReplay(existing: unknown, candidate: string): void {
   if (String(existing) !== candidate) throw new GovernedReviewIdempotencyConflictError();
 }
 
-export function parseJson(value: unknown): unknown {
-  if (typeof value === "string") return JSON.parse(value);
-  return value;
-}
+
 
 export function jsonParam(value: unknown): string | null {
   return value === null || value === undefined ? null : JSON.stringify(value);
