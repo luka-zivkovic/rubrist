@@ -1,5 +1,5 @@
 import { rowToStudyProjection, rowToClosure, rowToStudySummary, rowToStudyItemProjection, rowToStudyEvent, rowToStudyItemEvent, rowToTaxonomyArtifact, rowToTaxonomyRevision, rowToTaxonomyCode, rowToAssignmentEvent, iso, nullableString, textArray, nullableTextArray } from './storage-values.js';
-export { rowToStudyProjection, rowToClosure, rowToStudySummary, rowToStudyItemProjection, rowToStudyEvent, rowToStudyItemEvent, rowToTaxonomyArtifact, rowToTaxonomyRevision, rowToTaxonomyCode, rowToAssignmentEvent, iso, nullableString, textArray, nullableTextArray } from './storage-values.js';
+export { rowToStudySummary, rowToStudyItemProjection, rowToStudyItemEvent, rowToTaxonomyRevision, rowToAssignmentEvent } from './storage-values.js';
 import {
   ANALYSIS_MAX_EVENT_VERSION,
   ANALYSIS_MAX_TAXONOMY_REVISIONS,
