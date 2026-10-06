@@ -354,3 +354,12 @@ Tests include two-connection continuation, orphan rejection, failed-event and
 failed-closure rollback, replacement/replay, microsecond boundaries and project
 erasure. API typechecking passes. Alignment, adjudication, sealed paths, truth
 freeze and public repository wiring remain unfinished.
+
+## Post-barrier alignment evidence
+
+CURRENT: migration 0047 freezes each alignment event's complete visible label
+set in the same statement. It enforces live owner/assigned-reviewer access,
+stream versions and digests, immutable instruction-successor proposals and
+closure before adjudication. Snapshot failure rolls back the entire event.
+Independent audit approved 25 alignment/barrier/label tests; API typechecking
+passes. Adjudication chains, sealed paths and truth freeze remain unfinished.

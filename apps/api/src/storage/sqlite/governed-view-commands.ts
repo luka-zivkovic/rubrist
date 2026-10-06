@@ -25,7 +25,7 @@ export function initializeGovernedViewValidator(db:DatabaseSync):void {
 }
 function insert(c:SqliteCommandContext,table:'governed_review_batch_events'|'governed_review_task_events',row:Record<string,SQLInputValue>){c.db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));}
 /** Nonsealed transitions; alignment, adjudication and freeze remain staged. */
-export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,action:'open'|'close_labeling'|'finalize',raw:GovernedReviewStreamCommand,clock=Date.now):string {
+export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,action:'open'|'close_labeling'|'open_alignment'|'start_adjudication'|'finalize',raw:GovernedReviewStreamCommand,clock=Date.now):string {
  initializeGovernedViewValidator(db);
  const command=GovernedReviewStreamCommandSchema.parse(raw);
  return sqliteCommand(db,c=>{
@@ -34,9 +34,9 @@ export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedR
   const existing=c.db.prepare('SELECT id,request_digest FROM governed_review_batch_events WHERE batch_id=? AND idempotency_key=?').get(batchId,command.idempotencyKey);
   if(existing){if(existing.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return String(existing.id);}
   if(Number(batch.state_version)!==command.expectedStateVersion)throw new GovernedReviewStreamConflictError({currentState:String(batch.state),currentVersion:Number(batch.state_version)});
-  const expected=action==='open'?'draft':action==='close_labeling'?'open':'labeling_closed';
-  if(batch.state!==expected)throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:action});
-  let eventKind=action==='open'?'open':'labeling_closed',details:unknown={};
+  const expected=action==='open'?['draft']:action==='close_labeling'?['open']:action==='open_alignment'?['labeling_closed']:action==='start_adjudication'?['labeling_closed','alignment_open']:['labeling_closed','alignment_open','adjudicating'];
+  if(!expected.includes(String(batch.state)))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:action});
+  let eventKind=action==='open'?'open':action==='open_alignment'?'alignment_open':action==='start_adjudication'?'adjudicating':'labeling_closed',details:unknown={};
   if(action==='close_labeling'){
    const stop=c.db.prepare('SELECT governed_timestamp_v1(sqlite_command_time())>=governed_timestamp_v1(stop_at) AS at_stop FROM governed_review_batches WHERE id=?').get(batchId)!;
    const atStop=stop.at_stop===1;
