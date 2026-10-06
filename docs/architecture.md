@@ -18,8 +18,8 @@ documentation or implementation gap rather than a change in product intent.
 | `apps/api` | HTTP API, authentication boundaries, project authorization, repositories, and workers |
 | `apps/audit` | Provider-independent structured judging and verdict validation |
 | `packages/shared` | Zod domain models and transport contracts shared by API and web |
-| `packages/db` | PostgreSQL migrations, SQLite account-stage migrations and demo fixture data |
-| `packages/queue` | Queue names and pg-boss construction |
+| `packages/db` | PostgreSQL migrations, SQLite migrations and demo fixture data |
+| `packages/queue` | Queue names, pg-boss construction, and the SQLite durable queue adapter |
 
 ## Runtime modes
 
@@ -31,7 +31,7 @@ Setting `DATABASE_URL` enables persistent storage, Better Auth, project membersh
 
 In development, with no backend selector or database variables, the API uses `DemoRepository`. Explicit `RUBRIST_STORAGE=demo` also selects it; production requires an explicit selector or the legacy PostgreSQL URL. It contains representative fixtures and deterministic mock judging so the product can be explored without external services. Demo data is not persistent and authentication is disabled.
 
-### SQLite account-stage runtime
+### SQLite development runtime
 
 CURRENT: `RUBRIST_STORAGE=sqlite` and an absolute `RUBRIST_SQLITE_PATH` select
 persistent Better Auth, accounts, projects, API keys, invitations, pairings
@@ -42,9 +42,16 @@ services rather than using a PostgreSQL pool for authorization. Malformed
 configuration or storage failure never selects demo.
 
 This development checkpoint requires Node 24.15+ and one application instance.
-Evaluator, integration and evidence routes are explicitly unavailable until
-later SQLite milestones. It is not a release installation option yet. See
-[Milestone 1](sqlite/milestone-1.md) for the exact boundary and validation.
+Native criteria, mutable collections, and batch evaluations use the same
+repository contracts and shared evaluation workers. The SQLite queue persists
+claims and retries; separate evaluation tokens fence provider dispatch and
+completion. A terminal release-evidence run and its exact receipt BLOB commit
+together. Interrupted dispatched calls become explicit uncertainty, never an
+automatic second provider call. Worker transport revives BLOBs as Buffers.
+
+Integration, revision, analysis, and governed workflows remain explicitly
+unavailable. This is not a release installation option yet. See
+[Milestone 2](sqlite/milestone-2.md) for the exact boundary and validation.
 
 ## Core flows
 

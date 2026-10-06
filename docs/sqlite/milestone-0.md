@@ -142,38 +142,37 @@ stored artifacts must still be returned unchanged. Adding provenance to a
 future digest basis would require a new basis and new identities; replacing a
 DTO field does not authorize rewriting any stored bytes.
 
-ASSUMPTION, proposed in [ADR-0016](../decisions/0016-sqlite-deployment-and-provenance.md):
-introduce an explicitly versioned Analyze response with a strict discriminated
-`snapshot` object, and retain existing PostgreSQL response parsing:
+TARGET, accepted in [ADR-0016](../decisions/0016-sqlite-deployment-and-provenance.md):
+use strict backend-discriminated provenance while preserving existing PostgreSQL
+responses and retained bytes. Illustrative shapes (exact DTO and transport remain
+Milestone 4 implementation choices):
 
 ```json
 {"kind":"postgres-repeatable-read/v1","snapshotXid8":"100:100:","takenAt":"2026-10-05T10:00:00.000000Z"}
 ```
 
 ```json
-{"kind":"sqlite-serialized-freeze/v1","takenAt":"2026-10-05T10:00:00.000000Z"}
+{"kind":"sqlite-serialized-freeze/v1","takenAt":"2026-10-05T10:00:00.000Z"}
 ```
 
-The proposed SQLite shape deliberately has **no snapshot identifier**. A
-`BEGIN IMMEDIATE` freeze holds a consistent database view, excludes concurrent
-writers, and persists exact membership/exclusion payloads and digests before
-commit. An immutable snapshot row created inside the controlled command records
-server time; triggers compare it to the private command time and enforce the
-existing 60-second window lag. An opaque command token is stored privately only
-where required for commit barriers. SQLite time initially has millisecond
-precision padded to six fractional digits, honestly documenting that precision;
-precision changes cannot alter old stored timestamps.
+The SQLite shape has **no snapshot identifier**. A `BEGIN IMMEDIATE` freeze
+holds a consistent database view, excludes concurrent writers, and persists
+exact membership/exclusion payloads and digests before commit. Freeze and
+ingestion timestamps are captured within their owning write transactions.
+An immutable snapshot row records server time; triggers compare it to private
+command time and enforce the existing 60-second window lag. An opaque command
+token stays private where required for commit barriers. Milestone 4 must document
+actual timestamp precision; changes cannot alter retained timestamps.
 
-TARGET compatibility tests before Milestone 4 runtime: old PG DTO parses with
-unchanged bytes; old readers reject the explicitly versioned new response;
-new readers handle both PG and SQLite kinds and reject unknown kinds/fields;
-no SQLite response passes the old PG-only schema; unchanged member sets give
-identical existing content/frame digest inputs; window cutoffs, active writer
-interleaving, restart, and direct forged time/context fail safely. Release the
-new response through an explicit API version/negotiation boundary, not by
-silently widening the old schema. No receipt or calibration contract change is
-needed for this provenance design. The exact API version/negotiation choice
-and ADR approval remain gates before wiring it into Analyze.
+TARGET compatibility tests before Milestone 4 runtime: existing PG responses
+still parse; readers handle both backend kinds and reject unknown kinds/fields;
+SQLite never pretends to satisfy the old PG-only provenance; unchanged member
+sets retain identical content/frame digest inputs; window cutoffs, active writer
+interleaving, restart, and direct forged time/context fail safely. Choose either
+a versioned transport boundary or coordinated strict-union reader changes based
+on the actual consumer inventory. The known in-repository consumer is the web
+app; check for other consumers before shipping. A new API version is not itself
+an accepted requirement. No receipt or calibration contract change is needed.
 
 CURRENT executable evidence: the WAL test keeps one reader's view stable across
 another connection's commit; a concurrent writer cannot enter while the freeze

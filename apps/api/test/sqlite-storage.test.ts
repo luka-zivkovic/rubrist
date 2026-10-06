@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { migrateSqlite, openSqlite } from '@rubrist/db/sqlite';
@@ -7,6 +7,8 @@ import { storageConfig } from '../src/storage/config.js';
 import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
 import { createApp } from '../src/app.js';
 import { DemoRepository } from '../src/repository.js';
+
+const sqliteMigrationCount=readdirSync(new URL('../../../packages/db/sqlite-migrations/',import.meta.url)).filter(name=>name.endsWith('.sql')).length;
 
 const dirs: string[] = [];
 function temp() { const dir=mkdtempSync(`${tmpdir()}/rubrist-sqlite-storage-`); dirs.push(dir); return dir; }
@@ -41,7 +43,7 @@ describe('SQLite migrations and connection lifecycle', () => {
     const path = `${temp()}/test.sqlite`;
     const db=openSqlite(path);
     migrateSqlite(db); migrateSqlite(db);
-    expect(db.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(1);
+    expect(db.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(sqliteMigrationCount);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(db.prepare('PRAGMA foreign_keys').get()?.foreign_keys).toBe(1);
     expect(db.prepare('PRAGMA journal_mode').get()?.journal_mode).toBe('wal');
@@ -65,7 +67,7 @@ describe('SQLite migrations and connection lifecycle', () => {
     const other=openSqlite(`${temp()}/newer.sqlite`); migrateSqlite(other);
     other.exec("INSERT INTO rubrist_sqlite_migrations VALUES('9999_future.sql','checksum','now')");
     expect(()=>migrateSqlite(other)).toThrow(/Incompatible/);
-    expect(other.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(2);
+    expect(other.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(sqliteMigrationCount+1);
     other.close();
   });
   it('rolls back an entire failed migration and can retry repaired unapplied SQL', () => {
@@ -114,7 +116,7 @@ describe('SQLite migrations and connection lifecycle', () => {
     const runtimes=await Promise.all([createSqliteRuntime(path),createSqliteRuntime(path)]);
     try {
       const db=openSqlite(path);
-      expect(db.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(1);
+      expect(db.prepare('SELECT count(*) n FROM rubrist_sqlite_migrations').get()?.n).toBe(sqliteMigrationCount);
       db.exec('BEGIN IMMEDIATE');
       const write=runtimes[0]!.repository.revokeApiKey('absent','absent');
       const started=performance.now();

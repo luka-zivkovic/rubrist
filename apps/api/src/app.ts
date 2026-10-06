@@ -1,3 +1,4 @@
+import { DatasetNotFoundError } from "./repository/errors.js";
 import { EvaluatorCallError } from "@rubrist/audit/runtime";
 import { ExecutionBindingInputError } from "./lib/execution-binding.js";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -624,16 +625,23 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
     await next();
   });
 
-  // Explicit staging boundary until evaluator/job ports land. Authentication
+  // Explicit staging boundary for the implemented SQLite vertical slices. Authentication
   // and project membership ran first; no unavailable route can perform work.
   if (options.accountStage) app.use("/api/*", async (c,next) => {
     const path=c.req.path;
+    if (path === '/api/v1/judge/batch' ||
+      /^\/api\/v1\/eval-runs\/[^/]+(?:\/assessment-receipt(?:\/comparisons)?)?$/.test(path) ||
+      /^\/api\/v1\/assessment-receipts\/[^/]+$/.test(path) ||
+      /^\/api\/v1\/criteria(?:\/[^/]+(?:\/(?:versions|current-skill))?)?$/.test(path) ||
+      /^\/api\/datasets(?:\/[^/]+(?:\/(?:archive|items(?:\/[^/]+)?))?)?$/.test(path) ||
+      /^\/api\/eval-runs(?:\/[^/]+)?$/.test(path) ||
+      path === '/api/skills/current') return next();
     if (path === '/api/projects' || path === '/api/project/settings' || path === '/api/project' ||
       path === '/api/api-keys' || path.startsWith('/api/api-keys/') ||
       path === '/api/judge-keys' || path.startsWith('/api/judge-keys/') ||
       path === '/api/judge/providers' || path === '/api/users/invite' ||
       path === '/api/agent-setup/pairings' || path.startsWith('/api/agent-setup/pairings/')) return next();
-    return c.json({error:'This workflow is not yet available in the SQLite account-stage runtime.',code:'sqlite_feature_unavailable'},503);
+    return c.json({error:'This workflow is not yet available in the SQLite development runtime.',code:'sqlite_feature_unavailable'},503);
   });
 
   // Governed human truth is a session-only, database-backed module. It is
@@ -1025,6 +1033,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   app.notFound((c) => c.json({ error: "Not found" }, 404));
 
   app.onError((error, c) => {
+    if (error instanceof DatasetNotFoundError) return c.json({ error: "Dataset not found" }, 404);
     if (error instanceof SqliteFeatureUnavailableError) return c.json({error:error.message,code:"sqlite_feature_unavailable"},503);
     if (error instanceof ExecutionBindingInputError) return c.json({ error: `Invalid execution binding: ${error.message}` }, 400);
     if (error instanceof EvaluatorCallError) {

@@ -174,7 +174,7 @@ export const CreateDatasetRevisionInputSchema = z.object({
 export type CreateDatasetRevisionInput = z.infer<typeof CreateDatasetRevisionInputSchema>;
 
 export const CreateDatasetInputSchema = z.object({
-  name: z.string().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
   description: z.string().max(2000).optional()
 });
 export type CreateDatasetInput = z.infer<typeof CreateDatasetInputSchema>;

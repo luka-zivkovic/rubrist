@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { migrateSqlite, openSqlite } from '@rubrist/db/sqlite';
 import { createAuth } from '../../lib/auth.js';
+import { serializeSqliteError } from './error-transport.js';
 import { sqliteCommands } from './commands.js';
 
 const port = parentPort!;
@@ -40,8 +41,7 @@ port.on('message', (message) => {
       } else throw new Error('Unknown storage message');
       port.postMessage({id:message.id,result});
     } catch(error) {
-      const value = error as Error & {statusCode?:number;body?:unknown};
-      port.postMessage({id:message.id,error:{name:value.name,message:value.message,statusCode:value.statusCode,body:value.body}});
+      port.postMessage({id:message.id,error:serializeSqliteError(error)});
     }
   });
 });

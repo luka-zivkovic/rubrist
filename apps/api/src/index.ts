@@ -51,7 +51,7 @@ const analysisStudyRepository = pool ? new PgAnalysisStudyRepository(pool) : nul
 const analysisPromotionRepository = pool ? new PgAnalysisPromotionRepository(pool) : null;
 const evaluatorLifecycleRepository = pool ? new PgEvaluatorLifecycleRepository(pool) : null;
 const analysisMeasurementRepository = pool ? new PgAnalysisMeasurementRepository(pool) : null;
-const queue = pool ? createQueue() : undefined;
+const queue = sqlite?.queue ?? (pool ? createQueue() : undefined);
 const pollers: Array<{ stop(): void | Promise<void> }> = [];
 
 if (analysisStudyRepository) {
@@ -71,8 +71,9 @@ if (queue) {
   // openrouter/custom bindings there is no environment-key fallback at all, so
   // a deleted project key would otherwise degrade EVERY subsequent judge run
   // to the mock heuristic while still recording source=llm_judge.
+  pollers.push(await registerEvalRunWorkers(queue, repository, createStrictJudgeProvider));
+  if (pool) {
   await registerJudgeRunWorker(queue, repository, createStrictJudgeProvider);
-  await registerEvalRunWorkers(queue, repository, createStrictJudgeProvider);
   // The gate worker needs no strict factory: runRegressionGateForVersion has
   // its own mock-degradation refusal (the original gate guard).
   await registerGateRunWorker(queue, repository, evaluatorLifecycleRepository ? {
@@ -118,6 +119,7 @@ if (queue) {
     intervalMs: parseIronsidePollIntervalMs(process.env.IRONSIDE_POLL_INTERVAL_MS),
     importLimit: parseIronsidePollImportLimit(process.env.IRONSIDE_POLL_IMPORT_LIMIT)
   }));
+  }
 }
 
 const server = serve({
@@ -135,7 +137,7 @@ const server = serve({
   port
 });
 
-console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite accounts; evaluator workflows not yet available)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
+console.log(`Rubrist API listening on http://localhost:${port}${sqlite ? " (SQLite durable evaluation)" : pool ? " (Postgres + judge worker)" : " (demo)"}`);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`Received ${signal}; shutting down Rubrist API`);

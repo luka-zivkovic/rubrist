@@ -31,7 +31,7 @@ export async function registerEvalRunWorkers(
   queue: Queue,
   repository: RubristRepository,
   provider: ProviderArg = createJudgeProvider
-): Promise<void> {
+): Promise<{ stop(): void }> {
   await queue.work<EvalRunJob>("eval.run", async ({ id, data }) => {
     try {
       await processEvalRunJob(repository, queue, data);
@@ -119,6 +119,7 @@ export async function registerEvalRunWorkers(
     });
   }, 60_000);
   recoveryTimer.unref();
+  return {stop: () => clearInterval(recoveryTimer)};
 }
 
 function errorMessage(error: unknown): string {
@@ -246,6 +247,7 @@ export async function recoverStaleEvalRunItemExecutions(
       evalRunId: execution.evalRunId,
       evalRunItemId: execution.evalRunItemId,
       executionToken: execution.executionToken,
+      recoverExpiredClaim: true,
       error: execution.providerCallReturned
         ? "Provider returned, but durable item completion was interrupted; the evaluator was not called again."
         : execution.providerCallStarted
@@ -324,6 +326,7 @@ export async function processEvalItemJob(
       evalRunId: parsed.evalRunId,
       evalRunItemId: parsed.evalRunItemId,
       executionToken: claimed.executionToken,
+      recoverExpiredClaim: true,
       error: claimed.providerCallReturned
         ? "Provider returned, but durable item completion was interrupted; the evaluator was not called again."
         : "Provider outcome unknown after worker interruption; the evaluator was not called again.",
