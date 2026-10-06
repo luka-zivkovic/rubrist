@@ -1,9 +1,9 @@
 # Milestone 6: parity and release qualification
 
 **CURRENT (2026-10-06):** all seven milestones are implemented and locally
-qualified. The stacked PR review/merge workflow remains pending: only Milestones
-0–1 have merged. The user replaced Copilot with Claude Code through agent-bridge
-for the remaining PR reviews on 2026-10-06.
+qualified against the revisions recorded below. The user replaced Copilot with
+Claude Code through agent-bridge for the remaining PR reviews on 2026-10-06.
+Live review, CI and merge states are tracked in milestone PRs #194–#198.
 This record does not authorize a release or an upgrade of an existing installation.
 
 ## Behavioral and recovery checklist
@@ -96,6 +96,10 @@ The measured slowdown identified missing case-specific retention access paths.
 Migration 0066 adds five nonunique indexes without rewriting history, deleting
 rows, relaxing guards or changing evidence contracts. Independent query-plan
 review confirmed exact lookups; migration integrity and foreign-key checks pass.
+During review, 0066 moved byte-identically into the M4 prerequisite so its new
+0067–0068 corrections remain a contiguous forward history. The benchmark
+observations below and in the raw files remain measurements of their original
+0065/0066 schemas; they are not new measurements of schema 0068.
 
 **Operating guidance:** keep SQLite to one API instance on durable local storage.
 Schedule large population freezes away from interactive peaks: the 5,000-member
@@ -110,17 +114,17 @@ throughput is inferred from local mock calls.
 
 ## Validation and review
 
-- Independent PostgreSQL fencing audit: 8/8 shared/lock-expiry contract tests.
-- Focused contract plus PostgreSQL convergence: 11/11.
+- Historical PostgreSQL fencing audit (schema 0066): 8/8 shared/lock-expiry contract tests.
+- Historical focused contract plus PostgreSQL convergence: 11/11.
 - Independent production crash/acknowledgement audit: 15/15.
 - Workspace typecheck, shared exports and repository boundaries pass.
-- Final schema 0066 full regression: **2,855/2,855 tests in 362 files**, zero
+- Historical schema 0066 full regression: **2,855/2,855 tests in 362 files**, zero
   skips, plus **57/57 tooling tests**. The earlier pre-index full run also passed.
-- Final migration/storage/workflow/restore focused suite: 29/29; backup/installer:
+- Historical schema-0066 migration/storage/workflow/restore suite: 29/29; backup/installer:
   3/3. Independent index migration integrity and query-plan review passed.
-- Complete pinned-image builds pass. Final API image `ac98a3f4ee54` and web image
+- Historical schema-0066 pinned-image builds passed. API image `ac98a3f4ee54` and web image
   `a426702e35d9` passed both backend installation/restart/replacement drills.
-  SQLite also passed backup/fresh-volume restore, Milestone 5 schema-0065 upgrade
+  SQLite also passed backup/fresh-volume restore, the then-Milestone-5 schema-0065 upgrade
   to 0066, older-image refusal and restoration with the predecessor image.
   These are unreleased qualification images, not a historical published release.
 - Both exact-final-script workload sizes independently approved: 100 durable
@@ -144,3 +148,29 @@ actionable findings. The shared contract passes **12/12 with no skips** against
 disposable PostgreSQL and SQLite, independently repeated by Claude. The new
 release-image rejection test, all four actual Compose renders, API typecheck,
 YAML parsing and whitespace checks pass. Updated PR CI is still required.
+
+## Integrated schema-0068 review
+
+Claude reviewed M6 after the M4/M5 fixes were merged: all five package
+typechecks and the standalone benchmark typecheck passed, with 30/30
+contract/crash-recovery tests, 90/90 integration tests and 6/6 tooling tests.
+All four template renders passed and a wrong image owner was rejected.
+Migration 0066 remains byte-identical; 0067–0068 append the governed-review
+and calibration guards. Historical benchmark observations remain unchanged.
+
+M5 adds a diagnostic-only persisted-clock warning and drains calibration
+discovery before queue shutdown. The PostgreSQL stored-report index assertion
+is now scoped to its own isolated schema; concurrent review fixtures must not
+change that assertion. Its focused five-test suite passed.
+
+Final follow-up with the M5 clock diagnostic passed all five package
+typechecks, 54/54 focused PostgreSQL/SQLite tests, 5/5 tooling tests and
+repository-boundary checks. Claude reported no unresolved actionable M6
+findings. Independent clock/readiness/discovery checks passed 13/13 and
+backup/installer tooling passed 4/4.
+
+The rebuilt API image `c22ccb7a1a51` and web image `a426702e35d9` passed both
+backend installation/restart/replacement drills. SQLite additionally passed
+backup/fresh-volume restore, synthetic predecessor schema-0065 upgrade to
+0068, older-image refusal and rollback by restoring the pre-upgrade backup.
+These local candidate images are unreleased; no existing installation was used.

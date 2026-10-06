@@ -14,9 +14,10 @@ record the schema head. Preserve them as historical observations, not fully
 reproducible evidence from the committed harness. They identified retention scans
 that delayed other commands on the serialized worker.
 `indexed-5000.json` uses the forward-only 0066 index migration; its runtime
-metadata identifies that exact final migration. `indexed-1000.json`
-records the smaller final-schema run. Both preserve all expected job, call and
-population counts without recorded operation errors.
+metadata identifies the schema head at measurement time (0066).
+`indexed-1000.json` records the smaller schema-0066 run. Neither is a
+measurement of 0067/0068. Both preserve all expected job, call and population
+counts without recorded operation errors.
 
 The 65-second wait respects the production freeze lag and is reported explicitly;
 it is not workload processing time. Main-thread event-loop samples reset after
@@ -46,8 +47,13 @@ pnpm exec tsx tools/bench/sqlite-workload.ts 1000 /tmp/rubrist-1000-new.json
 pnpm exec tsx tools/bench/sqlite-workload.ts 5000 /tmp/rubrist-5000-new.json
 ```
 
-These commands reproduce the indexed schema. For a new pre-index comparison,
-create a separate checkout at Milestone 5 commit
+At the current head these commands measure schema 0068. To reproduce the
+schema used for the indexed records, use a separate checkout of `bd707b5`
+(history through 0066), build it and run the commands with new output paths.
+Verify `runtime.lastMigration` is `0066_retention_indexes.sql`.
+
+For a new pre-index comparison, create a separate checkout at the former
+Milestone 5 head
 `9eb3a4c25fa4c861234ae01187c4784ed379999c` (migration history through 0065), copy
 the final `tools/bench/sqlite-workload.ts` into the same relative path there,
 install dependencies and build that checkout, then run the commands above with
