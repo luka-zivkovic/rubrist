@@ -559,3 +559,16 @@ were extracted unchanged for shared use. Independent AST comparison verified
 all prior declarations and unchanged PostgreSQL class/query bodies; 27 actual
 PostgreSQL/API/model regressions pass. This extraction introduces no lifecycle
 storage behavior.
+
+CURRENT qualification checkpoint: 550 tests pass across 67 SQLite and real
+PostgreSQL files, including analysis promotion, governed review, calibration,
+and lifecycle shared models. A separate injected TypeSafe transport test
+preserves the exact binary64 threshold and excludes private question text,
+probabilities, request IDs and credentials from retained evidence.
+
+CURRENT lifecycle storage: migration 0062 adds immutable lifecycle/event tables
+and plain SQL head, admissibility and execution-context views. Independent
+review approved both the storage and typed calibration tests (2/2); adjacent
+storage/typed coverage passes 24/24 and API typechecking passes. Lifecycle
+inserts remain staged until complete candidate bundles and all consumer guards
+are implemented together. This checkpoint does not enable governed evaluators.
