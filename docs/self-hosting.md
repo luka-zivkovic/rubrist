@@ -19,6 +19,11 @@
   instance when the current baseline changes.
 - **ASSUMPTION:** the default stack runs on one Coolify server, exposes only
   the nginx `web` service through TLS, and keeps the API and Postgres private.
+- **CURRENT:** always use the Compose templates from the release tag that
+  matches `RUBRIST_VERSION`, never from `main`. The templates on `main` check
+  the API's `/ready` route, which requires the first release that serves it;
+  no such release is published yet. The legacy `0.3.0` image has only
+  `/health`: install or update it with the templates from the `v0.3.0` tag.
 
 ## SQLite installation
 
@@ -57,13 +62,17 @@ Coolify Service.
 and a template that can be pasted into **Docker Compose Empty** today.
 
 1. Create a Docker Compose Empty Service in the target project/environment.
-2. Paste `deploy/coolify.yaml` and save it.
-3. Set `RUBRIST_VERSION` to an exact published release such as `0.3.0`. Do not
+2. Paste `deploy/coolify.yaml` from the release tag you will run, for example
+   `https://github.com/luka-zivkovic/rubrist/blob/vX.Y.Z/deploy/coolify.yaml`,
+   and save it. For the legacy `0.3.0` release, use the `v0.3.0` tag.
+3. Set `RUBRIST_VERSION` to that same exact published release `X.Y.Z`. Do not
    use `latest`, `main`, or another floating value.
 4. Confirm Coolify generated the `SERVICE_URL_WEB`, Postgres password, auth
    secret, and bootstrap token. Do not replace those values during an update.
 5. Deploy. The web component's health check traverses nginx to the API, while
-   the API health check verifies the process and Postgres gates startup.
+   the API health check gates startup. In the `v0.3.0` template it checks
+   `/health`; templates that check `/ready` also require storage and every
+   queue worker.
 6. Open the generated web URL and complete owner setup.
 
 Coolify copies a one-click template into each Service; later catalog changes
@@ -117,7 +126,9 @@ Every pre-launch release note must declare one of:
 3. If the baseline is unchanged, record the current Compose, exact image
    version, generated secrets, domain, and scheduled tasks.
 4. Change both Rubrist image references by changing the
-   single `RUBRIST_VERSION` value. Merge any release-specific Compose changes.
+   single `RUBRIST_VERSION` value. Merge any Compose changes from the target
+   release's tag, not from `main`; a template and image from different
+   releases are unsupported.
 5. Deploy and verify `/health`, sign-in, project reads, and a background job.
 
 Do not use Coolify's **Pull Latest Images & Restart** for Rubrist. An exact
@@ -147,12 +158,13 @@ Before publishing a release:
 ```sh
 docker build -f apps/api/Dockerfile -t rubrist-api:smoke .
 docker build -f apps/web/Dockerfile -t rubrist-web:smoke .
-RUBRIST_VERSION=0.3.0 docker compose -f deploy/coolify.yaml config >/dev/null
-RUBRIST_VERSION=0.3.0 \
+version=X.Y.Z # the candidate release; it must match package.json
+RUBRIST_VERSION="$version" docker compose -f deploy/coolify.yaml config >/dev/null
+RUBRIST_VERSION="$version" \
   RUBRIST_POSTGRES_PASSWORD=render-only \
   RUBRIST_AUTH_SECRET=render-only-secret-at-least-32-bytes \
   docker compose -f deploy/self-host/compose.yaml config >/dev/null
 ```
 
-Use the actual candidate version in the final command. The Compose render does
+Replace `X.Y.Z` with the actual candidate version. The Compose render does
 not prove GHCR visibility or database restore safety; verify both separately.

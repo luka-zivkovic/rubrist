@@ -1,5 +1,5 @@
 import { recordSqliteQueueReview } from './review-commands.js';
-import { AmbiguousProjectSkillError } from '../../repository/errors.js';
+import { AmbiguousProjectSkillError, CaseNotFoundError } from '../../repository/errors.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { JudgeRunSchema, VerdictRecordSchema, type EvaluatorExecutionContext } from '@rubrist/shared';
@@ -45,6 +45,8 @@ export function sqliteJudgeCommands(db:DatabaseSync) {
         if(existing)return verdict(existing);
       }
       let skillVersionId=input.skillVersionId??null;
+      // Same contract as PostgreSQL: an explicit evaluator must belong to the case's project.
+      if((input.source==='human'||input.source==='adjudicated')&&skillVersionId&&!one('SELECT 1 FROM skill_versions s JOIN cases c ON c.project_id=s.project_id WHERE s.project_id=? AND c.id=? AND s.id=?',input.projectId,input.caseId,skillVersionId))throw new CaseNotFoundError(input.caseId);
       if((input.source==='human'||input.source==='adjudicated')&&!skillVersionId) {
         const current=definitions.getCurrentSkill(input.projectId);
         const count=one('SELECT count(*) n FROM criterion_versions WHERE project_id=?',input.projectId)!.n;

@@ -1,8 +1,10 @@
 # Milestone 5: installation and operations
 
 **CURRENT (2026-10-06):** implementation, independent audits and complete local
-qualification pass. PR CI and Copilot review remain pending. This
-is not a published release or an authorization to deploy an existing installation.
+qualification pass. At the user's instruction, an independent Claude Code review
+replaced Copilot review for this PR; its corrections await the user's
+independent audit and PR CI. This is not a published release or an
+authorization to deploy an existing installation.
 
 The two fixed templates select PostgreSQL or SQLite for all state. SQLite has
 one API, a local persistent data volume and a separate backup volume. The
@@ -18,8 +20,8 @@ through degraded queues while logging failures. Liveness does not read storage
 or authentication. Production startup holds a process-lifetime OS SQLite lock,
 rejects database/lockfile symlinks (including dangling links), and requires a
 persistent mount when the template selects that check. Unexpected storage-worker
-exit terminates the API for Docker recovery. Shutdown marks readiness false and
-drains HTTP/jobs while stopping scheduled tasks.
+exit terminates the API for Docker recovery. Shutdown marks readiness false,
+drains HTTP and scheduled tasks, then stops the queue and storage.
 
 The maintenance CLI uses a pinned read snapshot and SQLite's native backup API,
 verifies integrity, foreign keys and exact running-image migration history,
@@ -46,6 +48,36 @@ its proposed negative backup rate. The implementation instead pins an explicit
 read snapshot and uses a supported positive page rate, verified on local Node
 24.15/SQLite 3.51.3 and container Node 24.21/SQLite 3.53.4. Container Node images
 are pinned by version and manifest digest.
+
+## Claude Code PR review
+
+CURRENT: Claude Code reviewed exactly `fda3f95..9eb3a4c` read-only and found no
+blocking issue. Corrections made in the working tree for the user's audit:
+
+- Shutdown is staged again: HTTP and poller drains (at most 15 of the 30
+  seconds) finish before the queue closes pg-boss's send path, and queue,
+  PostgreSQL pool and SQLite cleanup each still run when an earlier step
+  rejects or times out.
+- PostgreSQL and Coolify docs require templates from the release tag matching
+  `RUBRIST_VERSION`; the current `/ready` templates need the first release that
+  serves it, and `0.3.0` keeps its `v0.3.0` templates.
+- The documented Compose restore is the helper-container procedure the drill
+  runs. Coolify gained explicit backup/restore commands derived from the
+  selected container's mounts and environment; those are **not** drilled.
+- Coolify PostgreSQL has the same 45-second stop grace; the recovery-record
+  snippet removes the container copy.
+- The installer refuses a `--version` other than its own release; drills and
+  fixtures use the package version.
+- The unverified SQLite template checksum is resolved by the authorized
+  dependent Milestone 6 PR #198 release workflow, which checks and renders both
+  templates; it is not duplicated here.
+
+Correction evidence (Node 24.15.0, `maxWorkers=1`): the API typecheck passes;
+focused staged-shutdown, readiness, restore-boundary and route-manifest tests
+pass 16/16; operations tooling tests pass 4/4. The installer CLI was run from a
+checkout using the image's `/repo` relative path and copy list, not inside a
+built image. No build, container, Coolify, full-suite or benchmark run was
+repeated for these corrections, so the container results below predate them.
 
 ## Validation record
 

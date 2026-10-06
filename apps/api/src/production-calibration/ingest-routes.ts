@@ -58,6 +58,7 @@ export function productionRecordErrorStatus(code: ProductionRecordRepositoryErro
       return 422;
     case "empty_batch":
     case "invalid_record":
+    case "invalid_window":
     case "future_dated_record":
       return 400;
   }

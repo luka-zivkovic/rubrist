@@ -1,7 +1,18 @@
 # Milestone 2 validation record
 
-Status: **CURRENT — implemented and independently audited; PR CI/Copilot review pending**.
+Status: **CURRENT — implemented, independently audited and Claude-reviewed; final PR CI pending**.
 Date: 2026-10-05. Branch: `sqlite-milestone-2`, based on merged Milestone 1.
+
+CURRENT update 2026-10-06: the user replaced Copilot review with Claude Code
+through agent-bridge for PRs #194–#198. Claude reviewed `ceb6562` against merged
+Milestone 1 with no blocking findings; 63 SQLite tests and a cross-project
+probe passed. Its two optional suggestions were addressed: the architecture
+table now names the SQLite queue, and an HTTP isolation regression covers
+cross-project runs, exact receipt reads, freeze, comparison and evaluator
+version rejection without side effects. Claude re-reviewed the follow-up and
+independently passed all six workflow tests. API typecheck also passed. Earlier
+Copilot-gate statements below record historical checkpoints and are superseded
+by this update and `docs/pull-request-reviews.md`.
 
 ## Authority
 

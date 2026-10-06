@@ -35,7 +35,7 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
   }
   if(value instanceof ProductionRecordRepositoryError) {
     result.code=value.code;
-    result.details=Object.fromEntries(['line','bytes','maximum','records','decisionId','from','to'].flatMap(key=>{
+    result.details=Object.fromEntries(['line','bytes','maximum','records','decisionId','from','to','bound'].flatMap(key=>{
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
   }

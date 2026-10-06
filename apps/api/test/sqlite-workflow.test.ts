@@ -39,6 +39,36 @@ async function waitTerminal(app:ReturnType<typeof createApp>,headers:Record<stri
   return result;
 }
 describe('SQLite authenticated durable batch workflow',()=>{
+  it('denies another project access to runs, receipt bytes, comparisons and evaluator versions',async()=> {
+    const f=await fixture();
+    const body={purpose:'release_evidence',skillVersionId:f.versionId,items:[{clientItemId:'private-case',input:'Private question',output:'Private answer',metadata:{}}]};
+    const accepted=await f.app.request('/api/v1/judge/batch',{method:'POST',headers:f.headers,body:JSON.stringify(body)});
+    expect(accepted.status).toBe(202);
+    const {evalRunId}=await accepted.json() as {evalRunId:string};
+    const {provider,calls}=observedProvider();await f.runtime.queue.start();
+    const worker=await registerEvalRunWorkers(f.runtime.queue,f.runtime.repository,provider);cleanup.push(()=>worker.stop());
+    await waitTerminal(f.app,f.headers,evalRunId);
+    const receiptUrl=`/api/v1/eval-runs/${evalRunId}/assessment-receipt`;
+    const receiptResponse=await f.app.request(receiptUrl,{headers:f.headers});expect(receiptResponse.status).toBe(200);
+    const bytes=await receiptResponse.text(),receipt=JSON.parse(bytes) as {receiptId:string};
+    const created=await f.app.request('/api/projects',{method:'POST',headers:{cookie:f.cookie,'content-type':'application/json'},body:JSON.stringify({name:'Separate project'})});
+    expect(created.status).toBe(201);
+    const other=await created.json() as {projectId:string;apiKey:{key:string}};
+    const headers={authorization:`Bearer ${other.apiKey.key}`,'content-type':'application/json'};
+    for(const url of [`/api/v1/eval-runs/${evalRunId}`,receiptUrl,`/api/v1/assessment-receipts/${receipt.receiptId}`]) {
+      const denied=await f.app.request(url,{headers});expect(denied.status).toBe(404);
+    }
+    const compared=await f.app.request(`${receiptUrl}/comparisons`,{method:'POST',headers,body:JSON.stringify({consumerReceiptBase64:Buffer.from(bytes).toString('base64')})});
+    expect(compared.status).toBe(409);expect(await compared.json()).toMatchObject({reason:'missing_source'});
+    const submitted=await f.app.request('/api/v1/judge/batch',{method:'POST',headers,body:JSON.stringify(body)});
+    expect(submitted.status).toBe(400);
+    expect(await submitted.json()).toEqual({error:`Unknown skillVersionId for this project: ${f.versionId}`});
+    expect(await f.runtime.repository.listEvalRuns(other.projectId)).toEqual([]);
+    expect(await (await f.app.request(receiptUrl,{headers:f.headers})).text()).toBe(bytes);
+    expect(calls).toHaveBeenCalledTimes(1);
+    const db=openSqlite(f.path);cleanup.push(()=>db.close());
+    expect(db.prepare('SELECT count(*) AS n FROM assessment_receipt_comparisons').get()?.n).toBe(0);
+  });
   it('keeps regression-backed version history behind the authenticated M2 staging boundary',async()=> {
     const f=await fixture(),headers={cookie:f.cookie};
     const current=await (await f.app.request('/api/skills/current',{headers})).json() as any;

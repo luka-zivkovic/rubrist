@@ -54,11 +54,14 @@ one PR without asking again. Update an existing milestone PR rather than
 creating a duplicate. Target `main` when its prerequisites have merged;
 otherwise target the previous milestone branch and state the dependency.
 
-Inspect CI and Copilot review results on the PR. Address actionable findings
-and push fixes to that same PR. Copilot supplements the independent audit and
-tests; its review is not authority to change product scope or accept an ADR.
+CURRENT reviewer update, authorized 2026-10-06: use Claude Code through
+agent-bridge for the remaining SQLite milestone PRs. Stop polling or requesting
+Copilot reviews. Inspect CI and Claude's completed review, address actionable
+findings, and push fixes to the same PR for re-review. The peer review
+supplements the independent audit and tests; it is not authority to change
+product scope or accept an ADR.
 The user has authorized merging SQLite milestone PRs after CI passes and
-actionable independent/Copilot findings are resolved. Merge from the bottom
+actionable independent/Claude findings are resolved. Merge from the bottom
 of a stack, retarget the next PR, inspect its diff, and recheck it before
 merging. Continue through the authorized milestones; proposed ADR decisions
 still need explicit approval. Report PR URLs and pending checks. Deployment
