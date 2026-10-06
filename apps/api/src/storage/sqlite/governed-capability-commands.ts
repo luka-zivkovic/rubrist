@@ -36,7 +36,7 @@ export function initializeGovernedCapabilityValidator(db:DatabaseSync):void {
   const evaluated=evaluateGovernedCapability(read,String(projectId),String(criterionVersionId),String(subjectId));
   return evaluated.result===result&&canonicalGovernedJsonV1(evaluated.excluded)===String(excluded)&&canonicalGovernedJsonV1(evaluated.unknown)===String(unknown)&&canonicalGovernedJsonV1(evidence(String(criterionVersionId),evaluated))===String(storedEvidence);
  });
- registerSqliteValidator(db,'analysis_governed_separation_valid_v1',['governed_sealed_open','governed_sealed_task_access','governed_sealed_alignment_access','governed_sealed_adjudication_access'],(read,batchId,scope,subjectId)=>{
+ registerSqliteValidator(db,'analysis_governed_separation_valid_v1',['governed_sealed_open','governed_sealed_task_access','governed_sealed_alignment_access','governed_sealed_adjudication_access','governed_sealed_truth_access'],(read,batchId,scope,subjectId)=>{
   const batch=read.get('SELECT project_id,criterion_version_id FROM governed_review_batches WHERE id=?',batchId);if(!batch)return false;
   const check=read.get('SELECT result FROM governed_review_capability_checks WHERE batch_id=? AND check_scope=? AND subject_id=? AND evaluator_version_id IS NULL ORDER BY sequence DESC LIMIT 1',batchId,scope,subjectId);
   return check?.result==='eligible'&&evaluateGovernedCapability(read,String(batch.project_id),String(batch.criterion_version_id),String(subjectId)).result==='eligible';

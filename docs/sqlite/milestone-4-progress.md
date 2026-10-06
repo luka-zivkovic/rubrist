@@ -439,3 +439,12 @@ Scoped SQL guards require the latest eligible record and current facts within
 the serialized command. Failed capability evidence commits without the protected
 operation; typed domain errors reach the caller. Independent audit approved
 41/41 relevant tests; API typecheck passes. Sealed freeze remains staged.
+
+CURRENT 0055: sealed freeze now commits the exact protected item payloads,
+resolved labels, authoritative truth links, revision finalization and frozen
+batch event in one command. Every content-exposed reviewer/custodian/adjudication
+reader receives a live separation check. Successors must directly continue the
+protected sealed predecessor; development exposure and competing sealed children
+block the write. Independent audit approved 21/21 sealed/nonsealed freeze and
+truth-link tests; API typecheck passes. Tests include competing batches over one
+successor intake, exposure after intake, orphan rejection and atomic rollback.

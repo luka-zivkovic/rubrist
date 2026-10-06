@@ -1,3 +1,4 @@
+import { governedEvidenceCommand,checkGovernedSeparation,governedContentSubjects } from './governed-capability-commands.js';
 import type { DatabaseSync,SQLInputValue } from 'node:sqlite';
 import type { GovernedReviewActor } from '../../governed-review/repository.js';
 import { GovernedReviewStreamCommandSchema,type GovernedReviewStreamCommand } from '../../governed-review/contracts.js';
@@ -14,17 +15,20 @@ const digest=(kind:string,value:unknown)=>governedJsonTextDigest(kind,JSON.strin
 /** Internal nonsealed materialization; the repository projection is loaded later. */
 export function freezeNonsealedGovernedTruth(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,raw:GovernedReviewStreamCommand,clock=Date.now):string {
  initializeGovernedViewValidator(db);const command=GovernedReviewStreamCommandSchema.parse(raw);
- return sqliteCommand(db,c=>{
+ return governedEvidenceCommand(db,c=>{
   governedReviewAccess(db,actor,true);
   const batch=c.db.prepare('SELECT b.*,s.state,s.state_version FROM governed_review_batches b JOIN governed_review_batch_states s ON s.batch_id=b.id WHERE b.id=? AND b.project_id=?').get(batchId,actor.projectId);if(!batch)throw new GovernedReviewNotFoundError();
   const subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp),requestDigest=governedReviewRequestDigest({batchId,action:'freeze',command});
   const replay=c.db.prepare('SELECT request_digest,dataset_revision_id FROM governed_review_batch_events WHERE batch_id=? AND idempotency_key=?').get(batchId,command.idempotencyKey);
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return String(replay.dataset_revision_id);}
   if(batch.state_version!==command.expectedStateVersion)throw new GovernedReviewStreamConflictError({currentState:String(batch.state),currentVersion:Number(batch.state_version)});
-  if(batch.state!=='resolved'||!['analysis_authoring','iterative_development'].includes(String(batch.role_intent))||batch.source_population_kind!=='dataset_revision')throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze'});
+  if(batch.state!=='resolved'||!['dataset_revision','sealed_intake'].includes(String(batch.source_population_kind)))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze'});
+  const failed=checkGovernedSeparation(db,c,batchId,'truth_freeze',governedContentSubjects(c,batchId,true),command.idempotencyKey);if(failed)return failed;
   const members=c.db.prepare('SELECT bi.id batch_item_id,bi.draw_position,ri.*,res.resolution_kind,res.resolved_label,res.adjudication_id FROM governed_review_batch_items bi JOIN governed_review_items ri ON ri.id=bi.review_item_id JOIN governed_review_item_resolutions res ON res.batch_item_id=bi.id WHERE bi.batch_id=? ORDER BY bi.draw_position,bi.id').all(batchId);
   if(members.length!==Number(batch.fixed_budget)||members.some(m=>!m.resolved_label))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze_incomplete'});
   const revisionId=stableId('dsr',batchId,'governed-freeze');
+  const sealed=batch.role_intent==='sealed_validation';
+  const prior=sealed?c.db.prepare('SELECT r.* FROM governed_sealed_intake_populations p JOIN dataset_revisions r ON r.id=p.predecessor_revision_id WHERE p.id=?').get(batch.source_population_id!):undefined;
   const source=c.db.prepare('SELECT source_dataset_id FROM dataset_revisions WHERE id=?').get(batch.source_population_id!);
   const items=members.map(m=>{
    const batchItemId=String(m.batch_item_id),truthLinkId=stableId('gdtl',revisionId,batchItemId),payload=JSON.parse(String(m.review_payload_snapshot));assertBlindProjectionSafe(payload);
@@ -35,7 +39,7 @@ export function freezeNonsealedGovernedTruth(db:DatabaseSync,actor:GovernedRevie
   });
   const insert=(table:string,row:Record<string,SQLInputValue>)=>c.db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
   const digests=items.map(i=>i.itemDigest);
-  insert('dataset_revisions',{id:revisionId,project_id:actor.projectId,series_id:'governed-review:'+batchId,revision_number:1,source_dataset_id:source?.source_dataset_id??null,parent_revision_id:null,role:batch.role_intent!,source_kind:'collection_snapshot',identity_basis:'input-identity/v1',content_digest:datasetRevisionContentDigest(digests),revision_digest:datasetRevisionDigest({role:batch.role_intent as 'analysis_authoring'|'iterative_development',itemDigests:digests}),item_count:items.length,provenance_level:'governed_blind',created_by_user_id:actor.userId,idempotency_key:'governed-freeze:'+batchId,criterion_version_id:batch.criterion_version_id!,created_at:c.timestamp});
+  insert('dataset_revisions',{id:revisionId,project_id:actor.projectId,series_id:prior?.series_id??'governed-review:'+batchId,revision_number:prior?Number(prior.revision_number)+1:1,source_dataset_id:sealed?null:source?.source_dataset_id??null,parent_revision_id:prior?.id??null,role:batch.role_intent!,source_kind:sealed?'sealed_intake':'collection_snapshot',identity_basis:'input-identity/v1',content_digest:datasetRevisionContentDigest(digests),revision_digest:datasetRevisionDigest({role:batch.role_intent as 'analysis_authoring'|'iterative_development'|'sealed_validation',itemDigests:digests}),item_count:items.length,provenance_level:'governed_blind',created_by_user_id:actor.userId,idempotency_key:'governed-freeze:'+batchId,criterion_version_id:batch.criterion_version_id!,created_at:c.timestamp});
   for(const item of items){
    insert('dataset_revision_items',{id:item.id,revision_id:revisionId,project_id:actor.projectId,position:item.position,input_digest:item.inputDigest,item_digest:item.itemDigest,payload_snapshot:JSON.stringify(item.payload),reference_label:item.referenceLabel,reference_fail_step:null,reference_provenance:JSON.stringify(item.provenance),note:null,created_at:c.timestamp});
    const sourceKind=item.resolutionKind==='adjudicated'?'adjudication':'governed_labels',labelIds=sourceKind==='governed_labels'?item.labelIds:[];
