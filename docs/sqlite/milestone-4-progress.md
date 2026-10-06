@@ -605,3 +605,24 @@ qualification passes 107/107 across 12 files, including the real PostgreSQL
 numeric oracle. API typechecking passes. Remaining M4: activation, retirement,
 replacement and revocation transitions, measurement, inventory mapping and final
 qualification.
+
+CURRENT lifecycle transitions: migration 0064 enables exact activation,
+retirement, reciprocal replacement, and atomic calibration-revocation events.
+The activation finalizer requires the complete replacement bundle and exact
+complete calibration/regression evidence. Raw stored identifiers participate in
+event digests without schema trimming. Independent review approved 42 candidate
+and transition tests; an additional inventory audit prompted activation-specific
+regression immutability and direct-SQL coverage for authorization pins, suite
+eligibility, live ownership, and calibration attempt monotonicity. Those expanded
+suites pass 32/32; their independent follow-up is pending.
+
+CURRENT measurement: all report projections now read one SQLite transaction
+snapshot and cross the worker/HTTP boundary. Exact retained aggregate bytes are
+verified before parsing; current revocation changes admissibility and durations
+without changing historical artifacts. Independent review approved the slice;
+17 SQLite, real PostgreSQL, API and model tests pass. API typechecking passes.
+
+CURRENT remaining M4 work: final per-predicate inventory reconciliation and
+consolidated qualification. Inventory review has identified additional governed
+parity and direct-SQL coverage corrections; those are not yet qualified. M4 is
+still incomplete and has not been opened as a PR.

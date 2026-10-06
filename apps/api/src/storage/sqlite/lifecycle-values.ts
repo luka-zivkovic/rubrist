@@ -38,3 +38,14 @@ export function insertLifecycleEvent(c:SqliteCommandContext,event:Omit<Evaluator
  const row={id:event.id,contract_version:event.contractVersion,lifecycle_id:event.lifecycleId,project_id:event.projectId,criterion_id:event.criterionId,skill_version_id:event.skillVersionId,sequence:BigInt(event.sequence),transition:event.transition,state:event.state,predecessor_event_id:event.predecessorEventId,predecessor_event_digest:event.predecessorEventDigest,activation_bundle_id:event.activationBundleId,calibration_artifact_id:a?.calibrationArtifactId??null,calibration_artifact_digest:a?.calibrationArtifactDigest??null,calibration_evidence_digest:a?.calibrationEvidenceDigest??null,regression_run_id:a?.regressionRunId??null,regression_dataset_revision_id:a?.regressionDatasetRevisionId??null,replaced_skill_version_id:event.replacedSkillVersionId,actor_user_id:event.actorUserId,actor_subject_id:event.actorSubjectId,actor_role:event.actorRole,reason:event.reason,idempotency_key:event.idempotencyKey,request_digest:event.requestDigest,content_digest:evaluatorLifecycleEventContentDigest(event),occurred_at:c.timestamp};
  insertLifecycleRow(c,'evaluator_lifecycle_events',row);return rowToEvent({...row,sequence:event.sequence});
 }
+
+/** Validate the public shape, then retain the exact SQL identity strings for hashing.
+ * Shared input schemas trim identifiers; PostgreSQL hashes the stored columns.
+ */
+export function lifecycleRawEvent(row:Record<string,any>):EvaluatorLifecycleEvent {
+ const event=rowToEvent(row);
+ for(const [property,column] of [['id','id'],['lifecycleId','lifecycle_id'],['projectId','project_id'],['criterionId','criterion_id'],['skillVersionId','skill_version_id'],['predecessorEventId','predecessor_event_id'],['activationBundleId','activation_bundle_id'],['replacedSkillVersionId','replaced_skill_version_id'],['actorUserId','actor_user_id'],['actorSubjectId','actor_subject_id'],['idempotencyKey','idempotency_key'],['reason','reason']] as const){Object.assign(event,{[property]:row[column]===null?null:String(row[column])});}
+ if(event.activationEvidence)event.activationEvidence={calibrationArtifactId:String(row.calibration_artifact_id),calibrationArtifactDigest:String(row.calibration_artifact_digest),calibrationEvidenceDigest:String(row.calibration_evidence_digest),regressionRunId:String(row.regression_run_id),regressionDatasetRevisionId:String(row.regression_dataset_revision_id)};
+ return event;
+}
+export function lifecycleRawEventDigest(row:Record<string,any>){const {contentDigest:_digest,occurredAt:_time,...event}=lifecycleRawEvent(row);return evaluatorLifecycleDigest({basis:'evaluator-lifecycle-event/v1',...event});}

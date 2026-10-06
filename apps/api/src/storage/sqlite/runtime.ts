@@ -1,3 +1,4 @@
+import type {AnalysisMeasurementRepository} from '../../analysis-measurement/repository.js';
 import type {BinaryCalibrationControlRepository,BinaryCalibrationExecutionRepository} from '../../binary-calibration/repository.js';
 import type {AnalysisPromotionRepository} from '../../analysis-promotion/repository.js';
 import type { GovernedReviewRepository } from '../../governed-review/repository.js';
@@ -49,6 +50,7 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     finalizeRun:(...args)=>storage.command('calibrationFinalize',...args),
     markRecoveryRequired:(...args)=>storage.command('calibrationMarkRecovery',...args),
   };
+  const analysisMeasurement:AnalysisMeasurementRepository={getReport:(...args)=>storage.command('measurementReport',...args)};
   const analysisPromotions:AnalysisPromotionRepository={createPromotion:(...args)=>storage.command('promotionCreate',...args),listPromotions:(...args)=>storage.command('promotionList',...args),getPromotion:(...args)=>storage.command('promotionGet',...args),listCandidates:(...args)=>storage.command('promotionCandidates',...args),listSupports:(...args)=>storage.command('promotionSupports',...args)};
   const governedReview:GovernedReviewRepository={
     listInstructions:(...args)=>storage.command('governedInstructions',...args),
@@ -336,5 +338,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,evaluatorLifecycle,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,analysisMeasurement,evaluatorLifecycle,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

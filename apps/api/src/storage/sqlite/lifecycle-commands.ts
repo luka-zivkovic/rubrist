@@ -1,3 +1,4 @@
+import {transitionLifecycle} from './lifecycle-transition.js';
 import type {DatabaseSync} from 'node:sqlite';
 import {EvaluatorLifecycleRepositoryError,type EvaluatorLifecycleRepository} from '../../evaluator-lifecycle/repository.js';
 import {createLifecycleCandidate} from './lifecycle-candidate.js';
@@ -15,8 +16,8 @@ export function sqliteLifecycleCommands(db:DatabaseSync){
   lifecycleList:(...args:Args<'listLifecycles'>)=>listLifecycleProjections(db,args[0].projectId,args[1]),
   lifecycleBinding:resolution.getGovernedBinding,lifecycleResolution:resolution.recordResolution,
   lifecycleAuthorize:(...args:Args<'authorizeExecution'>)=>sqliteCommand(db,c=>authorizeLifecycleExecution(c,...args)),
-  lifecycleActivate:(..._args:Args<'activate'>):never=>{throw new EvaluatorLifecycleRepositoryError('unsupported','Lifecycle activation is not enabled yet');},
-  lifecycleRetire:(..._args:Args<'retire'>):never=>{throw new EvaluatorLifecycleRepositoryError('unsupported','Lifecycle retirement is not enabled yet');}
+  lifecycleActivate:(...args:Args<'activate'>)=>transitionLifecycle(db,...args,'activated'),
+  lifecycleRetire:(...args:Args<'retire'>)=>transitionLifecycle(db,...args,'retired')
  };
  for(const name of Object.keys(commands) as Array<keyof typeof commands>){const command=commands[name] as (...args:any[])=>unknown;Object.assign(commands,{[name]:(...args:any[])=>{try{return command(...args);}catch(error){
   if(error instanceof EvaluatorLifecycleRepositoryError)throw error;

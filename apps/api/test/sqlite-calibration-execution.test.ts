@@ -63,3 +63,10 @@ it('serializes authorization of competing evaluators on the same sealed revision
  expect(f.db.prepare('SELECT * FROM binary_calibration_attempts WHERE run_id=?').all(competitor.runId)).toEqual([]);
  expect(f.db.prepare("SELECT * FROM governed_review_capability_checks WHERE check_scope='final_validation' AND evaluator_version_id=?").all(other.id)).toEqual([]);
 });
+it.each(['identity','calls','state','upstream'])('rejects direct calibration attempt %s violations before accounting',async field=>{
+ const f=await calibrationFixture(),run=createCalibrationRun(f.db,f.actor,f.calibrationInput),claim=sqliteCalibrationClaimCommands(f.db).claimRun(run.runId,'worker',10000)!,execution=sqliteCalibrationExecutionCommands(f.db);
+ execution.authorizeRun(claim);const work=execution.getNextAttempt(claim)!;execution.recordProviderCallStarted(claim,work.attemptId);
+ const set={identity:"dataset_revision_item_digest='sha256:'||printf('%064d',0)",calls:'physical_provider_calls=0',state:"attempt_state='not_started'",upstream:"upstream_provider='unexpected'"}[field]!;
+ expect(()=>sqliteCommand(f.db,c=>c.db.prepare(`UPDATE binary_calibration_attempts SET ${set} WHERE id=?`).run(work.attemptId))).toThrow(field==='identity'?/immutable calibration attempt identity/:field==='upstream'?/upstream provider requires OpenRouter/:/state and calls are monotonic/);
+ expect(f.db.prepare('SELECT accounting_state,attempt_state,physical_provider_calls,upstream_provider FROM binary_calibration_attempts WHERE id=?').get(work.attemptId)).toEqual({accounting_state:'pending',attempt_state:'started',physical_provider_calls:1,upstream_provider:null});
+});
