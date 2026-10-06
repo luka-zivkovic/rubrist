@@ -24,22 +24,38 @@ export function initializeGovernedViewValidator(db:DatabaseSync):void {
  });initialized.add(db);
 }
 function insert(c:SqliteCommandContext,table:'governed_review_batch_events'|'governed_review_task_events',row:Record<string,SQLInputValue>){c.db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));}
-/** Initial stream operations; later barriers/labels are intentionally guarded. */
-export function openNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,raw:GovernedReviewStreamCommand,clock=Date.now):string {
+/** Nonsealed transitions; alignment, adjudication and freeze remain staged. */
+export function transitionNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,action:'open'|'close_labeling'|'finalize',raw:GovernedReviewStreamCommand,clock=Date.now):string {
+ initializeGovernedViewValidator(db);
  const command=GovernedReviewStreamCommandSchema.parse(raw);
  return sqliteCommand(db,c=>{
   governedReviewAccess(db,actor,true);const batch=c.db.prepare('SELECT * FROM governed_review_batch_states WHERE batch_id=? AND project_id=?').get(batchId,actor.projectId);if(!batch)throw new GovernedReviewNotFoundError();
-  const subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp),requestDigest=governedReviewRequestDigest({batchId,action:'open',command});
+  const subjectId=governedReviewSubject(db,actor.projectId,actor.userId,c.timestamp),requestDigest=governedReviewRequestDigest({batchId,action,command});
   const existing=c.db.prepare('SELECT id,request_digest FROM governed_review_batch_events WHERE batch_id=? AND idempotency_key=?').get(batchId,command.idempotencyKey);
   if(existing){if(existing.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return String(existing.id);}
   if(Number(batch.state_version)!==command.expectedStateVersion)throw new GovernedReviewStreamConflictError({currentState:String(batch.state),currentVersion:Number(batch.state_version)});
-  if(batch.state!=='draft')throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'open'});
+  const expected=action==='open'?'draft':action==='close_labeling'?'open':'labeling_closed';
+  if(batch.state!==expected)throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:action});
+  let eventKind=action==='open'?'open':'labeling_closed',details:unknown={};
+  if(action==='close_labeling'){
+   const stop=c.db.prepare('SELECT governed_timestamp_v1(sqlite_command_time())>=governed_timestamp_v1(stop_at) AS at_stop FROM governed_review_batches WHERE id=?').get(batchId)!;
+   const atStop=stop.at_stop===1;
+   const tasks=c.db.prepare('SELECT task_id,state FROM governed_review_task_states WHERE batch_id=? ORDER BY task_id').all(batchId);
+   if(!atStop&&tasks.some(t=>!['submitted','deferred'].includes(String(t.state))))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:action});
+   details={activeLabelIds:c.db.prepare('SELECT label_id FROM governed_active_review_labels WHERE batch_id=? ORDER BY label_id').all(batchId).map(r=>String(r.label_id)),deferredTaskIds:tasks.filter(t=>t.state==='deferred').map(t=>String(t.task_id)),expiredTaskIds:atStop?tasks.filter(t=>['assigned','viewed','withdrawn'].includes(String(t.state))).map(t=>String(t.task_id)):[],closedAtFixedStop:atStop};
+  } else if(action==='finalize'){
+   const items=c.db.prepare('SELECT i.review_item_id,r.resolution_kind FROM governed_review_batch_items i JOIN governed_review_item_resolutions r ON r.batch_item_id=i.id WHERE i.batch_id=? ORDER BY i.draw_position,i.id').all(batchId);
+   if(items.every(i=>['single_rater','unanimous','adjudicated'].includes(String(i.resolution_kind)))){eventKind='resolved';details={resolvedReviewItemIds:items.map(i=>String(i.review_item_id))};}
+   else if(items.some(i=>['coverage_gap','unresolvable'].includes(String(i.resolution_kind)))){eventKind='incomplete';details={gapReviewItemIds:items.filter(i=>['coverage_gap','unresolvable'].includes(String(i.resolution_kind))).map(i=>String(i.review_item_id))};}
+   else throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'finalize_requires_adjudication'});
+  }
   const version=Number(batch.state_version)+1,previous=c.db.prepare('SELECT event_digest FROM governed_review_batch_events WHERE batch_id=? ORDER BY state_version DESC LIMIT 1').get(batchId)?.event_digest??null;
-  const basis={actorRoleAtReview:actor.projectRole,actorSubjectId:subjectId,batchId,datasetRevisionId:null,details:{},eventKind:'open',previousEventDigest:previous,representativeIneligibleReasons:[],representativeOfPopulationId:null,sequence:version,stateVersion:version};
+  const basis={actorRoleAtReview:actor.projectRole,actorSubjectId:subjectId,batchId,datasetRevisionId:null,details,eventKind,previousEventDigest:previous,representativeIneligibleReasons:[],representativeOfPopulationId:null,sequence:version,stateVersion:version};
   const id=stableId('grbe',batchId,command.idempotencyKey);
-  insert(c,'governed_review_batch_events',{id,project_id:actor.projectId,batch_id:batchId,sequence:version,state_version:version,expected_previous_state_version:command.expectedStateVersion,event_kind:'open',actor_subject_id:subjectId,actor_role_at_review:actor.projectRole,representative_ineligible_reasons:'[]',details:'{}',previous_event_digest:previous,event_digest:digest('governed-review-batch-event/v1',basis),idempotency_key:command.idempotencyKey,request_digest:requestDigest,occurred_at:c.timestamp});return id;
+  insert(c,'governed_review_batch_events',{id,project_id:actor.projectId,batch_id:batchId,sequence:version,state_version:version,expected_previous_state_version:command.expectedStateVersion,event_kind:eventKind,actor_subject_id:subjectId,actor_role_at_review:actor.projectRole,representative_ineligible_reasons:'[]',details:JSON.stringify(details),previous_event_digest:previous,event_digest:digest('governed-review-batch-event/v1',basis),idempotency_key:command.idempotencyKey,request_digest:requestDigest,occurred_at:c.timestamp});return id;
  },clock);
 }
+export function openNonsealedGovernedBatch(db:DatabaseSync,actor:GovernedReviewActor,batchId:string,raw:GovernedReviewStreamCommand,clock=Date.now):string {return transitionNonsealedGovernedBatch(db,actor,batchId,'open',raw,clock);}
 export function getOrCreateNonsealedBlindView(db:DatabaseSync,actor:GovernedReviewActor,taskId:string,clock=Date.now):GovernedBlindTaskViewArtifact {
  initializeGovernedViewValidator(db);
  return sqliteCommand(db,c=>{

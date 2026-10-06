@@ -338,3 +338,19 @@ PostgreSQL regression run passed 25 tests, and API typechecking passes. Tests
 cover stale versions, forged bytes with recomputed hashes, pinned reviewer
 identity, abandonment, revoked membership, plain SQLite backup and project
 erasure. Label, barrier, sealed and public repository paths remain unfinished.
+
+## Independent labels and the labeling barrier
+
+CURRENT: migrations 0045–0046 bind each immutable label to its same-command
+submission event, preserve withdrawn-attempt lineage, and expose current active
+labels through a SQL projection. Labeling closure atomically expires pending
+tasks at the fixed stop while retaining deferred tasks. Resolution distinguishes
+complete single-rater/unanimous truth, coverage gaps and unresolved conflicts.
+
+CURRENT: independent audit approved 24 focused label, view and barrier tests
+after two corrections: dynamic validator registration on fresh connections, and
+using the database's full-precision stop comparison in command preflight.
+Tests include two-connection continuation, orphan rejection, failed-event and
+failed-closure rollback, replacement/replay, microsecond boundaries and project
+erasure. API typechecking passes. Alignment, adjudication, sealed paths, truth
+freeze and public repository wiring remain unfinished.

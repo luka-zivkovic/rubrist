@@ -19,8 +19,8 @@ export function parseJson(value: unknown): unknown {
 }
 
 export function taskEventContent(input: {
-  actorRoleAtReview: string;
-  actorSubjectId: string;
+  actorRoleAtReview: string | null;
+  actorSubjectId: string | null;
   eventKind: string;
   taskId: string;
   sequence: number;
