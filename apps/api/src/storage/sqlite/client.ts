@@ -1,3 +1,4 @@
+import {BinaryCalibrationRepositoryError} from '../../binary-calibration/repository.js';
 import {AnalysisPromotionRepositoryError} from '../../analysis-promotion/repository.js';
 import * as governedErrors from '../../governed-review/errors.js';
 import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
@@ -30,6 +31,7 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          if(message.error.name==='BinaryCalibrationRepositoryError')Object.setPrototypeOf(error,BinaryCalibrationRepositoryError.prototype);
           if(message.error.name==='AnalysisPromotionRepositoryError')Object.setPrototypeOf(error,AnalysisPromotionRepositoryError.prototype);
           if(message.error.name==='AnalysisStudyRepositoryError') Object.setPrototypeOf(error,AnalysisStudyRepositoryError.prototype);
           if(message.error.name==='AnalysisPopulationRepositoryError') Object.setPrototypeOf(error,AnalysisPopulationRepositoryError.prototype);

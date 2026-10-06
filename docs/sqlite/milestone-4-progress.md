@@ -543,3 +543,19 @@ Independent review approved the bounded mint slice after correcting those two
 metadata/reference checks. Five focused mint tests cover backup/restart, unknown
 outcomes, complete rollback, current revocation and forged bytes with recomputed
 digests. Runtime/public wiring and governed evaluator lifecycle remain pending.
+
+CURRENT native calibration runtime: all seven control and thirteen execution
+repository methods now use serialized SQLite RPC. The HTTP app receives only
+the control facade; startup registers the existing calibration worker with its
+separate execution facade, provider executor and binding recheck. Typed errors
+retain their class and public code across the worker boundary. Independent
+runtime tests pass 3/3 with mocked provider calls, concurrent replay, restart,
+owner/member HTTP access, stored artifact bytes and recheck backoff. This does
+not yet enable analysis-promoted evaluator versions: lifecycle and all consumer
+authorization guards must land together before removing their staging guards.
+
+CURRENT lifecycle preparation: twelve pure functions and their cursor interface
+were extracted unchanged for shared use. Independent AST comparison verified
+all prior declarations and unchanged PostgreSQL class/query bodies; 27 actual
+PostgreSQL/API/model regressions pass. This extraction introduces no lifecycle
+storage behavior.

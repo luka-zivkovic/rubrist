@@ -1,3 +1,4 @@
+import type {BinaryCalibrationControlRepository,BinaryCalibrationExecutionRepository} from '../../binary-calibration/repository.js';
 import type {AnalysisPromotionRepository} from '../../analysis-promotion/repository.js';
 import type { GovernedReviewRepository } from '../../governed-review/repository.js';
 import type { AnalysisStudyRepository } from '../../analysis-study/repository.js';
@@ -18,6 +19,30 @@ export { SqliteFeatureUnavailableError } from './feature-error.js';
 export async function createSqliteRuntime(path: string, judgeProviderFactory:JudgeProviderFactory=createStrictJudgeProvider, options:{seedStarterEvaluators?:boolean}={}) {
   const storage = new SqliteStorage(path,options);
   try { await storage.ready; } catch(error) { await storage.close(); throw error; }
+  const binaryCalibration:BinaryCalibrationControlRepository={
+    createRun:(...args)=>storage.command('calibrationCreate',...args),
+    listRuns:(...args)=>storage.command('calibrationList',...args),
+    getRun:(...args)=>storage.command('calibrationGet',...args),
+    getArtifact:(...args)=>storage.command('calibrationGetArtifact',...args),
+    getArtifactStatus:(...args)=>storage.command('calibrationGetArtifactStatus',...args),
+    getGovernedBinding:(...args)=>storage.command('calibrationGetGovernedBinding',...args),
+    recordResolution:(...args)=>storage.command('calibrationRecordResolution',...args),
+  };
+  const binaryCalibrationExecution:BinaryCalibrationExecutionRepository={
+    listRunnableRunIds:(...args)=>storage.command('calibrationListRunnable',...args),
+    claimRun:(...args)=>storage.command('calibrationClaim',...args),
+    heartbeatClaim:(...args)=>storage.command('calibrationHeartbeat',...args),
+    getRecheckTarget:(...args)=>storage.command('calibrationRecheckTarget',...args),
+    recordRecheck:(...args)=>storage.command('calibrationRecordRecheck',...args),
+    rejectBeforeAuthorization:(...args)=>storage.command('calibrationReject',...args),
+    authorizeRun:(...args)=>storage.command('calibrationAuthorize',...args),
+    recoverStartedAttempts:(...args)=>storage.command('calibrationRecover',...args),
+    getNextAttempt:(...args)=>storage.command('calibrationNextAttempt',...args),
+    recordProviderCallStarted:(...args)=>storage.command('calibrationProviderStarted',...args),
+    completeAttempt:(...args)=>storage.command('calibrationCompleteAttempt',...args),
+    finalizeRun:(...args)=>storage.command('calibrationFinalize',...args),
+    markRecoveryRequired:(...args)=>storage.command('calibrationMarkRecovery',...args),
+  };
   const analysisPromotions:AnalysisPromotionRepository={createPromotion:(...args)=>storage.command('promotionCreate',...args),listPromotions:(...args)=>storage.command('promotionList',...args),getPromotion:(...args)=>storage.command('promotionGet',...args),listCandidates:(...args)=>storage.command('promotionCandidates',...args),listSupports:(...args)=>storage.command('promotionSupports',...args)};
   const governedReview:GovernedReviewRepository={
     listInstructions:(...args)=>storage.command('governedInstructions',...args),
@@ -305,5 +330,5 @@ export async function createSqliteRuntime(path: string, judgeProviderFactory:Jud
     deleteJudgeProviderKey: (...args) => storage.command('deleteJudgeProviderKey',...args)
   } satisfies Omit<RubristRepository,'createSkillVersion'|'runRegressionGateForVersion'|'failRegressionGateForVersion'|'getRegressionRunForVersion'|'listRegressionRunsForVersions'>;
   const repository:RubristRepository={...methods,...sqliteRegressionService(storage,methods,judgeProviderFactory)};
-  return {storage,accounts,repository,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
+  return {storage,accounts,repository,binaryCalibration,binaryCalibrationExecution,analysisPromotions,governedReview,analysisPopulations,analysisStudies,productionRecords,queue,capabilityChecks,resolution,auth:storage.auth(),close:async () => { await queue.stop(); await storage.close(); }};
 }

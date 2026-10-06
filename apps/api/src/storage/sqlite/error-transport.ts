@@ -1,3 +1,4 @@
+import {BinaryCalibrationRepositoryError} from '../../binary-calibration/repository.js';
 import {AnalysisPromotionRepositoryError} from '../../analysis-promotion/repository.js';
 import { GovernedReviewDomainError } from '../../governed-review/errors.js';
 import { AnalysisStudyRepositoryError } from '../../analysis-study/repository.js';
@@ -41,6 +42,7 @@ export function serializeSqliteError(error: unknown): Record<string, unknown> {
       const item=value.details[key];return item===null||['string','number','boolean'].includes(typeof item)?[[key,item]]:[];
     }));
   }
+  if(value instanceof BinaryCalibrationRepositoryError)result.code=value.code;
   if(value instanceof AnalysisPromotionRepositoryError){result.code=value.code;result.details={};}
   if(value instanceof AnalysisStudyRepositoryError){
     result.code=value.code;

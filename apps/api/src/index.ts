@@ -44,9 +44,9 @@ const auth = sqlite?.auth ?? (pool ? createAuth(pool) : undefined);
 // Demo mode seeds verdicts so κ / disagreement feeds / calibration render
 // without a worker or auth. Real mode (PgRepository) uses live data.
 const repository = sqlite?.repository ?? (pool ? new PgRepository(pool) : new DemoRepository(undefined, { seedVerdicts: true }));
-const binaryCalibrationRepository = pool
-  ? new PgBinaryCalibrationRepository(pool)
-  : null;
+const pgBinaryCalibrationRepository = pool ? new PgBinaryCalibrationRepository(pool) : null;
+const binaryCalibrationRepository = sqlite?.binaryCalibration ?? pgBinaryCalibrationRepository;
+const binaryCalibrationExecutionRepository = sqlite?.binaryCalibrationExecution ?? pgBinaryCalibrationRepository;
 const analysisStudyRepository = sqlite?.analysisStudies ?? (pool ? new PgAnalysisStudyRepository(pool) : null);
 const analysisPromotionRepository = sqlite?.analysisPromotions ?? (pool ? new PgAnalysisPromotionRepository(pool) : null);
 const evaluatorLifecycleRepository = pool ? new PgEvaluatorLifecycleRepository(pool) : null;
@@ -91,10 +91,10 @@ if (queue) {
   await registerLangfuseImportWorker(queue, repository);
   await registerIronsideImportWorker(queue, repository);
   pollers.push(await registerFeedbackSyncWorker(queue, repository));
-  if (binaryCalibrationRepository) {
+  if (binaryCalibrationExecutionRepository) {
     const binaryCalibrationOrchestrator = await registerBinaryCalibrationWorker(
       queue,
-      binaryCalibrationRepository,
+      binaryCalibrationExecutionRepository,
       createBinaryCalibrationProviderExecutor({
         resolveProjectCredential: (projectId, provider) =>
           repository.getJudgeProviderCredential(projectId, provider)
@@ -133,6 +133,7 @@ const server = serve({
     analysisPopulationRepository:sqlite?.analysisPopulations,
     analysisStudyRepository,
     analysisPromotionRepository,
+    binaryCalibrationRepository,
     evaluatorLifecycleRepository,
     analysisMeasurementRepository,
     productionDecisionRecordRepository
