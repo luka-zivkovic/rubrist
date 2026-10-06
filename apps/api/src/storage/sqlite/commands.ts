@@ -1,3 +1,4 @@
+import {sqlitePromotionCommands} from './promotion-commands.js';
 import { sqliteGovernedCommands } from './governed-commands.js';
 import { sqliteStudyCommands } from './study-commands.js';
 import { sqliteStudyReadCommands } from './study-read-commands.js';
@@ -224,7 +225,7 @@ export function sqliteCommands(db: DatabaseSync, options:{seedStarterEvaluators?
     }); },
     recordCaseView(input: Args<'recordCaseView'>[0]) { audit(input.projectId,input.userId,'case.view','case',input.caseId,{traceId:input.traceId}); }
   };
-  return {...commands, ...sqliteGovernedCommands(db), ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
+  return {...commands, ...sqlitePromotionCommands(db), ...sqliteGovernedCommands(db), ...sqliteStudyCommands(db), ...sqliteStudyReadCommands(db), ...sqliteStudyItemCommands(db), ...sqliteStudyTaxonomyCommands(db), ...sqliteStudyAssignmentCommands(db), ...sqlitePopulationCommands(db), ...sqliteProductionCommands(db), ...sqliteRegressionCommands(db), ...sqliteSkillCommands(db), ...sqliteHistoricalGateCommands(db), ...sqliteProjectCommands(db), ...sqliteFeedbackCommands(db), ...sqliteImportJobCommands(db),
     ...sqliteIntegrationCommands(db),
     ...sqliteTraceTestCommands(db),
     ...sqliteGoldenCommands(db), ...sqliteConvergenceCommands(db), ...sqliteEvidenceCommands(db), ...sqliteReviewCommands(db), ...sqliteResolutionCommands(db), ...sqliteQueueCommands(db), ...sqliteDefinitionCommands(db), ...sqliteTraceCommands(db), ...sqliteDatasetCommands(db), ...sqliteSuiteCommands(db), ...sqliteDatasetRevisionCommands(db), ...sqliteEvalCommands(db), ...sqliteJudgeCommands(db)};

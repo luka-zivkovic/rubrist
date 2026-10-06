@@ -48,7 +48,7 @@ const binaryCalibrationRepository = pool
   ? new PgBinaryCalibrationRepository(pool)
   : null;
 const analysisStudyRepository = sqlite?.analysisStudies ?? (pool ? new PgAnalysisStudyRepository(pool) : null);
-const analysisPromotionRepository = pool ? new PgAnalysisPromotionRepository(pool) : null;
+const analysisPromotionRepository = sqlite?.analysisPromotions ?? (pool ? new PgAnalysisPromotionRepository(pool) : null);
 const evaluatorLifecycleRepository = pool ? new PgEvaluatorLifecycleRepository(pool) : null;
 const analysisMeasurementRepository = pool ? new PgAnalysisMeasurementRepository(pool) : null;
 const productionDecisionRecordRepository=sqlite?.productionRecords ?? (pool?new PgProductionDecisionRecordRepository(pool):null);

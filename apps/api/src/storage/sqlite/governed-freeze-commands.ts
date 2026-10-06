@@ -22,14 +22,14 @@ export function freezeNonsealedGovernedTruth(db:DatabaseSync,actor:GovernedRevie
   const replay=c.db.prepare('SELECT request_digest,dataset_revision_id FROM governed_review_batch_events WHERE batch_id=? AND idempotency_key=?').get(batchId,command.idempotencyKey);
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return String(replay.dataset_revision_id);}
   if(batch.state_version!==command.expectedStateVersion)throw new GovernedReviewStreamConflictError({currentState:String(batch.state),currentVersion:Number(batch.state_version)});
-  if(batch.state!=='resolved'||!['dataset_revision','sealed_intake'].includes(String(batch.source_population_kind)))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze'});
+  if(batch.state!=='resolved'||!['dataset_revision','sealed_intake','analysis_promotion_handoff'].includes(String(batch.source_population_kind)))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze'});
   const failed=checkGovernedSeparation(db,c,batchId,'truth_freeze',governedContentSubjects(c,batchId,true),command.idempotencyKey);if(failed)return failed;
   const members=c.db.prepare('SELECT bi.id batch_item_id,bi.draw_position,ri.*,res.resolution_kind,res.resolved_label,res.adjudication_id FROM governed_review_batch_items bi JOIN governed_review_items ri ON ri.id=bi.review_item_id JOIN governed_review_item_resolutions res ON res.batch_item_id=bi.id WHERE bi.batch_id=? ORDER BY bi.draw_position,bi.id').all(batchId);
   if(members.length!==Number(batch.fixed_budget)||members.some(m=>!m.resolved_label))throw new GovernedReviewTransitionConflictError({currentState:String(batch.state),attemptedAction:'freeze_incomplete'});
   const revisionId=stableId('dsr',batchId,'governed-freeze');
   const sealed=batch.role_intent==='sealed_validation';
   const prior=sealed?c.db.prepare('SELECT r.* FROM governed_sealed_intake_populations p JOIN dataset_revisions r ON r.id=p.predecessor_revision_id WHERE p.id=?').get(batch.source_population_id!):undefined;
-  const source=c.db.prepare('SELECT source_dataset_id FROM dataset_revisions WHERE id=?').get(batch.source_population_id!);
+  const source=c.db.prepare('SELECT source_dataset_id FROM dataset_revisions WHERE id=?').get(batch.source_population_kind==='analysis_promotion_handoff'?batch.population_id!:batch.source_population_id!);
   const items=members.map(m=>{
    const batchItemId=String(m.batch_item_id),truthLinkId=stableId('gdtl',revisionId,batchItemId),payload=JSON.parse(String(m.review_payload_snapshot));assertBlindProjectionSafe(payload);
    const provenance={kind:'dataset_claim',sourceId:truthLinkId,verdictIds:[],actorUserIds:[],basis:`Non-authoritative receipt-v1 compatibility projection. Authoritative governed provenance is governed_dataset_truth_links ${truthLinkId}.`};

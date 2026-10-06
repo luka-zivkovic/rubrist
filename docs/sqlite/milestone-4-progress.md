@@ -464,3 +464,32 @@ public fields and class identity across RPC. Independent audit found and
 verified a corrected sealed-successor error mapping; nine runtime/read/transport
 tests pass, including concurrent replay, restart byte identity, HTTP conflicts,
 and exposed-predecessor `sealed_overlap`. API typecheck passes.
+
+CURRENT consolidated governed qualification: 462/462 tests across 57 files pass,
+including the full then-current SQLite suite and real PostgreSQL governed-review
+coverage. This qualification predates the promotion slice below.
+
+CURRENT 0056–0057: immutable analysis-code promotion now binds the exact closed
+study, current taxonomy head, closure-active support/assignment evidence, one
+new criterion definition, and complete development exposures in one serialized
+command. A mandatory deferred finalization claim checks canonical support,
+request, handoff and content digests. Trailing writes after finalization cannot
+change the bundle. Native criteria cannot use the promotion namespace; analysis
+promotion activities cannot evade their evidence namespace. Promoted evaluator
+creation remains staged pending lifecycle completeness.
+
+The governed handoff binds the full original analysis revision, including items
+outside the promotion support set. It requires a promotion committed in an
+earlier command, preserves blind projections, and completes the existing
+review-to-truth workflow. All five promotion repository methods cross the
+worker and are injected at startup; typed errors survive RPC. Claude Code's
+ADR consultation found no additional founder decision needed. Independent audit
+approved the implementation after an exposure-reference bypass was corrected.
+47/47 focused tests and API typecheck pass; four post-finalizer tests additionally
+assert the specific raw guard failures. Adjacent draft/freeze/transport coverage
+also passed independent review. Shared promotion mapping/cursor helpers retain
+PostgreSQL behavior, verified by 18 real-PG/API/model tests.
+
+TARGET remaining M4: measurement, calibration/private ledger/admissibility,
+evaluator lifecycle and execution authorization, complete invariant-inventory
+mapping, and final cross-backend qualification. M4 is not complete yet.
