@@ -1,4 +1,5 @@
 import { createReadiness } from "./storage/readiness.js";
+import { stagedShutdown } from "./shutdown.js";
 import { serve } from "@hono/node-server";
 import { runMigrations } from "@rubrist/db";
 import { createQueue } from "@rubrist/queue";
@@ -163,17 +164,22 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   }, 30_000);
   forceExit.unref();
 
-  try {
-    await Promise.all([closeServer(), queue?.stop(), ...pollers.map((poller) => poller.stop())]);
-    await pool?.end();
-    await sqlite?.close();
-    clearTimeout(forceExit);
-    process.exit(0);
-  } catch (error) {
-    clearTimeout(forceExit);
-    console.error("Failed to shut down Rubrist API cleanly", error);
-    process.exit(1);
-  }
+  // Requests and poller ticks may still enqueue, so the queue (whose stop
+  // closes pg-boss's pool) stops only after them. Stage one keeps at most 15s
+  // of the 30s forced-exit budget; the container grace period is 45s.
+  const clean = await stagedShutdown({
+    closeServer,
+    pollers,
+    stopQueue: queue ? () => queue.stop() : undefined,
+    closeStorage: [
+      ...(pool ? [() => pool.end()] : []),
+      ...(sqlite ? [() => sqlite.close()] : [])
+    ],
+    drainMs: 15_000
+  });
+  clearTimeout(forceExit);
+  if (!clean) console.error("Failed to shut down Rubrist API cleanly");
+  process.exit(clean ? 0 : 1);
 }
 
 async function closeServer(): Promise<void> {

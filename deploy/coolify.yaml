@@ -30,6 +30,7 @@ services:
       TRUSTED_ORIGINS: ${SERVICE_URL_WEB}
       RUBRIST_TRUST_PROXY: "1"
       RUBRIST_BOOTSTRAP_TOKEN: ${SERVICE_PASSWORD_64_BOOTSTRAP}
+    stop_grace_period: 45s
     depends_on:
       postgres:
         condition: service_healthy

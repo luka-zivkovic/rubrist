@@ -7,7 +7,9 @@ import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {migrateSqlite,openSqlite} from '../packages/db/dist/sqlite.js';
 import {createBackup,restoreBackup,createRecoveryRecord,writeRecoveryEnv} from './storage/sqlite-backup.mjs';
-import {prepareInstallation} from './self-host/install.mjs';
+import {packageVersion,prepareInstallation} from './self-host/install.mjs';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
 const secret='synthetic-operations-secret-never-use-in-deployment';
 test('online WAL snapshot restores exact bytes without overwriting files; verifies secret, checksum and schema',async()=>{
@@ -49,18 +51,21 @@ test('online WAL snapshot restores exact bytes without overwriting files; verifi
 });
 test('installer provisions either fixed backend with private secrets and refuses existing directories',()=>{
   const root=mkdtempSync(join(tmpdir(),'rubrist-installer-'));
+  const version=packageVersion();
   try{
     for(const backend of ['sqlite','postgres']){
-      const directory=join(root,backend);prepareInstallation({backend,version:'0.4.0',directory});
+      const directory=join(root,backend);prepareInstallation({backend,version,directory});
       const env=readFileSync(join(directory,'.env'),'utf8'),compose=readFileSync(join(directory,'compose.yaml'),'utf8');
       assert.equal(statSync(directory).mode&0o777,0o700);assert.equal(statSync(join(directory,'.env')).mode&0o777,0o600);
       assert.match(compose,new RegExp(`RUBRIST_STORAGE: ${backend}`));assert.match(compose,/\/ready/);
       if(backend==='sqlite'){assert.doesNotMatch(compose,/DATABASE_URL|image: postgres/);assert.doesNotMatch(env,/POSTGRES_PASSWORD/);}else{assert.match(env,/RUBRIST_POSTGRES_PASSWORD/);}
-      assert.throws(()=>prepareInstallation({backend,version:'0.4.0',directory}),{code:'EEXIST'});
+      assert.throws(()=>prepareInstallation({backend,version,directory}),{code:'EEXIST'});
       assert.equal(readFileSync(join(directory,'.env'),'utf8'),env);
     }
     assert.throws(()=>prepareInstallation({backend:'sqlite',version:'latest',directory:join(root,'bad')}),/exact/);
-    assert.throws(()=>prepareInstallation({backend:'sqlite',version:'0.4.0',publicUrl:'https://host/\nBAD=1',directory:join(root,'bad')}),/origin/);
+    const [major,minor,patch]=version.split('.').map(Number);
+    assert.throws(()=>prepareInstallation({backend:'sqlite',version:`${major}.${minor}.${patch+1}`,directory:join(root,'bad')}),/must match this installer's release/);
+    assert.throws(()=>prepareInstallation({backend:'sqlite',version,publicUrl:'https://host/\nBAD=1',directory:join(root,'bad')}),/origin/);
     assert.equal(existsSync(join(root,'bad')),false);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
@@ -88,4 +93,22 @@ test('restore rejects valid-checksum incompatible schemas without publishing a t
   const escaped=join(root,'escaped.json');createRecoveryRecord(escaped,'synthetic-ending-backslash'+String.fromCharCode(92));
   const output=join(root,'invalid.env');assert.throws(()=>writeRecoveryEnv({recoveryFile:escaped,output}),/manual/);assert.equal(existsSync(output),false);
  }finally{db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test('documented installer command runs from the repository root layout used by the API image',()=>{
+  const repository=fileURLToPath(new URL('..',import.meta.url)),root=mkdtempSync(join(tmpdir(),'rubrist-installer-cli-'));
+  try{
+    // The image's WORKDIR is /repo and the docs invoke this relative path.
+    const dockerfile=readFileSync(join(repository,'apps/api/Dockerfile'),'utf8'),runtime=dockerfile.slice(dockerfile.indexOf('AS runtime'));
+    for(const copied of ['package.json','packages ./packages','tools/storage ./tools/storage','tools/self-host ./tools/self-host','deploy/self-host ./deploy/self-host'])assert.ok(runtime.includes(copied),copied);
+    assert.match(runtime,/^WORKDIR \/repo$/m);
+    const directory=join(root,'rubrist-install'),cli=['tools/self-host/install.mjs','--backend','sqlite','--version',packageVersion(),'--directory',directory,'--public-url','http://localhost:8081'];
+    const output=execFileSync(process.execPath,cli,{cwd:repository,encoding:'utf8',env:{PATH:process.env.PATH}});
+    assert.match(output,/Prepared a new installation/);assert.doesNotMatch(output,/RUBRIST_AUTH_SECRET|betterAuthSecret/);
+    assert.equal(readFileSync(join(directory,'compose.yaml'),'utf8'),readFileSync(join(repository,'deploy/self-host/compose.sqlite.yaml'),'utf8'));
+    assert.match(readFileSync(join(directory,'.env'),'utf8'),new RegExp(`^RUBRIST_VERSION=${packageVersion().replaceAll('.','\\.')}$`,'m'));
+    const mismatch=['tools/self-host/install.mjs','--backend','sqlite','--version','9.9.9','--directory',join(root,'mismatch')];
+    assert.throws(()=>execFileSync(process.execPath,mismatch,{cwd:repository,encoding:'utf8',stdio:'pipe'}),error=>/must match this installer's release/.test(error.stderr));
+    assert.equal(existsSync(join(root,'mismatch')),false);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });

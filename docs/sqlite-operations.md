@@ -3,8 +3,10 @@
 **TARGET:** one API instance on one host, durable local storage, and the same
 application features as PostgreSQL. **CURRENT:** Milestone 5 implementation is
 under qualification; no SQLite release has been published by this work.
-Commands below require a release that includes these tools and templates.
-Do not use the historical 0.3.0 image with the new template's `/ready` check.
+Commands below require the first release that includes these tools and
+templates; none is published yet. Always use an image and template from the
+same release. The legacy `0.3.0` image serves no `/ready` route and has no
+SQLite tooling; use its `v0.3.0`-tagged templates instead.
 
 ## Install either backend
 
@@ -22,6 +24,12 @@ docker run --rm --user "$(id -u):$(id -g)" \
 cd rubrist-install
 docker compose up -d --wait --wait-timeout 900
 ```
+
+`--version` must equal the release of the image (or checkout) that runs the
+installer; any other value is refused, because the template comes from that
+release. CURRENT qualification exercises this command's script from a
+repository checkout at the image's `/repo` layout, not by running the image:
+the `docker run` wrapper above is not yet tested.
 
 The directory must not exist. The installer writes a unique Compose project
 name, the selected `compose.yaml`, `.env`, and `auth-recovery.json`. Files are
@@ -60,9 +68,10 @@ migration, not simply changing `user:` on a populated volume.
 - Unexpected storage-worker exit terminates the API so Docker can restart it.
   Startup logs classify permission, disk-full, I/O, contention and schema errors
   without printing paths, SQL or credentials. Inspect `docker compose logs api`.
-- Shutdown disables readiness immediately, stops pollers and queue claims, and
-  drains HTTP and jobs concurrently. The container allows 45 seconds; the app
-  forces exit after 30. An interrupted dispatched model call can become
+- Shutdown disables readiness immediately, then drains HTTP requests and
+  scheduled pollers together for at most 15 seconds, because both can still
+  enqueue jobs. Only then does it stop the queue (draining claimed jobs) and
+  close storage. The container allows 45 seconds; the app forces exit after 30. An interrupted dispatched model call can become
   `outcome_unknown`; recovery does not promise exactly-once external calls.
 
 Named volumes survive container replacement. They are not backups. Never run
@@ -79,7 +88,8 @@ The completed manifest is written last; a directory without its manifest is an
 incomplete backup. Existing output directories are never reused or overwritten.
 
 ```sh
-# Transfer the protected recovery record to a temporary container path.
+# Transfer the protected recovery record to a temporary container path;
+# run the final rm even if the backup fails.
 docker compose cp auth-recovery.json api:/tmp/rubrist-auth-recovery.json
 docker compose exec -T api node tools/storage/sqlite-backup.mjs backup \
   --source /var/lib/rubrist/rubrist.sqlite \
@@ -94,13 +104,18 @@ actual `BETTER_AUTH_SECRET`. A domain-separated HMAC fingerprint binds the
 manifest to it without exposing the encryption key. The secret is deliberately
 absent from database backups and is needed to decrypt provider/integration
 credentials and preserve session signatures. Do not rotate it during an update.
-For an existing or Coolify installation, create a record without printing it:
+For an existing installation, create a record without printing it, then
+remove the container's temporary copy:
 
 ```sh
 docker compose exec -T api node tools/storage/sqlite-backup.mjs recovery \
   --output /tmp/rubrist-auth-recovery.json
 docker compose cp api:/tmp/rubrist-auth-recovery.json ./auth-recovery.json
+docker compose exec -T api rm /tmp/rubrist-auth-recovery.json
 ```
+
+Run the `rm` even if a copy step fails. Coolify uses the container commands in
+[Coolify backup and restore](#coolify-backup-and-restore).
 
 Move encrypted copies of backups off-host, separately from recovery secrets.
 The backup volume on the application host cannot protect against host loss.
@@ -116,17 +131,27 @@ untouched until recovery is verified.
 Prepare a fresh directory with the recovered secret, using the installer command
 above plus `--recovery-file /out/auth-recovery.json` (place that protected file in
 the mounted parent). Copy the backup directory into the new installation folder.
-Do **not** start the new API before restoring. From the new installation folder:
+Do **not** start the new API before restoring. From the new installation folder,
+copy the backup and recovery record into a temporary helper container that
+mounts the new installation's volumes, then restore inside it:
 
 ```sh
-docker compose run --rm --no-deps \
-  --volume "$PWD/before-upgrade:/restore:ro" \
-  --volume "$PWD/auth-recovery.json:/run/auth-recovery.json:ro" \
-  api node tools/storage/sqlite-backup.mjs restore \
+helper="rubrist-restore-$(date +%s)"
+docker compose run -d --no-deps --name "$helper" api sleep infinity
+docker cp ./before-upgrade "$helper":/restore
+docker cp ./auth-recovery.json "$helper":/run/recovery.json
+docker exec "$helper" node tools/storage/sqlite-backup.mjs restore \
   --backup /restore --target /var/lib/rubrist/rubrist.sqlite \
-  --recovery-file /run/auth-recovery.json
+  --recovery-file /run/recovery.json
+docker rm -f "$helper"
 docker compose up -d --wait --wait-timeout 900
 ```
+
+The helper deliberately avoids host bind mounts: a bind of a temporary host
+path failed under Colima during qualification, while `docker cp` works on any
+local Docker engine. Its writable layer holds copies of the backup and recovery
+record, so run `docker rm -f "$helper"` even when the restore fails. This is
+the procedure the disposable SQLite drill runs.
 
 Restore checks the **target container's actual secret**, recovery fingerprint,
 file checksum, integrity, foreign keys and compatible migration prefix. It copies
@@ -159,14 +184,88 @@ SQLite installations are not reset when a PostgreSQL baseline changes.
 
 ## Coolify and trustctl
 
-Use `deploy/coolify.sqlite.yaml` with its matching image version. Coolify generates
-the auth/bootstrap secrets. Save the auth secret via the recovery command above
-or a protected secret manager. Keep one API replica. The separate data and backup
-volumes are local to the host. For restore in an existing Service, stop it, restore
-into a new filename under `/var/lib/rubrist` using the same image and recovered
-secret, then set `RUBRIST_SQLITE_PATH` to that absolute filename and redeploy.
-Never replace the existing database or its sidecars. Custom scheduling is required;
-this recipe does not claim Coolify's database backup feature covers SQLite.
+Use `deploy/coolify.sqlite.yaml` from the release tag that matches its image
+version. Coolify generates the auth/bootstrap secrets. Keep one API replica. The
+separate data and backup volumes are local to the host. Custom scheduling is
+required; this recipe does not claim Coolify's database backup feature covers
+SQLite.
+
+### Coolify backup and restore
+
+Run these commands on the Coolify host from a private working directory. They
+are written for this recipe but have **not** been exercised against a Coolify
+Service; the qualified drill uses the Compose installation above. Identify the
+Service's API container yourself rather than relying on Coolify naming or labels:
+list running API containers, pick the one Coolify shows for this Service, and
+confirm which volumes are actually mounted into it.
+
+```sh
+umask 077
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | grep rubrist-api
+api=CONTAINER_NAME_FROM_THE_LIST
+docker inspect --format '{{range .Mounts}}{{.Type}} {{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}} -> {{.Destination}}{{println}}{{end}}' "$api"
+source_path="$(docker exec "$api" printenv RUBRIST_SQLITE_PATH)"
+```
+
+The output must show `/var/lib/rubrist` and `/var/lib/rubrist-backups` mounts.
+Create the recovery record once, without printing the secret:
+
+```sh
+docker exec "$api" node tools/storage/sqlite-backup.mjs recovery \
+  --output /tmp/rubrist-auth-recovery.json
+docker cp "$api":/tmp/rubrist-auth-recovery.json ./auth-recovery.json
+docker exec "$api" rm /tmp/rubrist-auth-recovery.json
+```
+
+Back up the running Service. Always remove the container's recovery copy,
+including after a failed backup:
+
+```sh
+name="backup-$(date -u +%Y%m%dT%H%M%SZ)"
+docker cp ./auth-recovery.json "$api":/tmp/rubrist-auth-recovery.json
+docker exec "$api" node tools/storage/sqlite-backup.mjs backup \
+  --source "$source_path" --output "/var/lib/rubrist-backups/$name" \
+  --recovery-file /tmp/rubrist-auth-recovery.json
+docker exec "$api" rm /tmp/rubrist-auth-recovery.json
+docker cp "$api:/var/lib/rubrist-backups/$name" "./$name"
+```
+
+To restore, first capture the image, the data mount and the Service's **actual**
+auth secret from the API container while it still exists. The secret goes only
+into a private `--env-file`; it is not printed or placed on a command line:
+
+```sh
+image="$(docker inspect --format '{{.Config.Image}}' "$api")"
+data_mount="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/rubrist"}}{{if eq .Type "volume"}}type=volume,src={{.Name}}{{else}}type=bind,src={{.Source}}{{end}},dst=/var/lib/rubrist{{end}}{{end}}' "$api")"
+test -n "$data_mount"
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api" \
+  | grep '^BETTER_AUTH_SECRET=' > rubrist-restore.env
+test "$(wc -l < rubrist-restore.env)" -eq 1
+```
+
+Stop the Service in Coolify. `docker inspect --format '{{.State.Running}}' "$api"`
+must not print `true`. Then restore into a **new** filename on the same data
+volume through a helper that never starts the API:
+
+```sh
+target="/var/lib/rubrist/rubrist-restored-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+helper="rubrist-restore-$(date +%s)"
+docker run -d --name "$helper" --env-file rubrist-restore.env \
+  --mount "$data_mount" --entrypoint sleep "$image" infinity
+docker cp "./$name" "$helper":/restore
+docker cp ./auth-recovery.json "$helper":/run/recovery.json
+docker exec "$helper" node tools/storage/sqlite-backup.mjs restore \
+  --backup /restore --target "$target" --recovery-file /run/recovery.json
+docker rm -f "$helper"
+rm rubrist-restore.env
+echo "$target"
+```
+
+Run `docker rm -f "$helper"` and `rm rubrist-restore.env` even when a step fails.
+Restore refuses a backup whose recovery record does not match the Service's
+secret. Set the Service's `RUBRIST_SQLITE_PATH` to the printed absolute filename
+and redeploy. Never replace the existing database or its sidecars; keep it until
+the restored Service is verified as described above.
 
 The independently maintained **trustctl v0.2.0 supports PostgreSQL only**. It fetches
 `compose.yaml` and its checksum, requires a PostgreSQL password and does not

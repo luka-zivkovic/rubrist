@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
-import {prepareInstallation} from '../self-host/install.mjs';
+import {packageVersion,prepareInstallation} from '../self-host/install.mjs';
 const args=process.argv.slice(2),apiImage=args[0],webImage=args[1],previousImage=args[2];
 if(!apiImage||!webImage)throw Error('Usage: sqlite-deployment.mjs API_IMAGE WEB_IMAGE [SYNTHETIC_PREDECESSOR_IMAGE]');
 const root=mkdtempSync(join(tmpdir(),'rubrist-deployment-')),first=join(root,'first'),restored=join(root,'restored');
@@ -23,7 +23,7 @@ const smoke=fileURLToPath(new URL('./deployment-smoke.mjs',import.meta.url));
 const state=join(root,'state.json');
 function verify(directory,mode){return run(process.execPath,[smoke,mode,endpoint(directory),state]);}
 try{
- prepareInstallation({backend:'sqlite',version:'0.0.0',directory:first,publicUrl:origin});owned.push(first);configure(first,previousImage??apiImage);
+ prepareInstallation({backend:'sqlite',version:packageVersion(),directory:first,publicUrl:origin});owned.push(first);configure(first,previousImage??apiImage);
  compose(first,'up','-d','--wait','--wait-timeout','900');
  function pinPort(directory,image){configure(directory,image);}
  console.log(verify(first,'create'));
@@ -40,7 +40,7 @@ try{
   let rejected=false;try{compose(first,'run','--rm','--no-deps','api');}catch(error){rejected=/schema|migration/i.test(error.message);}if(!rejected)throw Error('Older image did not reject upgraded schema');
   pinPort(first,apiImage,port);
  }
- prepareInstallation({backend:'sqlite',version:'0.0.0',directory:restored,publicUrl:origin,recoveryFile:join(first,'auth-recovery.json')});owned.push(restored);pinPort(restored,previousImage??apiImage,port);
+ prepareInstallation({backend:'sqlite',version:packageVersion(),directory:restored,publicUrl:origin,recoveryFile:join(first,'auth-recovery.json')});owned.push(restored);pinPort(restored,previousImage??apiImage,port);
  const helper='rubrist-restore-'+randomBytes(6).toString('hex');helpers.push(helper);
  compose(restored,'run','-d','--no-deps','--name',helper,'api','sleep','infinity');
  run('docker',['cp',join(root,'backup'),helper+':/restore']);run('docker',['cp',join(restored,'auth-recovery.json'),helper+':/run/recovery.json']);

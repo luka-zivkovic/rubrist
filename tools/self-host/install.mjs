@@ -5,10 +5,13 @@ import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+export function packageVersion(){return JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;}
 /** Prepares a fresh operator directory; does not start Docker or alter an installation. */
 export function prepareInstallation({backend,version,directory,publicUrl='http://localhost:8081',recoveryFile}) {
   if(!['sqlite','postgres'].includes(backend))throw Error('Choose --backend sqlite or postgres');
   if(!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version??''))throw Error('Choose an exact --version X.Y.Z');
+  // The template comes from this checkout or image, so it must name the same release.
+  if(version!==packageVersion())throw Error(`--version must match this installer's release (${packageVersion()}); run the installer from the image or checkout of the release you install`);
   if(!directory)throw Error('--directory is required and must not already exist');
   let url;try{url=new URL(publicUrl);}catch{throw Error('Invalid --public-url');}
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||url.pathname!=='/'||/[\s$'"\\]/.test(publicUrl))throw Error('--public-url must be an HTTP(S) origin');
