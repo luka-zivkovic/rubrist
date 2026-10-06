@@ -1,17 +1,18 @@
 import { expect,it } from 'vitest';
 import { fixture,freeze } from './helpers/sqlite-analysis.js';
+import {governedDraftFixture} from './helpers/sqlite-governed-draft.js';
 import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { materializeNonsealedReviewItem } from '../src/storage/sqlite/governed-review-items.js';
 import { governedJsonTextDigest } from '../src/storage/sqlite/governed-json-text.js';
 import { stableId } from '../src/governed-review/storage-values.js';
-async function prepared(){const f=await fixture();freeze(f);const item=sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,f.projectId,'rev','item-0','subject'));return {...f,item};}
+async function prepared(){const f=await governedDraftFixture(),revisionId=f.revision.id,sourceId=String(f.db.prepare("SELECT id FROM dataset_revision_items WHERE revision_id=? AND json_extract(payload_snapshot,'$.output')='Answer 0'").get(revisionId)!.id);const item=sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,f.projectId,revisionId,sourceId,'subject'));return {...f,item,revisionId,sourceId};}
 it('pins safe immutable review payloads to exact source evidence and preserves replay',async()=>{
- const f=await prepared();expect(f.item.id).toBe(stableId('gri',f.projectId,'dataset-revision-item','item-0'));
+ const f=await prepared();expect(f.item.id).toBe(stableId('gri',f.projectId,'dataset-revision-item',f.sourceId));
  const row=f.db.prepare('SELECT * FROM governed_review_items WHERE id=?').get(f.item.id)!;
- expect(JSON.parse(String(row.review_payload_snapshot))).toEqual({input:expect.anything(),output:'Answer'});
+ expect(JSON.parse(String(row.review_payload_snapshot))).toEqual({input:expect.anything(),output:'Answer 0'});
  expect(JSON.parse(String(row.redaction_provenance))).toMatchObject({metadataAccepted:false,source:'immutable_dataset_revision'});
- expect(sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,f.projectId,'rev','item-0','subject'))).toEqual(f.item);
- expect(()=>sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,'foreign','rev','item-0','subject'))).toThrow();
+ expect(sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,f.projectId,f.revisionId,f.sourceId,'subject'))).toEqual(f.item);
+ expect(()=>sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,'foreign',f.revisionId,f.sourceId,'subject'))).toThrow();
  expect(()=>f.db.exec("UPDATE governed_review_items SET input_digest='rewrite'")).toThrow(/immutable/);
  expect(()=>f.db.exec('DELETE FROM governed_review_items')).toThrow(/project erasure/);
  await f.runtime.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('SELECT * FROM governed_review_items').all()).toEqual([]);
@@ -31,3 +32,5 @@ it.each(['payload','metadata','digest','source','identity','subject','sealed','b
   c.db.prepare(`INSERT INTO governed_review_items(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
  })).toThrow();expect(f.db.prepare('SELECT count(*) n FROM governed_review_items').get()?.n).toBe(1);
 });
+
+it('requires a completed promotion before materializing any analysis-population review item',async()=>{const f=await fixture();freeze(f);expect(()=>sqliteCommand(f.db,c=>materializeNonsealedReviewItem(c,f.projectId,'rev','item-0','subject'))).toThrow(/completed criterion promotion/);expect(f.db.prepare('SELECT * FROM governed_review_items').all()).toEqual([]);});

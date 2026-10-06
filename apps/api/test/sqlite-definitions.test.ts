@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema, CreatedCriterionSchema } from '@rubrist/shared';
 import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
+import {initializeSqliteCommandContext} from '../src/storage/sqlite/command-context.js';
 import { sqliteDefinitionCommands } from '../src/storage/sqlite/definition-commands.js';
 import { CriterionStableKeyConflictError, AmbiguousProjectSkillError } from '../src/repository/errors.js';
 import { criterionVersionDigest } from '../src/lib/criterion-digest.js';
@@ -63,16 +64,16 @@ describe('SQLite native evaluator definitions',()=>{
     await r.authorizeSkillVersionExecution(auth); await r.authorizeSkillVersionExecution(auth);
     await expect(r.authorizeSkillVersionExecution({...auth,resourceId:'different'})).rejects.toThrow(/idempotency/);
     await expect(r.authorizeSkillVersionExecution({...auth,projectId:'other'})).rejects.toThrow();
-    const db=openSqlite(f.path); cleanup.push(()=>db.close()); const commands=sqliteDefinitionCommands(db);
+    const db=openSqlite(f.path); cleanup.push(()=>db.close()); initializeSqliteCommandContext(db); const commands=sqliteDefinitionCommands(db);
     expect(db.prepare('SELECT count(*) n FROM evaluator_execution_authorizations').get()?.n).toBe(1);
-    // Incomplete governed bundles cannot enter the database during this slice.
-    expect(()=>db.prepare("INSERT INTO criteria VALUES('governed',?,'governed','analysis_promotion',NULL,?)").run(f.projectId,new Date().toISOString())).toThrow(/governed/);
+    // A promoted criterion must belong to its complete owning promotion command.
+    expect(()=>db.prepare("INSERT INTO criteria VALUES('governed',?,'governed','analysis_promotion',NULL,?)").run(f.projectId,new Date().toISOString())).toThrow(/unfinalized owning promotion/);
     expect(()=>commands.authorizeSkillVersionExecution({...auth,skillVersionId:'absent-governed-version',idempotencyKey:'governed'})).toThrow(/governed/);
     expect(db.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');
   });
   it('rejects forged digests and altered evaluator identity even through direct SQL',async()=>{
     const f=await fixture(), created=await f.runtime.repository.createCriterion(f.projectId,f.input,f.actor);
-    const db=openSqlite(f.path); cleanup.push(()=>db.close()); sqliteDefinitionCommands(db);
+    const db=openSqlite(f.path); cleanup.push(()=>db.close()); initializeSqliteCommandContext(db); sqliteDefinitionCommands(db);
     expect(()=>db.exec("UPDATE criterion_versions SET definition='changed'")).toThrow(/immutable/);
     expect(()=>db.exec("UPDATE skill_versions SET prompt='changed'")).toThrow(/immutable/);
     expect(()=>db.exec('UPDATE criteria SET created_by_user_id=NULL')).toThrow(/immutable/);
