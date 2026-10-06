@@ -91,6 +91,13 @@ fresh recovery installation with the original secret and private files.
 Coolify itself, the full suite and benchmarks were not repeated in this check.
 The earlier qualification below remains historical evidence for its pinned image.
 
+A subsequent independent audit found calibration discovery also needed to drain
+before queue shutdown. Its stop handle now waits for the active discovery pass.
+Claude verified three new regression tests (including failures without the fix),
+typecheck and 41 focused tests; one unrelated PostgreSQL-only test was skipped.
+The independent follow-up passed all seven shutdown tests. Backup tests now
+verify every current migration name and checksum, avoiding a stale fixed count.
+
 ## Validation record
 
 CURRENT focused evidence:

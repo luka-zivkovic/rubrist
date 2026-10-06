@@ -22,7 +22,8 @@ test('online WAL snapshot restores exact bytes without overwriting files; verifi
     const bytes=Buffer.from([0,255,1,13,10,128]);db.prepare('INSERT INTO backup_fixture VALUES(1,?)').run(bytes);
     assert.ok(statSync(source+'-wal').size>0);
     const manifest=await createBackup({source,output,recoveryFile:recovery,secret});
-    assert.equal(manifest.history.length,65);
+    const migrationRoot=new URL('../packages/db/sqlite-migrations/',import.meta.url);
+    assert.deepEqual(manifest.history,readdirSync(migrationRoot).filter(file=>file.endsWith('.sql')).sort().map(id=>({id,checksum:createHash('sha256').update(readFileSync(new URL(id,migrationRoot))).digest('hex')})));
     assert.equal(statSync(join(output,'database.sqlite')).mode&0o777,0o600);
     assert.equal(existsSync(join(output,'database.sqlite-wal')),false);
     assert.equal(JSON.stringify(manifest).includes(secret),false);
@@ -79,7 +80,7 @@ test('restore rejects valid-checksum incompatible schemas without publishing a t
    const output=join(root,kind);await createBackup({source,output,recoveryFile,secret});
    const path=join(output,'database.sqlite'),copy=new DatabaseSync(path);
    try{
-    if(kind==='newer')copy.prepare('INSERT INTO rubrist_sqlite_migrations VALUES(?,?,?)').run('0066_unknown.sql','0'.repeat(64),'synthetic');
+    if(kind==='newer')copy.prepare('INSERT INTO rubrist_sqlite_migrations VALUES(?,?,?)').run('9999_unknown.sql','0'.repeat(64),'synthetic');
     if(kind==='checksum')copy.exec("UPDATE rubrist_sqlite_migrations SET checksum='wrong' WHERE id=(SELECT min(id) FROM rubrist_sqlite_migrations)");
    }finally{copy.close();}
    const manifest=JSON.parse(readFileSync(join(output,'manifest.json'),'utf8'));
