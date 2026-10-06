@@ -1,7 +1,9 @@
+import { canonicalJson } from '../../lib/canonical-json.js';
+import { assertBlindProjectionSafe } from '../../governed-review/projection.js';
 import { canonicalGovernedJsonText, analysisPayloadSnapshotText } from './governed-json-text.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision } from '@rubrist/shared';
+import { DatasetRevisionSchema, DatasetRevisionItemSchema, DatasetExposureEventSchema, DatasetRevisionPayloadSnapshotSchema, GovernedReviewPayloadSnapshotSchema, DatasetReferenceProvenanceSchema, verdictLabelFromPayload, type DatasetReferenceProvenance, type DatasetRevision } from '@rubrist/shared';
 import type { RubristRepository } from '../../repository.js';
 import { DatasetNotFoundError, DatasetRevisionConflictError, DatasetRevisionNotFoundError, SealedValidationUnavailableError } from '../../repository/errors.js';
 import { datasetRevisionContentDigest, datasetRevisionDigest, datasetRevisionItemDigest, decidePublicDatasetRevisionCreation } from '../../lib/dataset-revision.js';
@@ -21,6 +23,19 @@ export function sqliteDatasetRevisionCommands(db:DatabaseSync) {
   db.function('sqlite_dataset_payload_equal',{deterministic:true},(left,right)=>{try{return analysisPayloadSnapshotText(String(left))===canonicalGovernedJsonText(String(right))?1:0;}catch{return 0;}});
   db.function('sqlite_dataset_item_valid',{deterministic:true},(inputDigest,digest,payload,label,step,provenance,note)=> {
     try {return datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:String(inputDigest)},redactedPayload:snapshot(payload),referenceLabel:label,expectedFailStep:step as number|null,reviewProvenance:DatasetReferenceProvenanceSchema.parse(parse(provenance)),note})===digest?1:0;}catch{return 0;}
+  });
+  db.function('sqlite_dataset_item_valid_v2',{deterministic:true},(inputDigest,digest,payload,label,step,provenance,note)=> {
+    try {
+      // Validate without normalizing the immutable digest input. Blind
+      // snapshots omit metadata; ordinary snapshots retain their full shape.
+      const exactPayload=parse(payload),governed=exactPayload!==null&&typeof exactPayload==='object'&&!Object.hasOwn(exactPayload,'metadata');
+      const validated=governed?GovernedReviewPayloadSnapshotSchema.parse(exactPayload):DatasetRevisionPayloadSnapshotSchema.parse(exactPayload);
+      if(canonicalJson(validated)!==canonicalJson(exactPayload))return 0;
+      if(governed)assertBlindProjectionSafe(exactPayload);
+      const exactProvenance=parse(provenance),validatedProvenance=DatasetReferenceProvenanceSchema.parse(exactProvenance);
+      if(canonicalJson(validatedProvenance)!==canonicalJson(exactProvenance))return 0;
+      return datasetRevisionItemDigest({inputIdentity:{basis:'input-identity/v1',digest:String(inputDigest)},redactedPayload:exactPayload,referenceLabel:label,expectedFailStep:step as number|null,reviewProvenance:exactProvenance,note})===digest?1:0;
+    }catch{return 0;}
   });
   db.function('sqlite_dataset_content_digest',{deterministic:true},digests=>datasetRevisionContentDigest(parse(digests)));
   db.function('sqlite_dataset_revision_digest',{deterministic:true},(role,digests)=>datasetRevisionDigest({role:String(role) as DatasetRevision['role'],itemDigests:parse(digests)}));

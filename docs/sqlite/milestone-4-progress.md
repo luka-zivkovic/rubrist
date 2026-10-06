@@ -373,3 +373,28 @@ unresolvable decisions produce incomplete batches. Independent audit approved
 22 adjudication/alignment/barrier tests, including snapshot rollback, forged
 successors, peer replay and erasure. API typechecking passes. Truth-materialization
 and sealed-separation guards must land before enabling freeze or sealed access.
+
+## Authoritative truth links and nonsealed freeze
+
+CURRENT: migrations 0049–0050 require exact native/imported truth links, complete
+label snapshots and atomic revision finalization. Native freeze binds the exact
+resolved payload and adjudication head, creation exposure and representative
+scope. Imported self-attested/unverified classes remain distinct. Materialized
+truth blocks later adjudication mutation. Batch events now retain private command
+tokens, preventing equal server timestamps from standing in for command identity.
+
+CURRENT: Claude Code confirmed the hardening fits ADR-0016/0008 without a new
+ADR. Its consultation caught normalization in the older dataset item validator.
+A forward trigger uses v2: validate one exact payload shape, hash original parsed
+values, and require an authoritative truth link for every metadata-free item.
+The original validator and historical migrations remain unchanged. Public read
+projections retain their PostgreSQL-compatible metadata defaults.
+
+CURRENT: independent audit approved 22 focused tests after the imported-payload
+shape correction. API typechecking passes. The broader SQLite plus actual
+PostgreSQL governed-review run exercised 418 tests in 50 files: 417 passed and
+one retained an old error-message assertion; all ten freeze tests passed after
+that assertion was corrected. Tests cover rollback at each freeze step, native
+and imported payload forgery, numeric round trips, same-time command tokens,
+adjudicated truth, manual-sampling limits, peer continuation and plain integrity
+checks. Sealed intake, capability separation and sealed freeze remain unfinished.

@@ -64,7 +64,7 @@ it('preserves defer/resume CAS and rejects task writes after abandonment while r
  sqliteCommand(f.db,c=>{
   const prior=c.db.prepare('SELECT * FROM governed_review_batch_events WHERE batch_id=?').get(f.batchId)!;
   const basis={actorRoleAtReview:prior.actor_role_at_review,actorSubjectId:prior.actor_subject_id,batchId:f.batchId,datasetRevisionId:null,details:{},eventKind:'abandoned',previousEventDigest:prior.event_digest,representativeIneligibleReasons:[],representativeOfPopulationId:null,sequence:2,stateVersion:2};
-  const row={...prior,id:'abandoned',sequence:2,state_version:2,expected_previous_state_version:1,event_kind:'abandoned',previous_event_digest:prior.event_digest!,event_digest:governedContentV1Digest('governed-review-batch-event/v1',basis),idempotency_key:'abandoned',occurred_at:c.timestamp};
+  const row={...prior,created_command_token:c.token,id:'abandoned',sequence:2,state_version:2,expected_previous_state_version:1,event_kind:'abandoned',previous_event_digest:prior.event_digest!,event_digest:governedContentV1Digest('governed-review-batch-event/v1',basis),idempotency_key:'abandoned',occurred_at:c.timestamp};
   c.db.prepare(`INSERT INTO governed_review_batch_events(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
  });
  expect(()=>action('deferred',3)).toThrow(/open batch/);expect(getOrCreateNonsealedBlindView(f.db,f.actor,f.taskId)).toEqual(artifact);
