@@ -363,3 +363,13 @@ stream versions and digests, immutable instruction-successor proposals and
 closure before adjudication. Snapshot failure rolls back the entire event.
 Independent audit approved 25 alignment/barrier/label tests; API typechecking
 passes. Adjudication chains, sealed paths and truth freeze remain unfinished.
+
+## Adjudication chains
+
+CURRENT: migration 0048 adds immutable adjudication chains, exact considered-
+label snapshots, live-owner/rater separation and compare-and-swap corrections.
+Resolution uses the current adjudication head without changing original labels;
+unresolvable decisions produce incomplete batches. Independent audit approved
+22 adjudication/alignment/barrier tests, including snapshot rollback, forged
+successors, peer replay and erasure. API typechecking passes. Truth-materialization
+and sealed-separation guards must land before enabling freeze or sealed access.
