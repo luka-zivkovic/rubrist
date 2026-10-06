@@ -2,8 +2,9 @@
 // SPIKE: records the current SHA-256 of every view mod file. Running it is the
 // stand-in for an owner approving a mod: until it runs again, a changed file is
 // not shown. Usage: node tools/pin-view-mods.mjs [mods directory]
-// The shipped apps/web/public/mods holds only an empty index; to try the
-// examples locally, copy apps/web/examples/view-mods/* there and run this.
+// apps/web/public/mods is not tracked and ships empty, so a build has no mods;
+// to try the examples locally, copy apps/web/examples/view-mods/* there and
+// run this.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
