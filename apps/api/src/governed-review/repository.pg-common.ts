@@ -1,5 +1,5 @@
-import { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson } from "./storage-values.js";
-export { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson } from "./storage-values.js";
+import { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson, taskEventContent } from "./storage-values.js";
+export { stableId, ALLOWED_LABELS, MAX_BLIND_VIEW_BYTES, sha256Bytes, parseJson, taskEventContent } from "./storage-values.js";
 import type { Pool, PoolClient } from "pg";
 
 import { governedContentV1Digest } from "../lib/governed-content-digest.js";
@@ -63,40 +63,7 @@ export interface BatchRow {
   custodian_role_at_review: string | null;
   created_at: Date | string;
 }
-export function taskEventContent(input: {
-  actorRoleAtReview: string;
-  actorSubjectId: string;
-  eventKind: string;
-  taskId: string;
-  sequence: number;
-  previousEventDigest: string | null;
-  labelId?: string | null;
-  reason?: string | null;
-  canonicalViewBytesBase64?: string | null;
-  viewDigest?: string | null;
-  viewContractVersion?: string | null;
-  canonicalizationVersion?: string | null;
-  exposureClass?: string | null;
-  activity?: string | null;
-}) {
-  return {
-    activity: input.activity ?? null,
-    actorRoleAtReview: input.actorRoleAtReview,
-    actorSubjectId: input.actorSubjectId,
-    canonicalizationVersion: input.canonicalizationVersion ?? null,
-    eventKind: input.eventKind,
-    exposureClass: input.exposureClass ?? null,
-    labelId: input.labelId ?? null,
-    reason: input.reason ?? null,
-    canonicalViewBytesBase64: input.canonicalViewBytesBase64 ?? null,
-    previousEventDigest: input.previousEventDigest,
-    sequence: input.sequence,
-    stateVersion: input.sequence,
-    taskId: input.taskId,
-    viewContractVersion: input.viewContractVersion ?? null,
-    viewDigest: input.viewDigest ?? null
-  };
-}
+
 
 export async function loadAdjudication(
   db: Db,

@@ -47,6 +47,10 @@ export function initializeGovernedSqliteFunctions(db: DatabaseSync): void {
   db.function('governed_review_payload_project_v1', { deterministic: true }, value => JSON.stringify(projectGovernedReviewPayload(JSON.parse(text(value)))));
   db.function('governed_timestamp_v1', { deterministic: true }, value => governedTimestamp(text(value)));
   db.function('governed_jsonb_octets_v1', { deterministic: true }, value => value===null ? 0 : postgresJsonTextOctets(text(value)));
+  db.function('governed_base64_v1', { deterministic: true }, value => {
+    if(!(value instanceof Uint8Array))throw new Error('Governed base64 requires BLOB');
+    return Buffer.from(value).toString('base64');
+  });
   db.function('governed_bytes_v1_digest', { deterministic: true }, value => {
     if(!(value instanceof Uint8Array))throw new Error('Governed bytes require BLOB');
     return 'sha256:'+createHash('sha256').update(value).digest('hex');

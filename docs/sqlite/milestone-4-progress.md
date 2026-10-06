@@ -324,3 +324,17 @@ audit approved the slice after correcting offset-aware time-window ordering;
 all ten final draft tests and API typechecking pass. The broader SQLite suite
 passed 334 tests immediately before this draft slice. Other governed source
 kinds and public repository wiring remain unfinished.
+
+## Exact blind views and initial governed streams
+
+CURRENT: migration 0044 adds immutable, versioned batch and task streams with
+open/abandon and view/defer/resume transitions. Exact reviewer-visible bytes
+are retained as BLOB, validated against the frozen task projection, and encoded
+as base64 only for the unchanged event digest and wire representation. Replays
+return the stored artifact; live membership is checked on every read.
+
+CURRENT: independent audit approved 17 focused tests. The final SQLite and
+PostgreSQL regression run passed 25 tests, and API typechecking passes. Tests
+cover stale versions, forged bytes with recomputed hashes, pinned reviewer
+identity, abandonment, revoked membership, plain SQLite backup and project
+erasure. Label, barrier, sealed and public repository paths remain unfinished.

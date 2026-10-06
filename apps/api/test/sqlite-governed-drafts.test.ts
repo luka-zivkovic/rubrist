@@ -1,20 +1,10 @@
+import { governedDraftFixture as prepared } from './helpers/sqlite-governed-draft.js';
 import { governedTimestamp } from '../src/storage/sqlite/governed-timestamp.js';
 import { expect,it } from 'vitest';
-import { governedFixture } from './helpers/sqlite-governed.js';
-import { sqliteGovernedInstructionCommands } from '../src/storage/sqlite/governed-instruction-commands.js';
 import { createNonsealedGovernedDraft } from '../src/storage/sqlite/governed-draft-commands.js';
 import { sqliteCommand } from '../src/storage/sqlite/command-context.js';
 import { governedContentV1Digest } from '../src/lib/governed-content-digest.js';
-import { CreateGovernedReviewBatchInputSchema } from '../src/governed-review/contracts.js';
 import { executeGovernedReviewSelection } from '../src/governed-review/selection.js';
-async function prepared(){
- const f=await governedFixture(),r=f.runtime.repository,dataset=await r.createDataset({projectId:f.projectId,name:'Governed review'});
- await r.importDatasetExamples({projectId:f.projectId,datasetId:dataset.id,ingestionPurpose:'dataset_example',items:[0,1,2].map(i=>({sourceTraceId:'item-'+i,input:'Question '+i,output:'Answer '+i,metadata:{hidden:'metadata'}}))});
- const revision=(await r.createDatasetRevision({projectId:f.projectId,datasetId:dataset.id,role:'iterative_development'}))!;
- const instruction=sqliteGovernedInstructionCommands(f.db).governedInstructionCreate(f.actor,{criterionVersionId:f.criterionVersionId,title:'Evidence',instructions:'Review independently',failureCodeGuidance:'',idempotencyKey:'instruction'});
- const input=CreateGovernedReviewBatchInputSchema.parse({instructionVersionId:instruction.instructionVersionId,roleIntent:'iterative_development',source:{kind:'dataset_revision',revisionId:revision.id},selection:{method:'simple_random',fixedBudget:1},reviewerUserIds:[f.userId],fixedStopAt:new Date(Date.now()+3600000).toISOString(),idempotencyKey:'draft'});
- return {...f,input,revision};
-}
 it('freezes exact server-selected membership, decimal digests, assignments and replay',async()=>{
  const f=await prepared(),id=createNonsealedGovernedDraft(f.db,f.actor,f.input);
  const batch=f.db.prepare('SELECT * FROM governed_review_batches WHERE id=?').get(id)!;
