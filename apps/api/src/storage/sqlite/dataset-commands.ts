@@ -1,7 +1,8 @@
+import { importTraceInTransaction } from './trace-commands.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { DatasetSchema, DatasetItemSchema } from '@rubrist/shared';
-import type { AddDatasetItemsInputDb, CreateDatasetInputDb } from '../../repository/contracts.js';
+import type { AddDatasetItemsInputDb, CreateDatasetInputDb, ImportDatasetExamplesDbInput } from '../../repository/contracts.js';
 import { DatasetNameTakenError, DatasetNotFoundError, CaseNotFoundError } from '../../repository/errors.js';
 
 type Row=Record<string,any>;
@@ -46,6 +47,31 @@ export function sqliteDatasetCommands(db:DatabaseSync) {
     },
     addDatasetItems(input:AddDatasetItemsInputDb) {
       return transaction(now=>{
+        upsertDatasetItemsInTransaction(db,input,now);
+        return items(input.projectId,input.datasetId);
+      });
+    },
+    importDatasetExamples(input:ImportDatasetExamplesDbInput) {
+      return transaction(now=> {
+        if(!one('SELECT 1 FROM datasets WHERE project_id=? AND id=? AND archived_at IS NULL',input.projectId,input.datasetId)) throw new DatasetNotFoundError(input.datasetId);
+        return {items:input.items.map(example=> {
+          const imported=importTraceInTransaction(db,input.projectId,'manual',example,{ingestionPurpose:input.ingestionPurpose},now);
+          upsertDatasetItemsInTransaction(db,{projectId:input.projectId,datasetId:input.datasetId,items:[{caseId:imported.caseId,expectedLabel:example.expectedLabel,expectedFailStep:example.expectedFailStep,note:example.note}]},now);
+          const stored=one('SELECT id FROM dataset_items WHERE project_id=? AND dataset_id=? AND case_id=?',input.projectId,input.datasetId,imported.caseId)!;
+          return {sourceTraceId:imported.sourceTraceId,caseId:imported.caseId,created:imported.created,datasetItemId:String(stored.id)};
+        })};
+      });
+    },
+    removeDatasetItem(projectId:string,datasetId:string,itemId:string) {
+      return db.prepare('DELETE FROM dataset_items WHERE project_id=? AND dataset_id=? AND id=?').run(projectId,datasetId,itemId).changes>0;
+    }
+  };
+}
+
+// Internal caller-owned write: no nested commit can leave orphan examples.
+function upsertDatasetItemsInTransaction(db:DatabaseSync,input:AddDatasetItemsInputDb,now:string) {
+  if(!db.isTransaction) throw new Error('Dataset upsert requires its owning transaction');
+  const one=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).get(...args) as Row|undefined;
         if(!one('SELECT 1 FROM datasets WHERE project_id=? AND id=? AND archived_at IS NULL',input.projectId,input.datasetId)) throw new DatasetNotFoundError(input.datasetId);
         for(const member of input.items) {
           const source=one('SELECT rt.source_trace_id FROM cases c JOIN raw_traces rt ON rt.id=c.raw_trace_id AND rt.project_id=c.project_id WHERE c.project_id=? AND c.id=?',input.projectId,member.caseId);
@@ -57,11 +83,4 @@ export function sqliteDatasetCommands(db:DatabaseSync) {
             note=coalesce(excluded.note,dataset_items.note)`).run(`dsi_${randomUUID()}`,input.datasetId,input.projectId,member.caseId,String(source.source_trace_id),
               member.expectedLabel??null,member.note??null,now,member.expectedFailStep??null);
         }
-        return items(input.projectId,input.datasetId);
-      });
-    },
-    removeDatasetItem(projectId:string,datasetId:string,itemId:string) {
-      return db.prepare('DELETE FROM dataset_items WHERE project_id=? AND dataset_id=? AND id=?').run(projectId,datasetId,itemId).changes>0;
-    }
-  };
 }

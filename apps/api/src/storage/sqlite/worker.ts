@@ -2,16 +2,19 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { migrateSqlite, openSqlite } from '@rubrist/db/sqlite';
 import { createAuth } from '../../lib/auth.js';
 import { serializeSqliteError } from './error-transport.js';
+import { seedExistingSqliteStarterEvaluators } from './starter-evaluator.js';
 import { sqliteCommands } from './commands.js';
 
 const port = parentPort!;
 // All messages (including async authentication) run in order. Domain commands
 // cannot enter the auth driver's open transaction or block its completion.
+const migration = openSqlite(workerData.path);
+try { migrateSqlite(migration); } finally { if (migration.isOpen) migration.close(); }
 const domain = openSqlite(workerData.path);
-migrateSqlite(domain);
 const authentication = openSqlite(workerData.path);
 const auth = createAuth(authentication);
-const commands = sqliteCommands(domain);
+const commands = sqliteCommands(domain,{seedStarterEvaluators:workerData.seedStarterEvaluators});
+if(workerData.seedStarterEvaluators)seedExistingSqliteStarterEvaluators(domain);
 let pending = Promise.resolve();
 port.postMessage({ ready: true });
 port.on('message', (message) => {

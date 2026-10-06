@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqlite } from '@rubrist/db/sqlite';
 import { CreateCriterionInputSchema } from '@rubrist/shared';
-import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
 import { EXECUTION_LEASE_MS } from '../src/storage/sqlite/eval-execution.js';
 import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
@@ -41,7 +41,7 @@ describe('SQLite durable evaluation and receipt ownership',()=>{
     expect(await f.r.listEvalRuns(f.projectId)).toEqual(before);
     const register=vi.spyOn(f.db,'function');
     sqliteCommands(f.db);sqliteCommands(f.db);
-    expect(register).not.toHaveBeenCalled();
+    expect(register.mock.calls.map(call=>call[0]).filter(name=>['sqlite_subject_digest','sqlite_criterion_digest','sqlite_execution_authorization_digest','sqlite_skill_version_valid','sqlite_receipt_valid','sqlite_comparison_valid'].includes(name))).toEqual([]);
     register.mockRestore();
     expect(f.db.prepare("SELECT sqlite_subject_digest('project','subject') digest").get()?.digest).toMatch(/^sha256:/);
   });

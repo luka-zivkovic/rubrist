@@ -1,0 +1,67 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { openSqlite, migrateSqlite } from '@rubrist/db/sqlite';
+import { CreateCriterionInputSchema } from '@rubrist/shared';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
+import { sqliteCommands } from '../src/storage/sqlite/commands.js';
+import { createAuth } from '../src/lib/auth.js';
+import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
+const cleanup:Array<()=>void|Promise<void>>=[];
+afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
+const definition=CreateCriterionInputSchema.parse({stableKey:'grounded',name:'Grounded',definition:'Use evidence.',evaluator:{rubricMarkdown:'Pass grounded answers.',prompt:'Judge {{rubric_markdown}}.',executionBinding:bindingInput(MOCK_BINDING)}});
+async function fixture() {
+  vi.stubEnv('BETTER_AUTH_SECRET','sqlite-review-test-secret-at-least-32-characters');
+  const dir=mkdtempSync(join(tmpdir(),'rubrist-reviews-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
+  const path=join(dir,'db.sqlite'),runtime=await createSqliteRuntime(path);cleanup.push(()=>runtime.close());
+  const {user}=await runtime.auth.api.signUpEmail({body:{email:'owner@example.test',password:'synthetic-long-password',name:'Owner'}});
+  const {projectId}=await runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+  const r=runtime.repository,created=await r.createCriterion(projectId,definition,{}),versionId=created.evaluator.currentVersion.id,criterionVersionId=created.versions[0]!.id;
+  const trace=await r.importTrace(projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'judge_api'});
+  const judge=await r.recordJudgeRun({projectId,caseId:trace.caseId,skillVersionId:versionId,verdict:{label:'fail',score:0.1,confidence:0.9,reason:'Synthetic failure'}});
+  const db=openSqlite(path);cleanup.push(()=>db.close());sqliteCommands(db);
+  return {dir,path,runtime,r,projectId,user,versionId,criterionVersionId,trace,judge,db};
+}
+describe('SQLite visible golden registry and regression revisions',()=>{
+  it('atomically promotes human truth with immutable input snapshots and retires with a new empty revision',async()=> {
+    const f=await fixture();
+    const queue=await f.r.createReviewQueue({projectId:f.projectId,name:'Review',caseIds:[f.trace.caseId],criterionVersionId:f.criterionVersionId});
+    const entry=await f.r.promoteExceptionToGoldenSet({projectId:f.projectId,caseId:f.trace.caseId,skillVersionId:f.versionId,agreedLabel:'pass',reason:'Human reviewed',actorUserId:f.user.id,actorName:'Owner'});
+    expect((await f.r.getReviewQueueDetail(f.projectId,queue.id))?.queue.pendingCount).toBe(1);
+    const revision=await f.r.getOrCreateRegressionDatasetRevision(f.projectId,f.user.id,f.criterionVersionId);
+    expect(revision).toMatchObject({role:'regression_golden',provenanceLevel:'reviewed_unblinded',itemCount:1});
+    expect(f.db.prepare('SELECT criterion_version_id FROM dataset_revisions WHERE id=?').get(revision.id)?.criterion_version_id).toBe(f.criterionVersionId);
+    expect(revision.items[0]).toMatchObject({sourceCaseId:f.trace.caseId,sourceGoldenEntryId:entry.id,referenceLabel:'pass',referenceProvenance:{kind:'golden_promotion'}});
+    expect(revision.exposures.some(e=>e.kind==='legacy_pretracking'&&e.exposureClass==='development')).toBe(true);
+    const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());
+    expect(await peer.repository.getOrCreateRegressionDatasetRevision(f.projectId,f.user.id,f.criterionVersionId)).toEqual(revision);
+    expect((await peer.repository.getCaseDetail(f.projectId,f.trace.caseId,f.versionId))?.latestHumanLabel).toBe('pass');
+    expect(await f.r.getSkillFormatExamples(f.projectId,5,f.criterionVersionId)).toEqual([expect.objectContaining({id:entry.id,input:'x',output:'y',label:'pass'})]);
+    expect((await f.r.getGoldenSetTraces(f.projectId,f.criterionVersionId)).get(f.trace.caseId)?.input).toBe('x');
+    expect(await f.r.getGoldenSetHealth(f.projectId,f.criterionVersionId)).toMatchObject({totalActive:1});
+    await expect(f.r.promoteExceptionToGoldenSet({projectId:f.projectId,caseId:f.trace.caseId,skillVersionId:f.versionId,agreedLabel:'fail',reason:'Contradiction'})).rejects.toThrow(/conflict|contradict|recorded human/i);
+    await f.r.retireGoldenSetEntry({projectId:f.projectId,entryId:entry.id,actorUserId:f.user.id,reason:'Retired example'});
+    const empty=await f.r.getOrCreateRegressionDatasetRevision(f.projectId,f.user.id,f.criterionVersionId);expect(empty).toMatchObject({parentRevisionId:revision.id,itemCount:0,revisionNumber:2});
+    expect(await f.r.listGoldenSet(f.projectId,f.criterionVersionId)).toEqual([]);
+    expect(await f.r.getDatasetRevisionDetail(f.projectId,revision.id)).toEqual(revision);
+    await expect(f.r.retireGoldenSetEntry({projectId:f.projectId,entryId:entry.id})).rejects.toMatchObject({name:'GoldenSetEntryAlreadyRetiredError'});
+    expect(await f.r.listAuditEntries(f.projectId,'golden_set_entry',entry.id)).toHaveLength(1);
+    await peer.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  });
+  it('rolls promotion back if revision finalization fails and rejects mismatched direct bindings',async()=> {
+    const f=await fixture(),before=f.db.prepare('SELECT count(*) n FROM verdicts').get()?.n;
+    f.db.exec("CREATE TRIGGER fail_revision BEFORE INSERT ON dataset_revision_finalizations BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
+    await expect(f.r.promoteExceptionToGoldenSet({projectId:f.projectId,caseId:f.trace.caseId,skillVersionId:f.versionId,agreedLabel:'pass',reason:'Reviewed'})).rejects.toThrow(/synthetic/);
+    expect(f.db.prepare('SELECT count(*) n FROM verdicts').get()?.n).toBe(before);expect(f.db.prepare('SELECT count(*) n FROM golden_set_entries').get()?.n).toBe(0);
+    f.db.exec('DROP TRIGGER fail_revision');
+    const entry=await f.r.promoteExceptionToGoldenSet({projectId:f.projectId,caseId:f.trace.caseId,skillVersionId:f.versionId,agreedLabel:'pass',reason:'Reviewed'});
+    const second=await f.r.createCriterion(f.projectId,{...definition,stableKey:'other'},{});
+    expect(()=>f.db.prepare('UPDATE golden_set_entries SET source_skill_version_id=? WHERE id=?').run(second.evaluator.currentVersion.id,entry.id)).toThrow(/binding/);
+    expect(await f.r.getCaseDetail('other',f.trace.caseId,f.versionId)).toBeNull();
+    await expect(f.r.getOrCreateRegressionDatasetRevision(f.projectId)).rejects.toThrow(/explicit/);
+    await expect(f.r.listGoldenSet('other',f.criterionVersionId)).rejects.toThrow(/project/);
+  });
+});

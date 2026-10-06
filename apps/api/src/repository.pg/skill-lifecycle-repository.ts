@@ -805,6 +805,13 @@ export class PgSkillLifecycleRepository implements SkillLifecycleRepositoryPort 
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      // A terminal queue retry may race a still-running provider execution.
+      // Share its ownership lock before changing status or minting evidence.
+      const ownership = await client.query<{ owned: boolean }>(
+        `select pg_try_advisory_xact_lock(hashtextextended($1, 0)) as owned`,
+        [`candidate-regression:${job.projectId}:${job.skillVersionId}`]
+      );
+      if (!ownership.rows[0]?.owned) throw new Error("Regression execution is still owned by another live attempt");
       const locked = await client.query(
         `select status, regression_dataset_revision_id from skill_versions
          where id = $1 and project_id = $2

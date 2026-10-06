@@ -1,4 +1,5 @@
-import { DatasetNotFoundError } from '../../repository/errors.js';
+import { DatasetNotFoundError, DatasetRevisionConflictError, SealedValidationUnavailableError } from '../../repository/errors.js';
+import { recordSqliteEvalExposure } from './eval-exposure.js';
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -30,15 +31,23 @@ export function sqliteEvalCommands(db:DatabaseSync) {
     if(finished(row)&&row.trigger==='release_evidence') receipts.mint(projectId,evalRunId,now);
     return {runFinished:finished(row)};
   }
-  const commands={
-    createEvalRun(input:Args<'createEvalRun'>[0]) { return transaction(now=> {
+  function createOnce(input:Args<'createEvalRun'>[0]&{convergenceCaseId?:string;ingestionCaseId?:string}) { return transaction(now=> {
       if(input.datasetId&&!one('SELECT 1 FROM datasets WHERE project_id=? AND id=? AND archived_at IS NULL',input.projectId,input.datasetId)) throw new DatasetNotFoundError(input.datasetId);
-      if(input.datasetRevisionId||input.sourceTraceTest||!['manual','api_batch','release_evidence'].includes(input.trigger)) throw new SqliteFeatureUnavailableError('SQLite evaluation source unavailable at this stage');
+      if(!['manual','api_batch','backfill','release_evidence'].includes(input.trigger)) throw new SqliteFeatureUnavailableError('SQLite evaluation source unavailable at this stage');
+      if(input.datasetRevisionId) {
+        const revision=one('SELECT * FROM dataset_revisions WHERE project_id=? AND id=?',input.projectId,input.datasetRevisionId);
+        if(revision?.source_kind==='analysis_population')throw new DatasetRevisionConflictError('Analysis population revisions cannot run through the ordinary evaluation path');
+        if(revision?.role==='sealed_validation')throw new SealedValidationUnavailableError();
+      }
+      const existing=input.trigger==='backfill'?one("SELECT id FROM eval_runs WHERE project_id=? AND skill_version_id=? AND trigger='backfill'",input.projectId,input.skillVersionId):
+        input.ingestionCaseId?one('SELECT id FROM eval_runs WHERE project_id=? AND skill_version_id=? AND ingestion_case_id=?',input.projectId,input.skillVersionId,input.ingestionCaseId):
+        input.convergenceCaseId?one("SELECT id FROM eval_runs WHERE project_id=? AND skill_version_id=? AND convergence_case_id=? AND status IN ('pending','running')",input.projectId,input.skillVersionId,input.convergenceCaseId):null;
+      if(existing)return {run:commands.getEvalRunDetail(input.projectId,existing.id)!,created:false};
+
       const runId=`eval_${randomUUID()}`,stamp=new Date(now).toISOString();
       let completed=0,agreed=0,total=0;
       for(const item of input.items) {
         if(!['pending','completed','skipped'].includes(item.status??'pending')) throw new Error('Invalid evaluation item status at creation');
-        if(item.datasetRevisionItemId) throw new SqliteFeatureUnavailableError('SQLite dataset revision unavailable at this stage');
         if(item.status!=='skipped') total++;
         if(item.status==='completed') {
           verifyVerdict(input.projectId,item.caseId,input.skillVersionId,item.verdictId??'',item.resultLabel??'',item.failingStep);
@@ -46,17 +55,22 @@ export function sqliteEvalCommands(db:DatabaseSync) {
         } else if(item.verdictId||item.resultLabel||item.cached) throw new Error('Only completed items may carry cached verdicts');
         if(input.trigger==='release_evidence'&&!one("SELECT 1 FROM cases WHERE project_id=? AND id=? AND case_type='release_evidence'",input.projectId,item.caseId)) throw new Error('Release evidence requires release evidence cases');
       }
-      run(`INSERT INTO eval_runs(id,project_id,dataset_id,skill_version_id,trigger,status,blocking,total_items,completed_items,agreed_items,created_by_user_id,created_at,finished_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,runId,input.projectId,input.datasetId??null,input.skillVersionId,input.trigger,completed===total?'completed':'pending',Number(input.blocking??false),total,completed,agreed,input.createdByUserId??null,stamp,completed===total?stamp:null);
+      run(`INSERT INTO eval_runs(id,project_id,dataset_id,skill_version_id,trigger,status,blocking,total_items,completed_items,agreed_items,created_by_user_id,created_at,finished_at,dataset_revision_id,convergence_case_id,ingestion_case_id,source_trace_test_id,source_trace_test_revision,source_trace_test_validation_id,source_trace_test_validation_revision,source_trace_test_case_ref,source_trace_test_case_id,source_trace_test_dataset_item_id)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,runId,input.projectId,input.datasetId??null,input.skillVersionId,input.trigger,completed===total?'completed':'pending',Number(input.blocking??false),total,completed,agreed,input.createdByUserId??null,stamp,completed===total?stamp:null,input.datasetRevisionId??null,input.convergenceCaseId??null,input.ingestionCaseId??null,input.sourceTraceTest?.traceTestId??null,input.sourceTraceTest?.revision??null,input.sourceTraceTest?.validationId??null,input.sourceTraceTest?.validationRevision??null,input.sourceTraceTest?.sourceCaseRef??null,input.sourceTraceTest?.caseId??null,input.sourceTraceTest?.datasetItemId??null);
       for(const item of input.items) {
         const status=item.status??'pending';
-        run(`INSERT INTO eval_run_items(id,project_id,eval_run_id,dataset_item_id,case_id,client_item_id,content_digest,status,verdict_id,expected_label,result_label,agreement,cached,created_at,finished_at,expected_fail_step,failing_step,provider_metadata,delivery_deadline_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`evali_${randomUUID()}`,input.projectId,runId,item.datasetItemId??null,item.caseId,item.clientItemId??null,item.contentDigest??null,status,item.verdictId??null,item.expectedLabel??null,item.resultLabel??null,
-          status==='completed'&&item.expectedLabel?Number(item.expectedLabel===item.resultLabel):null,Number(item.cached??false),stamp,status==='pending'?null:stamp,item.expectedFailStep??null,item.failingStep??null,json(item.providerMetadata),status==='pending'?now+EXECUTION_LEASE_MS:null);
+        run(`INSERT INTO eval_run_items(id,project_id,eval_run_id,dataset_item_id,case_id,client_item_id,content_digest,status,verdict_id,expected_label,result_label,agreement,cached,created_at,finished_at,expected_fail_step,failing_step,provider_metadata,delivery_deadline_at,dataset_revision_item_id)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`evali_${randomUUID()}`,input.projectId,runId,item.datasetItemId??null,item.caseId,item.clientItemId??null,item.contentDigest??null,status,item.verdictId??null,item.expectedLabel??null,item.resultLabel??null,
+          status==='completed'&&item.expectedLabel?Number(item.expectedLabel===item.resultLabel):null,Number(item.cached??false),stamp,status==='pending'?null:stamp,item.expectedFailStep??null,item.failingStep??null,json(item.providerMetadata),status==='pending'?now+EXECUTION_LEASE_MS:null,item.datasetRevisionItemId??null);
       }
       if(completed===total&&input.trigger==='release_evidence') receipts.mint(input.projectId,runId,now);
-      return commands.getEvalRunDetail(input.projectId,runId)!;
-    }); },
+      if(completed===total)recordSqliteEvalExposure(db,runRow(input.projectId,runId)!,now);
+      return {run:commands.getEvalRunDetail(input.projectId,runId)!,created:true};
+    }); }
+  const commands={
+    createEvalRun(input:Args<'createEvalRun'>[0]) {return createOnce(input).run;},
+    createConvergenceEvalRun(input:Args<'createConvergenceEvalRun'>[0]) {return createOnce({...input,trigger:'manual',items:[{caseId:input.caseId}],convergenceCaseId:input.caseId});},
+    createImportedCaseEvalRun(input:Args<'createImportedCaseEvalRun'>[0]) {return createOnce({...input,trigger:'api_batch',items:[{caseId:input.caseId}],ingestionCaseId:input.caseId});},
     getEvalRun(projectId:string,evalRunId:string) { const row=runRow(projectId,evalRunId);return row?evalRun(row):null; },
     getEvalRunItem(projectId:string,evalRunId:string,evalRunItemId:string) { const row=one('SELECT * FROM eval_run_items WHERE project_id=? AND eval_run_id=? AND id=?',projectId,evalRunId,evalRunItemId);return row?evalItem(row):null; },
     getEvalRunDetail(projectId:string,evalRunId:string) {
@@ -65,8 +79,7 @@ export function sqliteEvalCommands(db:DatabaseSync) {
       return {...value,items,spend:computeEvalRunSpend(items)};
     },
     listEvalRuns(projectId:string,opts:Args<'listEvalRuns'>[1]={}) {
-      if(opts.purpose) throw new SqliteFeatureUnavailableError('SQLite purpose-filtered evaluations unavailable at this stage');
-      return all(`SELECT * FROM eval_runs WHERE project_id=? ${opts.skillVersionId?'AND skill_version_id=?':''} ORDER BY created_at DESC,id DESC LIMIT ?`,projectId,...(opts.skillVersionId?[opts.skillVersionId]:[]),sqliteLimit(opts.limit??50)).map(evalRun);
+      return all(`SELECT * FROM eval_runs WHERE project_id=? AND(? IS NULL OR skill_version_id=?) AND(? IS NULL OR trigger='backfill' OR(?='first_assessment' AND trigger='api_batch' AND dataset_id IS NULL)) ORDER BY CASE WHEN ?='first_assessment' AND status IN ('pending','running') THEN 0 ELSE 1 END,created_at DESC,id DESC LIMIT ?`,projectId,opts.skillVersionId??null,opts.skillVersionId??null,opts.purpose??null,opts.purpose??null,opts.purpose??null,sqliteLimit(opts.limit??50)).map(evalRun);
     },
     completeEvalRunItem(input:Args<'completeEvalRunItem'>[0]) { return transaction(now=> {
       const owner=runRow(input.projectId,input.evalRunId);

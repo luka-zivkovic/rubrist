@@ -1,3 +1,4 @@
+import { ProductionRecordRepositoryError } from '../../production-calibration/repository.js';
 import { SqliteFeatureUnavailableError } from './feature-error.js';
 import * as repositoryErrors from '../../repository/errors.js';
 import { Worker } from 'node:worker_threads';
@@ -12,10 +13,10 @@ export class SqliteStorage {
   private failure: Error | null = null;
   private readonly pending = new Map<number,{resolve:(value:any)=>void;reject:(error:Error)=>void}>();
   readonly ready: Promise<void>;
-  constructor(path: string) {
+  constructor(path: string, options:{seedStarterEvaluators?:boolean}={}) {
     const source = import.meta.url.endsWith('.ts');
     this.worker = new Worker(new URL(source ? './worker.ts' : './worker.js',import.meta.url), {
-      workerData:{path}, ...(source ? {execArgv:['--import','tsx']} : {})
+      workerData:{path,seedStarterEvaluators:options.seedStarterEvaluators??true}, ...(source ? {execArgv:['--import','tsx']} : {})
     });
     this.ready = new Promise((resolve,reject) => {
       this.worker.on('message',message => {
@@ -25,6 +26,7 @@ export class SqliteStorage {
         this.pending.delete(message.id);
         if (message.error) {
           const error = message.error.name === 'AgentSetupPairingInProgressError' ? new AgentSetupPairingInProgressError() : Object.assign(new Error(message.error.message),message.error);
+          if(message.error.name==='ProductionRecordRepositoryError') Object.setPrototypeOf(error,ProductionRecordRepositoryError.prototype);
           if(message.error.name==='SqliteFeatureUnavailableError') Object.setPrototypeOf(error,SqliteFeatureUnavailableError.prototype);
           const domainError = Object.hasOwn(repositoryErrors,message.error.name)
             ? repositoryErrors[message.error.name as keyof typeof repositoryErrors] : undefined;

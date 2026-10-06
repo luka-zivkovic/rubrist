@@ -1,0 +1,58 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { MockJudgeProvider } from '@rubrist/audit/runtime';
+import { createSqliteRuntime } from '../src/storage/sqlite/runtime.js';
+import { createApp } from '../src/app.js';
+import { registerGateRunWorker } from '../src/workers/gate.js';
+import { bindingInput } from './fixtures/execution-binding.js';
+const cleanup:Array<()=>void|Promise<void>>=[];
+afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
+it('initializes a real starter and completes authenticated editing through the durable regression worker',async()=>{
+ vi.stubEnv('BETTER_AUTH_SECRET','sqlite-onboarding-test-secret-at-least-32-characters');
+ const dir=mkdtempSync(join(tmpdir(),'rubrist-onboarding-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
+ let calls=0;
+ const runtime=await createSqliteRuntime(join(dir,'db.sqlite'),()=>Object.assign(new MockJudgeProvider(),{name:'anthropic',async judge(){calls++;throw new Error('Empty regression must not call a provider');}}));cleanup.push(()=>runtime.close());
+ const app=createApp(runtime.repository,{auth:runtime.auth,accounts:runtime.accounts,runtimeMode:'persistent',queue:runtime.queue,productionDecisionRecordRepository:runtime.productionRecords,capabilityChecks:runtime.capabilityChecks});
+ const setup=await app.request('/api/auth/setup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password:'synthetic-long-password',name:'Owner'})});expect(setup.status).toBe(200);
+ const cookie=setup.headers.getSetCookie().map(value=>value.split(';')[0]).join('; '),headers={cookie,'content-type':'application/json'};
+ const current=await app.request('/api/skills/current',{headers});expect(current.status).toBe(200);const skill=await current.json() as any;
+ expect(skill.isStarter).toBe(true);expect(skill.currentVersion.status).toBe('draft');expect(skill.currentVersion.executionBinding.provider).not.toBe('mock');
+ expect(await runtime.accounts.pairingEligibility(skill.projectId)).toBe('eligible');
+ vi.stubEnv('ANTHROPIC_API_KEY','');
+ const unavailableRuntime=await createSqliteRuntime(join(dir,'db.sqlite'));cleanup.push(()=>unavailableRuntime.close());
+ const unavailableApp=createApp(unavailableRuntime.repository,{auth:unavailableRuntime.auth,accounts:unavailableRuntime.accounts,runtimeMode:'persistent',queue:unavailableRuntime.queue});
+ const refused=await unavailableApp.request(`/api/skills/${skill.id}/versions`,{method:'POST',headers,body:JSON.stringify({rubricMarkdown:'Unavailable',prompt:'Judge {{rubric_markdown}}',executionBinding:bindingInput(skill.currentVersion.executionBinding),verdictKind:'binary',timeScope:'new'})});
+ expect(refused.status).toBe(503);expect(await runtime.repository.listSkillVersions(skill.projectId,skill.id)).toHaveLength(1);
+
+ await runtime.queue.start();await registerGateRunWorker(runtime.queue,runtime.repository);
+ const edit=await app.request(`/api/skills/${skill.id}/versions`,{method:'POST',headers,body:JSON.stringify({rubricMarkdown:'Approved rubric',prompt:'Judge {{rubric_markdown}}',executionBinding:bindingInput(skill.currentVersion.executionBinding),verdictKind:'binary',timeScope:'new'})});
+ expect(edit.status).toBe(202);const queued=await edit.json() as any;
+ await vi.waitFor(async()=>expect((await runtime.repository.getRegressionRunForVersion(skill.projectId,queued.version.id))?.status).toBe('passed'),{timeout:5000,interval:30});
+ expect(calls).toBe(0);expect((await runtime.repository.getSkillVersion(skill.projectId,queued.version.id))?.status).toBe('approved');expect(await runtime.accounts.pairingEligibility(skill.projectId)).toBe('project_already_configured');
+ const history=await app.request(`/api/skills/${skill.id}/versions`,{headers});expect(history.status).toBe(200);
+ const ledger=await history.json() as any;expect(ledger.versions).toHaveLength(2);expect(ledger.regressionRuns).toMatchObject([{skillVersionId:queued.version.id,status:'passed'}]);
+ const dashboard=await app.request('/api/dashboard',{headers});expect(dashboard.status).toBe(200);
+ const key=await runtime.repository.createApiKey({projectId:skill.projectId,name:'monitoring',capability:'production_ingest'});
+ const production=await app.request('/api/v1/production-decisions',{method:'POST',headers:{authorization:`Bearer ${key.key}`,'content-type':'application/json'},body:JSON.stringify({records:[{kind:'outcome',decisionId:'synthetic',at:'2026-09-20T00:00:00Z',question:'correct',value:true,source:'human'}]})});
+ expect(production.status).toBe(200);
+ expect((await runtime.productionRecords.loadRecords({projectId:skill.projectId,window:{from:null,to:null},maxRecords:10})).records).toHaveLength(1);
+ expect(await runtime.repository.listCases(skill.projectId)).toEqual([]);
+});
+
+it('upgrades an existing empty project once before readiness without rerunning account setup',async()=>{
+ vi.stubEnv('BETTER_AUTH_SECRET','sqlite-onboarding-test-secret-at-least-32-characters');
+ const dir=mkdtempSync(join(tmpdir(),'rubrist-onboarding-upgrade-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
+ const path=join(dir,'db.sqlite'),old=await createSqliteRuntime(path,undefined,{seedStarterEvaluators:false});cleanup.push(()=>old.close());
+ const {user}=await old.auth.api.signUpEmail({body:{email:'owner@example.test',password:'synthetic-long-password',name:'Owner'}});
+ const {projectId}=await old.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+ await expect(old.repository.getCurrentSkill(projectId)).rejects.toThrow();await old.close();
+ const upgraded=await createSqliteRuntime(path);cleanup.push(()=>upgraded.close());
+ expect(await upgraded.accounts.setupRequired()).toBe(false);
+ const starter=await upgraded.repository.getCurrentSkill(projectId);expect(starter.isStarter).toBe(true);
+ expect(await upgraded.accounts.pairingEligibility(projectId)).toBe('eligible');
+ await upgraded.close();const restarted=await createSqliteRuntime(path);cleanup.push(()=>restarted.close());
+ expect((await restarted.repository.getCurrentSkill(projectId)).id).toBe(starter.id);
+ expect(await restarted.repository.listSkillVersions(projectId,starter.id)).toHaveLength(1);
+});

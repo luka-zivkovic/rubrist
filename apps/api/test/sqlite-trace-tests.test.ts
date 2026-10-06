@@ -1,0 +1,90 @@
+import { CreateCriterionInputSchema } from '@rubrist/shared';
+import { MOCK_BINDING, bindingInput } from './fixtures/execution-binding.js';
+import { CreateTraceTestInputSchema } from '@rubrist/shared';
+import { TraceTestRevisionConflictError } from '../src/repository/errors.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { openSqlite } from '@rubrist/db/sqlite';
+import { createUnseededSqliteRuntime as createSqliteRuntime } from './helpers/sqlite.js';
+import { sqliteCommands } from '../src/storage/sqlite/commands.js';
+import { datasetInputIdentity } from '../src/lib/dataset-revision.js';
+import { DatasetRevisionConflictError, SealedValidationUnavailableError } from '../src/repository/errors.js';
+const cleanup:Array<()=>void|Promise<void>>=[];
+afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();vi.unstubAllEnvs();});
+async function fixture() {
+  vi.stubEnv('BETTER_AUTH_SECRET','sqlite-revision-test-secret-at-least-32-characters');
+  const dir=mkdtempSync(join(tmpdir(),'rubrist-revisions-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
+  const path=join(dir,'db.sqlite'),runtime=await createSqliteRuntime(path);cleanup.push(()=>runtime.close());
+  const {user}=await runtime.auth.api.signUpEmail({body:{email:'owner@example.test',password:'synthetic-long-password',name:'Owner'}});
+  const {projectId}=await runtime.accounts.ensureWorkspaceForUser({userId:user.id,email:user.email,owner:true});
+  const r=runtime.repository,dataset=await r.createDataset({projectId,name:'Examples'});
+  const db=openSqlite(path);cleanup.push(()=>db.close());sqliteCommands(db);
+  return {path,runtime,r,projectId,dataset,db,user};
+}
+
+const draft=CreateTraceTestInputSchema.parse({sourceCaseId:'replaced',sourceScope:{responsePath:['output']},desiredBehavior:'Use evidence',scenario:'Question',expectedBehavior:'Grounded answer',goodExample:'Grounded',badExample:'Invented',checker:{kind:'manual',label:'Evidence'},draftProvenance:{origin:'human'}});
+it('retains redacted source and append-only validated revisions through races, retention and restart',async()=>{
+ const f=await fixture(),trace=await f.r.importTrace(f.projectId,'manual',{input:{password:'private'},output:'answer',metadata:{}},{ingestionPurpose:'analysis_eligible_manual'});
+ const test=await f.r.createTraceTest({...draft,projectId:f.projectId,sourceCaseId:trace.caseId,createdByUserId:f.user.id});
+ expect(JSON.stringify(test)).not.toContain('private');expect(test.currentRevision).toBe(1);
+ await expect(f.r.createTraceTest({...draft,projectId:'other',sourceCaseId:trace.caseId})).rejects.toThrow(/not found/);
+ const proof={projectId:f.projectId,traceTestId:test.id,revision:1,badEvidence:{result:'fail' as const,output:'bad',note:null},goodEvidence:{result:'pass' as const,output:'good',note:null},recordedByUserId:f.user.id};
+ const unauthenticated=await f.r.recordTraceTestValidation(proof);
+ await expect(f.r.enableTraceTest({projectId:f.projectId,traceTestId:test.id,expectedRevision:1,validationId:unauthenticated.id,reviewedByUserId:f.user.id})).rejects.toThrow(/successful validation/);
+ const valid=await f.r.recordTraceTestValidation({...proof,method:'manual_override',overrideReason:'Reviewed both contrasting examples'});
+ const enabled=await f.r.enableTraceTest({projectId:f.projectId,traceTestId:test.id,expectedRevision:1,validationId:valid.id,reviewedByUserId:f.user.id});
+ expect(enabled).toMatchObject({currentRevision:2,enabledRevision:2,lifecycle:'enabled',hasUnpublishedChanges:false});expect(enabled.revisions[0]).toEqual(test.revisions[0]);
+ const peer=await createSqliteRuntime(f.path);cleanup.push(()=>peer.close());
+ const update={...draft,projectId:f.projectId,traceTestId:test.id,expectedRevision:2,desiredBehavior:'Better evidence'};
+ const attempts=await Promise.allSettled([f.r.reviseTraceTest(update),peer.repository.reviseTraceTest(update)]);
+ expect(attempts.filter(a=>a.status==='fulfilled')).toHaveLength(1);
+ const failure=attempts.find(a=>a.status==='rejected') as PromiseRejectedResult;expect(failure.reason).toBeInstanceOf(TraceTestRevisionConflictError);expect(failure.reason).toMatchObject({expectedRevision:2,currentRevision:3});
+ await expect(f.r.recordTraceTestValidation(proof)).rejects.toThrow(/revision/);
+ expect(()=>f.db.exec("UPDATE trace_test_revisions SET scenario='changed'")).toThrow(/immutable/);
+ expect(()=>f.db.exec("UPDATE trace_test_validations SET status='failed'")).toThrow(/immutable/);
+ expect(()=>f.db.exec('DELETE FROM trace_test_validations')).toThrow(/erasure/);
+ f.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId);
+ const retained=(await f.r.getTraceTest(f.projectId,test.id))!;expect(retained).toMatchObject({sourceCaseId:null,sourceCaseRef:trace.caseId,hasUnpublishedChanges:true});expect(retained.sourceSnapshot).toEqual(test.sourceSnapshot);
+ f.db.prepare('DELETE FROM "user" WHERE id=?').run(f.user.id);
+ expect((await f.r.getTraceTest(f.projectId,test.id))?.revisions[1]).toMatchObject({lifecycle:'enabled',reviewedByUserId:null,validationId:valid.id});
+ retained.revisions[0]!.createdByUserId=null;retained.revisions[1]!.createdByUserId=null;retained.revisions[1]!.reviewedByUserId=null;retained.createdByUserId=null;retained.validations.forEach(v=>v.recordedByUserId=null);
+ await f.runtime.close();const restarted=await createSqliteRuntime(f.path);cleanup.push(()=>restarted.close());expect(await restarted.repository.getTraceTest(f.projectId,test.id)).toEqual(retained);
+ expect(await restarted.repository.listTraceTests('other')).toEqual([]);
+ await restarted.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('SELECT count(*) n FROM trace_test_revisions').get()?.n).toBe(0);expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+});
+
+it('rolls back incomplete creation and invalid overrides and deduplicates funnel events',async()=>{
+ const f=await fixture(),trace=await f.r.importTrace(f.projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'analysis_eligible_manual'});
+ f.db.exec("CREATE TRIGGER break_draft BEFORE INSERT ON trace_test_revisions BEGIN SELECT RAISE(ABORT,'injected revision failure'); END");
+ await expect(f.r.createTraceTest({...draft,projectId:f.projectId,sourceCaseId:trace.caseId})).rejects.toThrow(/injected/);
+ expect(f.db.prepare('SELECT count(*) n FROM trace_tests').get()?.n).toBe(0);f.db.exec('DROP TRIGGER break_draft');
+ const test=await f.r.createTraceTest({...draft,projectId:f.projectId,sourceCaseId:trace.caseId});
+ await expect(f.r.recordTraceTestValidation({projectId:f.projectId,traceTestId:test.id,revision:1,badEvidence:{result:'fail',output:'x',note:null},goodEvidence:{result:'pass',output:'y',note:null},method:'manual_override',overrideReason:'short'})).rejects.toThrow();
+ expect(f.db.prepare('SELECT count(*) n FROM trace_test_validations').get()?.n).toBe(0);
+ const event={projectId:f.projectId,journeyId:'synthetic',event:'started' as const,elapsedMs:0,intent:'prevent' as const};
+ await f.r.recordTraceTestFunnelEvent(event);await f.r.recordTraceTestFunnelEvent(event);
+ expect(f.db.prepare("SELECT count(*) n FROM audit_logs WHERE target_type='trace_test_funnel'").get()?.n).toBe(1);
+});
+
+it('pins an enabled trace test and its validation into runs and execution authorizations',async()=>{
+ const f=await fixture(),trace=await f.r.importTrace(f.projectId,'manual',{input:'x',output:'y',metadata:{}},{ingestionPurpose:'analysis_eligible_manual'});
+ const test=await f.r.createTraceTest({...draft,projectId:f.projectId,sourceCaseId:trace.caseId});
+ const proof=await f.r.recordTraceTestValidation({projectId:f.projectId,traceTestId:test.id,revision:1,badEvidence:{result:'fail',output:'bad',note:null},goodEvidence:{result:'pass',output:'good',note:null},method:'automated',evaluator:{provider:'mock',model:'synthetic'}});
+ await f.r.enableTraceTest({projectId:f.projectId,traceTestId:test.id,expectedRevision:1,validationId:proof.id,reviewedByUserId:f.user.id});
+ const evaluator=await f.r.createCriterion(f.projectId,CreateCriterionInputSchema.parse({stableKey:'grounded',name:'Grounded',definition:'Grounded answers',evaluator:{rubricMarkdown:'Grounded',prompt:'Judge',executionBinding:bindingInput(MOCK_BINDING)}}),{});
+ const versionId=evaluator.evaluator.currentVersion.id;
+ const imported=await f.r.importDatasetExamples({projectId:f.projectId,datasetId:f.dataset.id,ingestionPurpose:'trace_test_synthetic',items:[{sourceTraceId:'synthetic-test',input:'synthetic',output:'answer',metadata:{},expectedLabel:'fail'}]});
+ const item=imported.items[0]!,sourceTraceTest={traceTestId:test.id,revision:2,validationId:proof.id,validationRevision:1,sourceCaseRef:trace.caseId,caseId:item.caseId,datasetItemId:item.datasetItemId!};
+ const input={projectId:f.projectId,skillVersionId:versionId,trigger:'manual' as const,datasetId:f.dataset.id,sourceTraceTest,items:[{caseId:item.caseId,datasetItemId:item.datasetItemId!}]};
+ const run=await f.r.createEvalRun(input);expect(run.sourceTraceTest).toEqual(sourceTraceTest);
+ await expect(f.r.createEvalRun({...input,sourceTraceTest:{...sourceTraceTest,revision:1}})).rejects.toThrow(/binding/);
+ await expect(f.r.createEvalRun({...input,sourceTraceTest:{...sourceTraceTest,validationRevision:2}})).rejects.toThrow(/binding/);
+ await f.r.loadJudgeRunContext({projectId:f.projectId,caseId:item.caseId,skillVersionId:versionId,evalRunId:run.id,evalRunItemId:run.items[0]!.id});
+ expect(f.db.prepare('SELECT execution_context FROM evaluator_execution_authorizations WHERE resource_id=?').get(run.items[0]!.id)?.execution_context).toBe('trace_test');
+ expect(()=>f.db.prepare('UPDATE eval_runs SET source_trace_test_revision=1 WHERE id=?').run(run.id)).toThrow(/immutable/);
+ f.db.prepare('DELETE FROM cases WHERE id=?').run(trace.caseId);
+ expect((await f.r.getEvalRun(f.projectId,run.id))?.sourceTraceTest).toEqual(sourceTraceTest);
+ await f.r.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(f.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+});

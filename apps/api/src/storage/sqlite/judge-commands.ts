@@ -1,3 +1,5 @@
+import { recordSqliteQueueReview } from './review-commands.js';
+import { AmbiguousProjectSkillError, CaseNotFoundError } from '../../repository/errors.js';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { JudgeRunSchema, VerdictRecordSchema, type EvaluatorExecutionContext } from '@rubrist/shared';
@@ -19,7 +21,7 @@ export function sqliteJudgeCommands(db:DatabaseSync) {
       if(job.evalRunId) {
         const owner=one('SELECT * FROM eval_runs WHERE project_id=? AND id=? AND skill_version_id=?',job.projectId,job.evalRunId,skillVersion.id);
         if(!owner || (job.evalRunItemId&&!one('SELECT 1 FROM eval_run_items WHERE project_id=? AND eval_run_id=? AND id=? AND case_id=?',job.projectId,job.evalRunId,job.evalRunItemId,job.caseId))) throw new Error('Eval run item does not match judge job');
-        context=owner.trigger==='release_evidence'?'release_gate':owner.trigger==='manual'?'explicit_nonproduction_dataset':'manual_import';resourceKind='eval_run_item';resourceId=job.evalRunItemId??job.evalRunId;
+        context=owner.trigger==='release_evidence'?'release_gate':owner.source_trace_test_id?'trace_test':owner.trigger==='backfill'?'implicit_production':owner.trigger==='manual'?'explicit_nonproduction_dataset':'manual_import';resourceKind='eval_run_item';resourceId=job.evalRunItemId??job.evalRunId;
       } else {
         context=row.ingestion_purpose==='release_evidence'?'release_gate':row.ingestion_purpose==='judge_api'?'implicit_production':row.ingestion_purpose==='trace_test_synthetic'?'trace_test':'manual_import';resourceKind='case';resourceId=job.caseId;
       }
@@ -37,21 +39,30 @@ export function sqliteJudgeCommands(db:DatabaseSync) {
       return JudgeRunSchema.parse({...camel(row),latencyMs:row.latency_ms??undefined,providerMetadata:parse(row.provider_metadata)??undefined});
     }); },
     recordVerdict(input:Args<'recordVerdict'>[0]) { return transaction(now=> {
-      if(input.source!=='llm_judge'||input.actorUserId||input.externalRunId||input.reviewContext) throw new Error('SQLite non-evaluator verdict workflow unavailable at this stage');
-      const value=VerdictRecordSchema.parse({...input,id:`verdict_${randomUUID()}`,actorUserId:null,actorName:null,externalRunId:null,observed:input.observed??null,evaluatorScore:input.evaluatorScore??null,createdAt:new Date(now).toISOString()});
-      const row=one(`INSERT INTO verdicts(id,project_id,case_id,skill_version_id,source,verdict_kind,payload,created_at,observed,evaluator_score) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING *`,value.id,value.projectId,value.caseId,value.skillVersionId,'llm_judge',value.payload.kind,json(value.payload),value.createdAt,json(value.observed),json(value.evaluatorScore))!;
+      if(input.reviewContext)return recordSqliteQueueReview(db,input,now);
+      if(input.source==='imported_external'&&input.externalRunId) {
+        const existing=one("SELECT * FROM verdicts WHERE project_id=? AND source='imported_external' AND external_run_id=?",input.projectId,input.externalRunId);
+        if(existing)return verdict(existing);
+      }
+      let skillVersionId=input.skillVersionId??null;
+      // Same contract as PostgreSQL: an explicit evaluator must belong to the case's project.
+      if((input.source==='human'||input.source==='adjudicated')&&skillVersionId&&!one('SELECT 1 FROM skill_versions s JOIN cases c ON c.project_id=s.project_id WHERE s.project_id=? AND c.id=? AND s.id=?',input.projectId,input.caseId,skillVersionId))throw new CaseNotFoundError(input.caseId);
+      if((input.source==='human'||input.source==='adjudicated')&&!skillVersionId) {
+        const current=definitions.getCurrentSkill(input.projectId);
+        const count=one('SELECT count(*) n FROM criterion_versions WHERE project_id=?',input.projectId)!.n;
+        if(count>1)throw new AmbiguousProjectSkillError(input.projectId,count);
+        skillVersionId=one('SELECT skill_version_id FROM judge_runs WHERE project_id=? AND case_id=? ORDER BY created_at DESC,id DESC LIMIT 1',input.projectId,input.caseId)?.skill_version_id??current.currentVersion.id;
+      }
+      const value=VerdictRecordSchema.parse({...input,id:`verdict_${randomUUID()}`,skillVersionId,actorUserId:input.actorUserId??null,actorName:null,externalRunId:input.externalRunId??null,observed:input.observed??null,evaluatorScore:input.evaluatorScore??null,createdAt:new Date(now).toISOString()});
+      const row=one(`INSERT INTO verdicts(id,project_id,case_id,skill_version_id,source,actor_user_id,verdict_kind,payload,external_run_id,created_at,observed,evaluator_score) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`,value.id,value.projectId,value.caseId,value.skillVersionId,value.source,value.actorUserId,value.payload.kind,json(value.payload),value.externalRunId,value.createdAt,json(value.observed),json(value.evaluatorScore))!;
+      if(input.source==='human')run(`UPDATE review_queue_items SET status='completed',completed_at=? WHERE project_id=? AND case_id=? AND status='pending' AND judge_run_id IS NULL AND criterion_version_id=(SELECT criterion_version_id FROM skill_versions WHERE project_id=? AND id=?) AND(assigned_to_user_id IS NULL OR assigned_to_user_id=?)`,value.createdAt,input.projectId,input.caseId,input.projectId,skillVersionId,value.actorUserId);
       return verdict(row);
     }); },
     listVerdicts(input:Args<'listVerdicts'>[0]) {
       const filters=['v.project_id=?'];const params=[input.projectId];
       for(const [column,value] of [['v.case_id',input.caseId],['v.source',input.source],['v.skill_version_id',input.skillVersionId],['s.criterion_id',input.criterionId]]) if(value) { filters.push(`${column}=?`);params.push(value); }
       if(input.evidenceScope==='customer') filters.push("c.case_type<>'release_evidence'");
-      return all(`SELECT v.* FROM verdicts v JOIN cases c ON c.id=v.case_id AND c.project_id=v.project_id JOIN skill_versions sv ON sv.id=v.skill_version_id JOIN skills s ON s.id=sv.skill_id WHERE ${filters.join(' AND ')} ORDER BY v.created_at DESC,v.id DESC LIMIT ?`,...params,sqliteLimit(input.limit)).map(verdict);
+      return all(`SELECT v.*,coalesce(u.name,u.email) actor_name FROM verdicts v LEFT JOIN "user" u ON u.id=v.actor_user_id JOIN cases c ON c.id=v.case_id AND c.project_id=v.project_id LEFT JOIN skill_versions sv ON sv.id=v.skill_version_id LEFT JOIN skills s ON s.id=sv.skill_id WHERE ${filters.join(' AND ')} ORDER BY v.created_at DESC,v.id DESC LIMIT ?`,...params,sqliteLimit(input.limit)).map(verdict);
     },
-    createFeedbackSyncJob(_input:Args<'createFeedbackSyncJob'>[0]) {
-      // No integration-backed trace can exist under the current migration's
-      // source_integration_id IS NULL constraint. There is no upstream target.
-      return null;
-    }
   };
 }

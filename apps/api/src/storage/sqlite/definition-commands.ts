@@ -19,7 +19,7 @@ type Row = Record<string, any>;
 const id = (prefix: string) => `${prefix}_${randomUUID()}`;
 const json = (value: unknown) => value == null ? null : JSON.stringify(value);
 const parse = (value: unknown) => value == null ? null : JSON.parse(String(value));
-function version(row: Row): SkillVersion {
+export function sqliteSkillVersion(row: Row): SkillVersion {
   return SkillVersionSchema.parse({id:row.id,skillId:row.skill_id,criterionVersionId:row.criterion_version_id,version:row.version,status:row.status,
     rubricMarkdown:row.rubric_markdown,prompt:row.prompt,typedQuestion:parse(row.typed_question),decisionThreshold:row.decision_threshold,
     outputSchema:parse(row.output_schema),executionBinding:parse(row.execution_binding),customEndpointUrl:row.custom_endpoint_url,
@@ -139,7 +139,7 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
       });
     },
     getSkillVersion(projectId: string, versionId: string): SkillVersion | null {
-      const row=one('SELECT * FROM skill_versions WHERE project_id=? AND id=?',projectId,versionId);return row?version(row):null;
+      const row=one('SELECT * FROM skill_versions WHERE project_id=? AND id=?',projectId,versionId);return row?sqliteSkillVersion(row):null;
     },
     getCriterionVersionForSkillVersion(projectId: string, versionId: string) {
       const row=one('SELECT cv.* FROM criterion_versions cv JOIN skill_versions sv ON sv.criterion_version_id=cv.id AND sv.project_id=cv.project_id WHERE sv.project_id=? AND sv.id=?',projectId,versionId);
@@ -149,7 +149,7 @@ export function sqliteDefinitionCommands(db: DatabaseSync) {
     getCurrentSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId),
     getLatestSkill: (projectId: string) => skill(projectId,undefined,true),
     getLatestSkillForCriterion: (projectId: string, criterionId: string) => skill(projectId,criterionId,true),
-    listSkillVersions: (projectId: string, skillId: string, limit=50) => all('SELECT * FROM skill_versions WHERE project_id=? AND skill_id=? ORDER BY created_at DESC,id DESC LIMIT ?',projectId,skillId,sqliteLimit(limit)).map(version),
+    listSkillVersions: (projectId: string, skillId: string, limit=50) => all('SELECT * FROM skill_versions WHERE project_id=? AND skill_id=? ORDER BY created_at DESC,id DESC LIMIT ?',projectId,skillId,sqliteLimit(limit)).map(sqliteSkillVersion),
     authorizeSkillVersionExecution(input: Args<'authorizeSkillVersionExecution'>[0]): void {
       transaction(now=>{
         const digest=evaluatorExecutionAuthorizationDigest({...input,lifecycleEventId:null,calibrationArtifactId:null});

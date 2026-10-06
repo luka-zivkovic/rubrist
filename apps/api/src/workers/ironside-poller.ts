@@ -20,7 +20,7 @@ export interface IronsidePollingResult {
 }
 
 export interface IronsidePollerHandle {
-  stop(): void;
+  stop(): void | Promise<void>;
 }
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
@@ -36,8 +36,10 @@ export function registerIronsidePoller(
   if (intervalMs <= 0) return { stop() {} };
 
   let running = false;
+  let stopped = false;
+  let inFlight: Promise<void> | undefined;
   const tick = async () => {
-    if (running) return;
+    if (running || stopped) return;
     running = true;
     try {
       const result = await enqueueDueIronsideImports(repository, queue, { ...options, intervalMs });
@@ -51,10 +53,11 @@ export function registerIronsidePoller(
     }
   };
 
-  if (options.runOnStart ?? true) void tick();
-  const timer = setInterval(tick, intervalMs);
+  const start = () => { if (!running && !stopped) inFlight = tick(); };
+  if (options.runOnStart ?? true) start();
+  const timer = setInterval(start, intervalMs);
   timer.unref?.();
-  return { stop: () => clearInterval(timer) };
+  return { stop: async () => { stopped = true; clearInterval(timer); await inFlight; } };
 }
 
 export async function enqueueDueIronsideImports(

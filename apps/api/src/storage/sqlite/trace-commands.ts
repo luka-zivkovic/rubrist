@@ -13,34 +13,10 @@ export function sqliteTraceCommands(db: DatabaseSync) {
   const run=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).run(...args);
   const commands = {
     importTrace(projectId: string, source: CaseSource, input: ManualTraceImportInput, context: TraceImportContext): TraceImportResult {
-      assertTraceIngestionPurpose(source,context.ingestionPurpose);
-      if(isInternalTraceMetadata(input.metadata)) throw new RecursiveTraceSkippedError(input.sourceTraceId);
-      if(!['manual','release_evidence'].includes(source) || context.sourceIntegrationId || context.importJobId) {
-        throw new Error('Integration import storage is not yet available in SQLite');
-      }
       if(db.isTransaction) throw new Error('Nested SQLite trace import');
       db.exec('BEGIN IMMEDIATE');
-      try {
-        const now=new Date().toISOString();
-        const sourceTraceId=input.sourceTraceId?.trim() || `${source}_${randomUUID()}`;
-        const existing=one(`SELECT rt.id raw_trace_id,c.id case_id FROM raw_traces rt JOIN cases c ON c.raw_trace_id=rt.id AND c.project_id=rt.project_id
-          WHERE rt.project_id=? AND rt.source=? AND rt.source_trace_id=? AND rt.source_trace_version IS ? AND rt.source_remote_project_id IS ?`,
-          projectId,source,sourceTraceId,context.sourceTraceVersion??null,context.sourceRemoteProjectId??null);
-        let result: TraceImportResult;
-        if(existing) result={rawTraceId:String(existing.raw_trace_id),caseId:String(existing.case_id),sourceTraceId,created:false};
-        else {
-          const rawTraceId=`raw_${randomUUID()}`, caseId=`case_${randomUUID()}`;
-          const raw=normalizeTracePayload(input), normalized=redactNormalizedTracePayload(raw,context.redactionConfig);
-          run('INSERT INTO raw_traces VALUES(?,?,?,?,?,?,?,?,?,?,?)',rawTraceId,projectId,source,null,context.sourceRemoteProjectId??null,
-            sourceTraceId,context.sourceTraceVersion??null,null,JSON.stringify(raw),context.normalizationVersion??`${source}-v1`,now);
-          run('INSERT INTO cases VALUES(?,?,?,?,?,?,?)',caseId,projectId,rawTraceId,source,JSON.stringify(normalized),now,context.ingestionPurpose);
-          const identity=datasetInputIdentity({input:input.input});
-          run('INSERT INTO case_input_identity_records VALUES(?,?,?,?,?,?,?)',`ciir_${randomUUID()}`,projectId,caseId,'authoring_import',identity.basis,identity.digest,now);
-          if(source!=='release_evidence') run('UPDATE projects SET imported_trace_count=imported_trace_count+1,updated_at=? WHERE id=?',now,projectId);
-          result={rawTraceId,caseId,sourceTraceId,created:true};
-        }
-        db.exec('COMMIT'); return result;
-      } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
+      try { const result=importTraceInTransaction(db,projectId,source,input,context,new Date().toISOString());db.exec('COMMIT');return result; }
+      catch(error) { if(db.isTransaction)db.exec('ROLLBACK');throw error; }
     },
     getCaseSourceIdentity(projectId: string, caseId: string): CaseSourceIdentity | null {
       const row=one('SELECT rt.* FROM raw_traces rt JOIN cases c ON c.raw_trace_id=rt.id AND c.project_id=rt.project_id WHERE c.project_id=? AND c.id=?',projectId,caseId);
@@ -63,4 +39,31 @@ export function sqliteTraceCommands(db: DatabaseSync) {
     }
   };
   return commands;
+}
+
+// Internal command: caller owns the all-or-nothing bulk import transaction.
+export function importTraceInTransaction(db:DatabaseSync,projectId:string,source:CaseSource,input:ManualTraceImportInput,context:TraceImportContext,now:string):TraceImportResult {
+  if(!db.isTransaction) throw new Error('Trace import requires its owning transaction');
+  const one=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).get(...args);
+  const run=(sql:string,...args:SQLInputValue[])=>db.prepare(sql).run(...args);
+      assertTraceIngestionPurpose(source,context.ingestionPurpose);
+      if(isInternalTraceMetadata(input.metadata)) throw new RecursiveTraceSkippedError(input.sourceTraceId);
+        const sourceTraceId=input.sourceTraceId?.trim() || `${source}_${randomUUID()}`;
+        const existing=one(`SELECT rt.id raw_trace_id,c.id case_id FROM raw_traces rt JOIN cases c ON c.raw_trace_id=rt.id AND c.project_id=rt.project_id
+          WHERE rt.project_id=? AND rt.source=? AND rt.source_trace_id=? AND rt.source_trace_version IS ? AND rt.source_remote_project_id IS ?`,
+          projectId,source,sourceTraceId,context.sourceTraceVersion??null,context.sourceRemoteProjectId??null);
+        let result: TraceImportResult;
+        if(existing) result={rawTraceId:String(existing.raw_trace_id),caseId:String(existing.case_id),sourceTraceId,created:false};
+        else {
+          const rawTraceId=`raw_${randomUUID()}`, caseId=`case_${randomUUID()}`;
+          const raw=normalizeTracePayload(input), normalized=redactNormalizedTracePayload(raw,context.redactionConfig);
+          run('INSERT INTO raw_traces VALUES(?,?,?,?,?,?,?,?,?,?,?)',rawTraceId,projectId,source,context.sourceIntegrationId??null,context.sourceRemoteProjectId??null,
+            sourceTraceId,context.sourceTraceVersion??null,context.importJobId??null,JSON.stringify(raw),context.normalizationVersion??`${source}-v1`,now);
+          run('INSERT INTO cases VALUES(?,?,?,?,?,?,?)',caseId,projectId,rawTraceId,source,JSON.stringify(normalized),now,context.ingestionPurpose);
+          const identity=datasetInputIdentity({input:input.input});
+          run('INSERT INTO case_input_identity_records VALUES(?,?,?,?,?,?,?)',`ciir_${randomUUID()}`,projectId,caseId,'authoring_import',identity.basis,identity.digest,now);
+          if(source!=='release_evidence') run('UPDATE projects SET imported_trace_count=imported_trace_count+1,updated_at=? WHERE id=?',now,projectId);
+          result={rawTraceId,caseId,sourceTraceId,created:true};
+        }
+  return result;
 }

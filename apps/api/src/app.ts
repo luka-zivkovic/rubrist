@@ -106,7 +106,7 @@ import { registerTraceLinkRoutes } from "./routes/trace-links.js";
 import { registerV1AgentAdministrationRoutes } from "./routes/v1-agent-administration.js";
 import { registerV1EvaluationAdministrationRoutes } from "./routes/v1-evaluation-administration.js";
 import { bindingResolutionServices, type BindingResolutionServices } from "./lib/binding-resolution.js";
-import { MemoryCapabilityCheckStore, PgCapabilityCheckStore } from "./lib/capability-check-store.js";
+import { MemoryCapabilityCheckStore, PgCapabilityCheckStore, type CapabilityCheckStore } from "./lib/capability-check-store.js";
 
 export {
   agentSetupPairingClaimExpiresAt,
@@ -209,6 +209,7 @@ export interface CreateAppOptions {
   productionDecisionRecordRepository?: ProductionDecisionRecordRepository | null | undefined;
   /** How governed gates probe a binding; by default the project's credential against the real provider. */
   bindingResolution?: BindingResolutionServices | undefined;
+  capabilityChecks?: CapabilityCheckStore | undefined;
 }
 
 export function createApp(repository: RubristRepository = new DemoRepository(), options: CreateAppOptions = {}) {
@@ -685,7 +686,7 @@ export function createApp(repository: RubristRepository = new DemoRepository(), 
   // items or the private calibration ledger.
   const bindingResolution = options.bindingResolution ??
     bindingResolutionServices((projectId, provider) => repository.getJudgeProviderCredential(projectId, provider), {
-      checks: options.pool ? new PgCapabilityCheckStore(options.pool) : new MemoryCapabilityCheckStore()
+      checks: options.capabilityChecks ?? (options.pool ? new PgCapabilityCheckStore(options.pool) : new MemoryCapabilityCheckStore())
     });
   app.route("/api/binary-calibration-runs", createBinaryCalibrationControlRouter({
     repository: binaryCalibrationRepository,
