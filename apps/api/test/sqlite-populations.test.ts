@@ -9,6 +9,8 @@ import { openSqlite } from '@rubrist/db/sqlite';
 import { createUnseededSqliteRuntime } from './helpers/sqlite.js';
 import { sqliteCommand, type SqliteCommandContext } from '../src/storage/sqlite/command-context.js';
 import { sqliteCommands } from '../src/storage/sqlite/commands.js';
+import { sqlitePopulationCommands } from '../src/storage/sqlite/population-commands.js';
+import { AnalysisPopulationRepositoryError } from '../src/analysis-population/repository.js';
 import * as population from '../src/lib/analysis-population.js';
 import { datasetRevisionContentDigest, datasetRevisionDigest } from '../src/lib/dataset-revision.js';
 import { fixture, freeze, draftStudy, studyEvent, itemEvent, itemView, assignment, cleanup } from './helpers/sqlite-analysis.js';
@@ -143,6 +145,19 @@ it('serves authenticated population HTTP routes and maps invalid retained payloa
  sqliteCommand(f.db,c=>c.db.prepare("UPDATE cases SET normalized_payload=json_set(normalized_payload,'$.metadata',json('[]')) WHERE id=?").run(malformed.caseId),()=>f.now+120000);
  const invalid=await app.request('/api/analysis-populations',{method:'POST',body:JSON.stringify({...input,windowEnd:new Date(f.now+60000).toISOString(),idempotencyKey:'malformed'}),headers});expect(invalid.status).toBe(409);expect(await invalid.json()).toMatchObject({code:'analysis_population_revision_conflict'});
  expect(f.db.prepare('SELECT count(*) n FROM analysis_populations').get()?.n).toBe(1);
+});
+it('leaves storage engine failures unmapped rather than reporting a population conflict',async()=>{
+ const f=await fixture();sqliteCommand(f.db,()=>{},()=>f.now);
+ const actor={projectId:f.projectId,userId:f.userId,projectRole:'owner' as const};
+ const input={windowStart:'2020-01-01T00:00:00.000Z',windowEnd:new Date(f.now-60001).toISOString(),fixedBudget:2,idempotencyKey:'engine-readonly'};
+ // A read-only database is an engine failure, not a guard verdict; PostgreSQL
+ // also maps only constraint and serialization failures.
+ f.db.exec('PRAGMA query_only=ON');
+ const error=await Promise.resolve().then(()=>sqlitePopulationCommands(f.db).populationCreate(actor,input)).catch((caught:unknown)=>caught);
+ expect(error).not.toBeInstanceOf(AnalysisPopulationRepositoryError);
+ expect(Number((error as {errcode?:number}).errcode)&255).toBe(8);
+ f.db.exec('PRAGMA query_only=OFF');
+ expect(f.db.prepare('SELECT count(*) n FROM analysis_populations').get()?.n).toBe(0);
 });
 
 

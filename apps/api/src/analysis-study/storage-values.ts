@@ -204,4 +204,3 @@ export function textArray(value: unknown): string[] {
 export function nullableTextArray(value: unknown): (string | null)[] {
   return Array.isArray(value) ? value.map(nullableString) : [];
 }
-

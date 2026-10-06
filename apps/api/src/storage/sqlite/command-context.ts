@@ -21,6 +21,16 @@ export interface SqliteValidatorReader {
   iterate(sql:string,...values:SQLInputValue[]):IterableIterator<Record<string,SQLOutputValue>>;
 }
 interface ConnectionState { current:SqliteCommandContext|null; callbackActive:boolean; advancingClock:boolean; validatorActive:boolean; validators:Map<string,ReadonlySet<string>> }
+// Domain commands never change schema, attachments or connection pragmas. Such
+// changes are administrative and cannot shadow a validator trigger mid-command.
+const administrativeActions=new Set([
+  constants.SQLITE_CREATE_INDEX,constants.SQLITE_CREATE_TABLE,constants.SQLITE_CREATE_TEMP_INDEX,constants.SQLITE_CREATE_TEMP_TABLE,
+  constants.SQLITE_CREATE_TEMP_TRIGGER,constants.SQLITE_CREATE_TEMP_VIEW,constants.SQLITE_CREATE_TRIGGER,constants.SQLITE_CREATE_VIEW,
+  constants.SQLITE_DROP_INDEX,constants.SQLITE_DROP_TABLE,constants.SQLITE_DROP_TEMP_INDEX,constants.SQLITE_DROP_TEMP_TABLE,
+  constants.SQLITE_DROP_TEMP_TRIGGER,constants.SQLITE_DROP_TEMP_VIEW,constants.SQLITE_DROP_TRIGGER,constants.SQLITE_DROP_VIEW,
+  constants.SQLITE_PRAGMA,constants.SQLITE_ATTACH,constants.SQLITE_DETACH,constants.SQLITE_ALTER_TABLE,constants.SQLITE_REINDEX,
+  constants.SQLITE_ANALYZE,constants.SQLITE_CREATE_VTABLE,constants.SQLITE_DROP_VTABLE
+]);
 const connections=new WeakMap<DatabaseSync,ConnectionState>();
 function stateFor(db:DatabaseSync):ConnectionState {
   const existing=connections.get(db);if(existing)return existing;
@@ -70,7 +80,7 @@ export function sqliteCommand<T>(db:DatabaseSync,work:(context:SqliteCommandCont
         if(state.validatorActive||!source||!state.validators.get(arg2)!.has(source))return constants.SQLITE_DENY;
       }
       if(state.validatorActive&&![constants.SQLITE_READ,constants.SQLITE_SELECT,constants.SQLITE_FUNCTION,constants.SQLITE_RECURSIVE].includes(action))return constants.SQLITE_DENY;
-      return state.callbackActive&&(action===constants.SQLITE_TRANSACTION||action===constants.SQLITE_SAVEPOINT)?constants.SQLITE_DENY:constants.SQLITE_OK;
+      return state.callbackActive&&(action===constants.SQLITE_TRANSACTION||action===constants.SQLITE_SAVEPOINT||administrativeActions.has(action))?constants.SQLITE_DENY:constants.SQLITE_OK;
     });
     state.callbackActive=true;
     const result=work(context);

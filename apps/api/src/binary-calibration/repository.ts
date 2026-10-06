@@ -245,6 +245,16 @@ export interface BinaryCalibrationExecutionRepository {
     input: CompleteBinaryCalibrationAttemptInput
   ): Promise<void>;
   finalizeRun(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationMintResult>;
+  /**
+   * Terminal recovery for an already-authorized run whose evaluator lifecycle
+   * no longer authorizes calibration execution (ADR-0009, ADR-0010). Without
+   * any provider dispatch, one transaction accounts every pending attempt
+   * (`started` as `outcome_unknown`, `not_started` as `not_attempted`), mints
+   * the incomplete artifact through the ordinary mint, and releases the lease.
+   * Returns null, changing nothing, when the run is not yet authorized or its
+   * lifecycle still authorizes execution.
+   */
+  finalizeLifecycleForbiddenRun(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationMintResult | null>;
   markRecoveryRequired(claim: BinaryCalibrationExecutionClaim): Promise<void>;
 }
 

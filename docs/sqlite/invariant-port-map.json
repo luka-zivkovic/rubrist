@@ -153,7 +153,8 @@
         "packages/db/sqlite-migrations/0058_binary_calibration_storage.sql",
         "packages/db/sqlite-migrations/0059_binary_calibration_claims.sql",
         "packages/db/sqlite-migrations/0060_binary_calibration_authorization.sql",
-        "packages/db/sqlite-migrations/0061_binary_calibration_mint.sql"
+        "packages/db/sqlite-migrations/0061_binary_calibration_mint.sql",
+        "packages/db/sqlite-migrations/0068_binary_calibration_terminal_recovery.sql"
       ],
       "implementation": [
         "apps/api/src/storage/sqlite/calibration-claim-commands.ts",
@@ -173,7 +174,8 @@
         "apps/api/test/sqlite-calibration-mint.test.ts",
         "apps/api/test/sqlite-calibration-runtime.test.ts",
         "apps/api/test/sqlite-calibration-typed.test.ts",
-        "apps/api/test/sqlite-calibration.test.ts"
+        "apps/api/test/sqlite-calibration.test.ts",
+        "apps/api/test/sqlite-calibration-recovery.test.ts"
       ]
     },
     "governed-subjects": {
@@ -285,7 +287,8 @@
       "sqliteMigrations": [
         "packages/db/sqlite-migrations/0043_governed_review_drafts.sql",
         "packages/db/sqlite-migrations/0051_governed_sealed_intake.sql",
-        "packages/db/sqlite-migrations/0053_governed_sealed_drafts.sql"
+        "packages/db/sqlite-migrations/0053_governed_sealed_drafts.sql",
+        "packages/db/sqlite-migrations/0067_governed_sealed_intake_parity.sql"
       ],
       "implementation": [
         "apps/api/src/storage/sqlite/governed-draft-commands.ts",
@@ -294,7 +297,8 @@
       "tests": [
         "apps/api/test/sqlite-governed-drafts.test.ts",
         "apps/api/test/sqlite-governed-sealed-drafts.test.ts",
-        "apps/api/test/sqlite-governed-sealed-intake.test.ts"
+        "apps/api/test/sqlite-governed-sealed-intake.test.ts",
+        "apps/api/test/sqlite-governed-sealed-parity.test.ts"
       ]
     },
     "review-streams": {
@@ -400,7 +404,8 @@
       "tests": [
         "apps/api/test/sqlite-dataset-exact-payload.test.ts",
         "apps/api/test/sqlite-dataset-revisions.test.ts",
-        "apps/api/test/sqlite-golden.test.ts"
+        "apps/api/test/sqlite-golden.test.ts",
+        "apps/api/test/sqlite-dataset-source-parity.test.ts"
       ]
     },
     "definitions": {

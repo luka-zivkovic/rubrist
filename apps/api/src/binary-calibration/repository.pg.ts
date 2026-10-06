@@ -30,22 +30,23 @@ import {
   verifyBinaryCalibrationPrivateLedgerForArtifact
 } from "../lib/binary-calibration.js";
 
-import type {
-  BinaryCalibrationActor,
-  BinaryCalibrationArtifactCopy,
-  BinaryCalibrationArtifactStatusReason,
-  BinaryCalibrationArtifactStatusProjection,
-  BinaryCalibrationAttemptWorkItem,
-  BinaryCalibrationAuthorizedRun,
-  BinaryCalibrationControlRepository,
-  BinaryCalibrationExecutionClaim,
-  BinaryCalibrationExecutionRepository,
-  BinaryCalibrationMintResult,
-  BinaryCalibrationProjectAccess,
-  BinaryCalibrationRecheckTarget,
-  BinaryCalibrationRunProjection,
-  CompleteBinaryCalibrationAttemptInput,
-  CreateBinaryCalibrationRunInput
+import {
+  BinaryCalibrationRepositoryError,
+  type BinaryCalibrationActor,
+  type BinaryCalibrationArtifactCopy,
+  type BinaryCalibrationArtifactStatusReason,
+  type BinaryCalibrationArtifactStatusProjection,
+  type BinaryCalibrationAttemptWorkItem,
+  type BinaryCalibrationAuthorizedRun,
+  type BinaryCalibrationControlRepository,
+  type BinaryCalibrationExecutionClaim,
+  type BinaryCalibrationExecutionRepository,
+  type BinaryCalibrationMintResult,
+  type BinaryCalibrationProjectAccess,
+  type BinaryCalibrationRecheckTarget,
+  type BinaryCalibrationRunProjection,
+  type CompleteBinaryCalibrationAttemptInput,
+  type CreateBinaryCalibrationRunInput
 } from "./repository.js";
 
 import {
@@ -606,12 +607,85 @@ export class PgBinaryCalibrationRepository implements
   }
 
   async finalizeRun(claim: BinaryCalibrationExecutionClaim): Promise<BinaryCalibrationMintResult> {
+    const minted = await this.terminalize(claim, false);
+    if (!minted) throw repoError("state_conflict", "binary calibration run is not authorized");
+    return minted;
+  }
+
+  async finalizeLifecycleForbiddenRun(
+    claim: BinaryCalibrationExecutionClaim
+  ): Promise<BinaryCalibrationMintResult | null> {
+    return this.terminalize(claim, true);
+  }
+
+  async markRecoveryRequired(claim: BinaryCalibrationExecutionClaim): Promise<void> {
+    const result = await this.pool.query(
+      `update binary_calibration_runs
+       set state='recovery_required',claim_worker_id=null,claim_token=null,claim_expires_at=null
+       where id=$1 and claim_worker_id=$2 and claim_token=$3 and state='running'
+       returning id`,
+      [claim.runId, claim.workerId, claim.claimToken]
+    );
+    if (!result.rows[0]) throw repoError("state_conflict", "binary calibration worker claim is stale");
+  }
+
+  /**
+   * The one terminal mint. A lifecycle-forbidden recovery first proves, inside
+   * this transaction, that the run is authorized and its lifecycle now refuses
+   * the exact provider-start authorization, then accounts every pending
+   * attempt without a provider call before the ordinary mint.
+   */
+  private async terminalize(
+    claim: BinaryCalibrationExecutionClaim,
+    lifecycleForbidden: boolean
+  ): Promise<BinaryCalibrationMintResult | null> {
     return this.transaction(async (client) => {
-      const run = await requireClaim(client, claim, true);
+      let run = await requireClaim(client, claim, true);
+      if (lifecycleForbidden) {
+        if (!run.authorization_check_id) return null;
+        // A refusal rolls back only its savepoint; a run the lifecycle still
+        // authorizes leaves this transaction without any write.
+        await client.query("savepoint binary_calibration_lifecycle_recheck");
+        try {
+          await insertEvaluatorExecutionAuthorization(client, run, {
+            context: "binary_calibration_evidence",
+            resourceKind: "binary_calibration_run",
+            resourceId: String(run.id),
+            idempotencyKey: `provider-start:binary-calibration:${run.id}:${run.skill_version_id}`
+          });
+          await client.query("release savepoint binary_calibration_lifecycle_recheck");
+          return null;
+        } catch (error) {
+          const refusal = mapPgError(error);
+          if (!(refusal instanceof BinaryCalibrationRepositoryError) || refusal.code !== "ineligible") throw refusal;
+          await client.query("rollback to savepoint binary_calibration_lifecycle_recheck");
+        }
+      }
       await client.query(`select id from dataset_revisions where id=$1 for update`, [run.dataset_revision_id]);
       await requireActiveRevisionLease(client, run);
       if (!run.authorization_check_id || !run.started_at) {
         throw repoError("state_conflict", "binary calibration run is not authorized");
+      }
+      if (lifecycleForbidden) {
+        // No call is made: a started call is permanently outcome_unknown and
+        // an unstarted one is not_attempted.
+        const accounted = await client.query(
+          `update binary_calibration_attempts
+           set accounting_state='accounted',
+               terminal_evaluator_outcome=case attempt_state when 'started' then 'errored' else 'not_attempted' end,
+               error_code=case attempt_state when 'started' then 'outcome_unknown' end,
+               accounted_at=date_trunc('milliseconds',clock_timestamp())
+           where run_id=$1 and accounting_state='pending' and attempt_state in ('started','not_started')
+           returning id`,
+          [run.id]
+        );
+        if ((accounted.rowCount ?? 0) > 0) {
+          run = (await client.query<RunRow>(
+            `update binary_calibration_runs
+             set accounted_observations=accounted_observations+$2 where id=$1 returning *`,
+            [run.id, accounted.rowCount]
+          )).rows[0]!;
+        }
       }
       const pending = await client.query(
         `select count(*)::int as count from binary_calibration_attempts
@@ -834,17 +908,6 @@ export class PgBinaryCalibrationRepository implements
         }
       };
     });
-  }
-
-  async markRecoveryRequired(claim: BinaryCalibrationExecutionClaim): Promise<void> {
-    const result = await this.pool.query(
-      `update binary_calibration_runs
-       set state='recovery_required',claim_worker_id=null,claim_token=null,claim_expires_at=null
-       where id=$1 and claim_worker_id=$2 and claim_token=$3 and state='running'
-       returning id`,
-      [claim.runId, claim.workerId, claim.claimToken]
-    );
-    if (!result.rows[0]) throw repoError("state_conflict", "binary calibration worker claim is stale");
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {

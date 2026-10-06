@@ -35,3 +35,20 @@ it('never declares registered validator references outside triggers in the appli
  const db=fixture();
  for(const row of db.prepare("SELECT name,type,sql FROM sqlite_schema WHERE sql IS NOT NULL AND type<>'trigger'").all())expect(String(row.sql)).not.toMatch(/analysis_[a-z0-9_]+_valid_v[1-9][0-9]*\s*\(/);
 });
+it.each([
+ ['same-name temp trigger',"CREATE TEMP TRIGGER fixture_validate AFTER INSERT ON inputs BEGIN SELECT analysis_fixture_valid_v1(NEW.id); END"],
+ ['same-name view','CREATE VIEW fixture_validate AS SELECT analysis_fixture_valid_v1(1) v'],
+ ['check suppression','PRAGMA ignore_check_constraints=ON'],
+ ['attachment',"ATTACH ':memory:' AS shadow"],
+ ['guard removal','DROP TRIGGER fixture_validate']
+])('denies administrative %s inside a managed command',(_label,sql)=>{
+ const db=fixture();let calls=0;registerSqliteValidator(db,'analysis_fixture_valid_v1',['fixture_validate'],()=>{calls++;return true;});guard(db);
+ expect(()=>sqliteCommand(db,c=>c.db.exec(sql))).toThrow(/not authorized/);
+ expect(db.prepare("SELECT count(*) n FROM sqlite_temp_schema").get()?.n).toBe(0);
+ expect(db.prepare("SELECT count(*) n FROM sqlite_schema WHERE name='fixture_validate' AND type='trigger'").get()?.n).toBe(1);
+ expect(db.prepare('PRAGMA ignore_check_constraints').get()).toEqual({ignore_check_constraints:0});
+ expect(db.prepare('PRAGMA database_list').all().map(row=>row.name)).not.toContain('shadow');
+ sqliteCommand(db,c=>c.db.exec('INSERT INTO checks VALUES(1)'));expect(calls).toBe(1);
+ // Outside a command, schema maintenance remains an administrative boundary.
+ db.exec('PRAGMA ignore_check_constraints=OFF');
+});

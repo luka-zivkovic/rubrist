@@ -9,8 +9,11 @@ import {
 } from "../src/lib/binary-calibration.js";
 import { evaluatorIdentityFor, skillDigestOf } from "../src/lib/evaluator-identity.js";
 import {
+  BinaryCalibrationRepositoryError,
   type BinaryCalibrationActor
 } from "../src/binary-calibration/repository.js";
+import type { BinaryCalibrationProviderExecutor } from "../src/binary-calibration/provider.js";
+import { processBinaryCalibrationRun } from "../src/binary-calibration/worker.js";
 import { PgBinaryCalibrationRepository } from "../src/binary-calibration/repository.pg.js";
 import { PgGovernedReviewRepository, type GovernedReviewActor } from "../src/governed-review/index.js";
 import { PgRepository } from "../src/repository.pg.js";
@@ -447,6 +450,124 @@ run("PgBinaryCalibrationRepository", () => {
     await expect(pool.query(
       `delete from binary_calibration_private_ledgers where run_id=$1`, [runProjection.runId]
     )).rejects.toMatchObject({ code: "55000" });
+  }, 20_000);
+
+  it("ends an authorized run its lifecycle later refuses in one incomplete mint without dispatch", async () => {
+    const created = await repository.createRun(OWNER, {
+      datasetRevisionId: revisionId,
+      skillVersionId,
+      positiveClass: "pass",
+      trialPlan: { kind: "single", trialsPerItem: 1 },
+      suiteBinding: null,
+      idempotencyKey: "cal-run-lifecycle-refused"
+    });
+    const expireClaim = () => pool.query(
+      `update binary_calibration_runs set claim_expires_at=clock_timestamp()-interval '1 second' where id=$1`,
+      [created.runId]
+    );
+    const first = await repository.claimRun(created.runId, "cal-worker-lifecycle-a", 60_000);
+    await repository.authorizeRun(first!);
+    const started = await repository.getNextAttempt(first!);
+    await repository.recordProviderCallStarted(first!, started!.attemptId);
+    // While its lifecycle still authorizes it, a run is untouched by the recovery.
+    expect(await repository.finalizeLifecycleForbiddenRun(first!)).toBeNull();
+    expect((await pool.query(
+      `select attempt_state,accounting_state from binary_calibration_attempts where run_id=$1 order by attempt_state`,
+      [created.runId]
+    )).rows).toEqual([
+      { attempt_state: "not_started", accounting_state: "pending" },
+      { attempt_state: "started", accounting_state: "pending" }
+    ]);
+    await expireClaim();
+
+    // This legacy lineage has no lifecycle record, so the exact lifecycle
+    // decision the authorization guard consults is made to refuse calibration
+    // evidence for this version, as a retirement would.
+    if (!/^[A-Za-z0-9_-]+$/.test(skillVersionId)) throw new Error("unexpected skill version id");
+    await pool.query(`alter function evaluator_skill_version_context_allowed_v1(text,text,text) rename to evaluator_skill_version_context_allowed_test_original_v1`);
+    try {
+      await pool.query(
+        `create function evaluator_skill_version_context_allowed_v1(target_project_id text, target_skill_version_id text, target_context text)
+         returns boolean language sql stable as $$
+           select case when target_skill_version_id='${skillVersionId}' and target_context='binary_calibration_evidence' then false
+             else evaluator_skill_version_context_allowed_test_original_v1(target_project_id,target_skill_version_id,target_context) end
+         $$`
+      );
+      const probe = await repository.claimRun(created.runId, "cal-worker-lifecycle-probe", 60_000);
+      const refusal = await repository.authorizeRun(probe!).catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(BinaryCalibrationRepositoryError);
+      expect(refusal).toMatchObject({ code: "ineligible" });
+      await expireClaim();
+
+      const dispatched: string[] = [];
+      const executeProvider: BinaryCalibrationProviderExecutor = async ({ attempt, beforePhysicalCall }) => {
+        await beforePhysicalCall();
+        dispatched.push(attempt.attemptId);
+        return { outcome: "pass", providerObservation: { provider: "anthropic", observedModel: null, observedVersion: null, systemFingerprint: null, upstreamProvider: null } };
+      };
+      const minted = (await processBinaryCalibrationRun({
+        repository, executeProvider, runId: created.runId, workerId: "cal-worker-lifecycle-b", claimTtlMs: 60_000
+      }))!;
+      expect(dispatched).toEqual([]);
+      expect(minted.run).toMatchObject({ state: "incomplete", accountedObservations: 2 });
+      expect(minted.artifact).toMatchObject({
+        status: "incomplete",
+        incompleteReasons: ["trial_incomplete"],
+        trials: [{ outcomes: { planned: 2, classified: 0, errored: 1, notAttempted: 1, providerCalls: 1, errors: [{ code: "outcome_unknown", count: 1 }] } }]
+      });
+      expect((await pool.query(
+        `select attempt_state,terminal_evaluator_outcome,error_code,physical_provider_calls::int as physical_provider_calls
+         from binary_calibration_attempts where run_id=$1 order by attempt_state`,
+        [created.runId]
+      )).rows).toEqual([
+        { attempt_state: "not_started", terminal_evaluator_outcome: "not_attempted", error_code: null, physical_provider_calls: 0 },
+        { attempt_state: "started", terminal_evaluator_outcome: "errored", error_code: "outcome_unknown", physical_provider_calls: 1 }
+      ]);
+      const ledgerBytes = (await pool.query(
+        `select canonical_bytes from binary_calibration_private_ledgers where run_id=$1`, [created.runId]
+      )).rows[0].canonical_bytes as Buffer;
+      expect(verifyBinaryCalibrationPrivateLedgerForArtifact(JSON.parse(ledgerBytes.toString("utf8")), minted.artifact).ledger.records)
+        .toHaveLength(2);
+      expect((await pool.query(`select 1 from binary_calibration_revision_leases where run_id=$1`, [created.runId])).rows).toHaveLength(0);
+      const stored = (await pool.query(
+        `select canonical_bytes,artifact_digest from binary_calibration_artifacts where run_id=$1`, [created.runId]
+      )).rows;
+      expect(stored).toHaveLength(1);
+      await expect(pool.query(`update binary_calibration_artifacts set status='complete' where run_id=$1`, [created.runId]))
+        .rejects.toMatchObject({ code: "55000" });
+      await expect(pool.query(`delete from binary_calibration_artifacts where run_id=$1`, [created.runId]))
+        .rejects.toMatchObject({ code: "55000" });
+
+      // Replays neither dispatch nor mint again.
+      await expect(processBinaryCalibrationRun({
+        repository, executeProvider, runId: created.runId, workerId: "cal-worker-lifecycle-c", claimTtlMs: 60_000
+      })).resolves.toBeNull();
+      await expect(repository.finalizeLifecycleForbiddenRun(probe!)).rejects.toMatchObject({ code: "state_conflict" });
+      expect(dispatched).toEqual([]);
+      expect((await pool.query(
+        `select canonical_bytes,artifact_digest from binary_calibration_artifacts where run_id=$1`, [created.runId]
+      )).rows).toEqual(stored);
+    } finally {
+      await pool.query(`drop function evaluator_skill_version_context_allowed_v1(text,text,text)`);
+      await pool.query(`alter function evaluator_skill_version_context_allowed_test_original_v1(text,text,text) rename to evaluator_skill_version_context_allowed_v1`);
+    }
+
+    // The released revision accepts development exposure again; it is not
+    // kept, so the following tests still see a protected revision.
+    const exposure = await pool.connect();
+    try {
+      await exposure.query("begin");
+      await exposure.query(
+        `insert into dataset_exposure_events
+           (id,project_id,revision_id,kind,exposure_class,activity,subject_kind,subject_id,reason,details,idempotency_key)
+         values ('cal_released_exposure',$1,$2,'development_use','development','development_run',
+                 'activity','released','after release','{}','cal-released-exposure')`,
+        [PROJECT_ID, revisionId]
+      );
+    } finally {
+      await exposure.query("rollback");
+      exposure.release();
+    }
   }, 20_000);
 
   it("allows a same-version rerun, rejects a post-test version, and reports later revocation", async () => {

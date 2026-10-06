@@ -18,8 +18,10 @@ it('atomically protects the exact sealed frame and returns a payload-free receip
  await expect(f.runtime.repository.importTrace(f.projectId,'manual',{input:input.items[0]!.input,output:'Different',metadata:{}},{ingestionPurpose:'analysis_eligible_manual'})).rejects.toThrow();
  expect(()=>peer.exec("UPDATE governed_review_items SET review_payload_snapshot='{}'")).toThrow(/immutable/);
  expect(peer.prepare('PRAGMA integrity_check').get()?.integrity_check).toBe('ok');expect(peer.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
- f.db.prepare("UPDATE project_members SET role='member' WHERE project_id=? AND user_id=?").run(f.projectId,f.userId);expect(()=>create(peer,f.actor,input)).toThrow(expect.objectContaining({code:'governed_review_forbidden'}));
- f.db.prepare("UPDATE project_members SET role='owner' WHERE project_id=? AND user_id=?").run(f.projectId,f.userId);
+ const membership=f.db.prepare('SELECT * FROM project_members WHERE project_id=? AND user_id=?').get(f.projectId,f.userId)!;
+ f.db.prepare("UPDATE project_members SET role='member' WHERE project_id=? AND user_id=?").run(f.projectId,f.userId);expect(create(peer,{...f.actor,projectRole:'member'},input)).toEqual(result);
+ f.db.prepare('DELETE FROM project_members WHERE project_id=? AND user_id=?').run(f.projectId,f.userId);expect(()=>create(peer,f.actor,input)).toThrow(expect.objectContaining({code:'governed_review_forbidden'}));
+ f.db.prepare('INSERT INTO project_members(id,project_id,user_id,role,created_at) VALUES(?,?,?,?,?)').run(String(membership.id),String(membership.project_id),String(membership.user_id),String(membership.role),String(membership.created_at));
  await f.runtime.repository.deleteProject(f.projectId,{confirmProjectName:'Default Project'});expect(peer.prepare('SELECT * FROM governed_sealed_intake_populations').all()).toEqual([]);expect(peer.prepare('SELECT * FROM governed_input_identity_claims').all()).toEqual([]);
 });
 it('rejects previously visible and duplicate inputs and rolls back all claims after a frame failure',async()=>{

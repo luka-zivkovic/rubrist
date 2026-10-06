@@ -20,6 +20,7 @@ export function sqliteCalibrationCommands(db:DatabaseSync){
   calibrationAuthorize:execution.authorizeRun,calibrationRecover:execution.recoverStartedAttempts,
   calibrationNextAttempt:execution.getNextAttempt,calibrationProviderStarted:execution.recordProviderCallStarted,
   calibrationCompleteAttempt:execution.completeAttempt,calibrationFinalize:mint.finalizeRun,
+  calibrationFinalizeLifecycleForbidden:mint.finalizeLifecycleForbiddenRun,
   calibrationMarkRecovery:claims.markRecoveryRequired
  };
  for(const name of Object.keys(commands) as Array<keyof typeof commands>){const command=commands[name] as (...args:any[])=>unknown;Object.assign(commands,{[name]:(...args:any[])=>{try{return command(...args);}catch(error){
