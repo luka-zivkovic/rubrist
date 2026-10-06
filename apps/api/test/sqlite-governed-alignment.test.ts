@@ -51,3 +51,12 @@ it('rolls back alignment evidence when the label snapshot fails',async()=>{
  expect(()=>append(f.db,f.actor,f.batchId,comment)).toThrow(/injected snapshot failure/);
  expect(f.db.prepare('SELECT count(*) n FROM governed_review_alignment_events').get()?.n).toBe(0);expect(f.db.prepare('SELECT count(*) n FROM governed_review_alignment_finalizations').get()?.n).toBe(0);
 });
+import {appendNonsealedGovernedTaskAction} from '../src/storage/sqlite/governed-label-commands.js';
+import {GovernedReviewLabelAlreadyRevealedError} from '../src/governed-review/errors.js';
+it('preserves the specific revealed-label withdrawal error through the worker',async()=>{
+ const f=await governedConflictFixture();transition(f.db,f.actor,f.batchId,'open_alignment',{expectedStateVersion:2,idempotencyKey:'alignment'});append(f.db,f.actor,f.batchId,comment);
+ const action={kind:'withdraw_label' as const,input:{expectedStreamVersion:2,labelId:f.labelId,reason:'Changed mind',idempotencyKey:'withdraw'}};
+ expect(()=>appendNonsealedGovernedTaskAction(f.db,f.actor,f.taskId,action)).toThrow(GovernedReviewLabelAlreadyRevealedError);
+ await expect(f.runtime.governedReview.appendTaskAction(f.actor,f.taskId,action)).rejects.toBeInstanceOf(GovernedReviewLabelAlreadyRevealedError);
+ expect(f.db.prepare('SELECT label_id FROM governed_active_review_labels WHERE task_id=?').get(f.taskId)?.label_id).toBe(f.labelId);
+});

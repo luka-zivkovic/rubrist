@@ -2,7 +2,7 @@ import { governedEvidenceCommand,checkGovernedSeparation } from './governed-capa
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { GovernedReviewActor, GovernedTaskAction } from '../../governed-review/repository.js';
 import type { GovernedTaskMutationProjection } from '../../governed-review/contracts.js';
-import { GovernedReviewConflictError, GovernedReviewIdempotencyConflictError, GovernedReviewNotFoundError, GovernedReviewStreamConflictError, GovernedReviewTransitionConflictError } from '../../governed-review/errors.js';
+import { GovernedReviewLabelAlreadyRevealedError, GovernedReviewConflictError, GovernedReviewIdempotencyConflictError, GovernedReviewNotFoundError, GovernedReviewStreamConflictError, GovernedReviewTransitionConflictError } from '../../governed-review/errors.js';
 import { stableId, taskEventContent } from '../../governed-review/storage-values.js';
 import { governedReviewRequestDigest } from '../../lib/governed-review.js';
 import { governedJsonTextDigest } from './governed-json-text.js';
@@ -30,6 +30,7 @@ export function appendNonsealedGovernedTaskAction(db:DatabaseSync,actor:Governed
   if(replay){if(replay.request_digest!==requestDigest)throw new GovernedReviewIdempotencyConflictError();return projection(c.db,taskId);}
   const current=projection(c.db,taskId);
   if(current.stateVersion!==input.expectedStreamVersion)throw new GovernedReviewStreamConflictError({currentState:current.state,currentVersion:current.stateVersion});
+  if(action.kind==='withdraw_label'&&current.activeLabelId===action.input.labelId&&c.db.prepare('SELECT 1 FROM governed_review_alignment_event_labels WHERE label_id=? UNION ALL SELECT 1 FROM governed_review_adjudication_labels WHERE label_id=? LIMIT 1').get(action.input.labelId,action.input.labelId))throw new GovernedReviewLabelAlreadyRevealedError();
   const batch=c.db.prepare('SELECT state FROM governed_review_batch_states WHERE batch_id=?').get(task.batch_id!)!;
   const valid=action.kind==='defer'?current.state==='viewed':action.kind==='resume'?current.state==='deferred':action.kind==='withdraw_label'?current.state==='submitted'&&current.activeLabelId===action.input.labelId:['viewed','withdrawn'].includes(current.state);
   if(batch.state!=='open'||!valid)throw new GovernedReviewTransitionConflictError({currentState:batch.state!=='open'?String(batch.state):current.state,attemptedAction:action.kind});

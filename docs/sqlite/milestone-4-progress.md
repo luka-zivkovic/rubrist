@@ -493,3 +493,14 @@ PostgreSQL behavior, verified by 18 real-PG/API/model tests.
 TARGET remaining M4: measurement, calibration/private ledger/admissibility,
 evaluator lifecycle and execution authorization, complete invariant-inventory
 mapping, and final cross-backend qualification. M4 is not complete yet.
+
+CURRENT governed error parity: withdrawing an active label already exposed by
+alignment or adjudication returns the existing revealed-label error after the
+usual replay/CAS checks. Local and worker tests preserve class identity and
+leave the label unchanged. Independent alignment/label tests pass 21/21.
+
+CURRENT calibration preparation: shared pure aggregate, provider-policy,
+attempt-accounting and artifact/run projection helpers were extracted without
+changing any function body or PostgreSQL query. Independent review verified
+29 declarations and 30/30 real PostgreSQL/contract/integration tests with mocked
+providers. This does not yet enable SQLite calibration.
