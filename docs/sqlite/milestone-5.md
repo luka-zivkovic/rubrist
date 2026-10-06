@@ -98,6 +98,21 @@ typecheck and 41 focused tests; one unrelated PostgreSQL-only test was skipped.
 The independent follow-up passed all seven shutdown tests. Backup tests now
 verify every current migration name and checksum, avoiding a stale fixed count.
 
+After merging the Milestone 4 corrections (`137deee`, migrations 0066–0068),
+Claude implemented option A of M4 finding M4-6: detection of a persisted SQLite
+command clock ahead of host time. The worker reports the persisted lead at
+startup (a plain read) and on each readiness probe (from the probe's existing
+managed command). A process-local monitor logs one `rubrist.storage.clock`
+warning per episode above a 60-second tolerance and one notice on catch-up.
+It never fails startup or readiness and never rewinds, caps or reformats
+timestamps; the product decision on in-band clock repair remains open. Claude
+also confirmed the merged calibration worker keeps the discovery drain and that
+root's dynamic migration-history backup assertion matches 0001–0068.
+Evidence (Node 24.15.0, `maxWorkers=1`, no build or containers): API typecheck
+passes; 13 focused files pass 93/93, including three new clock tests whose
+de-duplication and startup assertions failed under mutation; operations
+tooling tests pass 4/4. The container drills predate this diagnostic.
+
 ## Validation record
 
 CURRENT focused evidence:

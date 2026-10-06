@@ -74,6 +74,16 @@ migration, not simply changing `user:` on a populated volume.
   close storage. The container allows 45 seconds; the app forces exit after 30.
   An interrupted dispatched model call can become
   `outcome_unknown`; recovery does not promise exactly-once external calls.
+- Command timestamps come from a persisted clock that never moves backward,
+  so one faulty forward host-clock sample holds every new record at that later
+  time until host time catches up. At startup and on readiness probes the API
+  compares that clock with host time; above a 60-second diagnostic tolerance it
+  logs one `rubrist.storage.clock` warning per episode (no paths, SQL or
+  credentials), and one notice when host time catches up. Startup and readiness
+  do not fail for drift, and nothing rewinds or caps the clock. If you see the
+  warning, investigate host time synchronization (NTP) and pause writes until
+  host time is correct. Do not edit or delete the clock, evidence or database
+  files: new records follow host time again once it passes the persisted clock.
 
 Named volumes survive container replacement. They are not backups. Never run
 `docker compose down -v` against an installation you intend to retain.

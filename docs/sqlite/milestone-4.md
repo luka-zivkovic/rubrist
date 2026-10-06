@@ -41,7 +41,12 @@ strict pretest ordering, as in PostgreSQL.
 CURRENT clock limitation: the persisted clock never moves backward, so one
 faulty forward host-clock sample holds every later command at that time until
 wall time catches up. `rubrist_command_clock.last_ms` ahead of wall time
-reveals it. Legitimate advances are never capped, and no in-band repair exists:
+reveals it. The original Milestone 4 branch has no automatic detection; on the
+Milestone 5 branch the API logs one warning at startup or readiness when the
+persisted clock leads host time by more than 60 seconds, and one notice when
+host time catches up (see [operations](../sqlite-operations.md#health-and-storage)).
+That diagnostic never fails startup or readiness and never rewinds or caps the
+clock. Legitimate advances are never capped, and no in-band repair exists:
 lowering the clock after evidence carries the faulty time would let later
 evidence appear earlier. Whether to keep that ordering guarantee, allow a
 rewind only when no evidence was stamped, or record a correction is an open
