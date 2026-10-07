@@ -33,6 +33,7 @@ import { AssessmentReasoning } from "./assessment-reasoning.js";
 import { sourceMessageIndices } from "../lib/message-evidence.js";
 import { ConversationEvidence } from "./conversation-evidence.js";
 import { CaseEvidence } from "./case-evidence.js";
+import { ModEvidenceView } from "./mod-evidence-view.js";
 import { TypedQuestionView } from "./typed-question-view.js";
 import { evidenceClaim, recordedTypedEvaluation, recordedVersionName } from "../lib/recorded-evaluation.js";
 
@@ -695,6 +696,9 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
           </Card>
         </div>
         <div id={`${evidencePrefix}-evidence`} tabIndex={-1} className="min-w-0 scroll-mt-48 flex flex-col gap-5 xl:scroll-mt-24 xl:col-start-1 xl:row-start-1 xl:row-span-2">
+          <ModEvidenceView key={`mod-${exception.id}-${judgeRun.id}`} input={trace.input} output={trace.output} steps={trace.steps}
+            metadata={trace.metadata} evaluatorFailingStep={failingStepFromRawResponse(rawResponse)} targetPrefix={evidencePrefix}
+            inspected={inspectedMessage?.caseId === exception.id && inspectedMessage.judgeRunId === judgeRun.id ? inspectedMessage : null}>
           {structuredEvidence ? <CaseEvidence input={trace.input} output={trace.output} steps={trace.steps} /> : (
             <ConversationEvidence
               key={`${exception.id}-${judgeRun.id}`}
@@ -716,6 +720,7 @@ export function TraceDetail({ reviewQueueItemId, reviewTaskPending = false, deta
             <StepLedger key={exception.id} steps={trace.steps}
               failingStep={failingStepFromRawResponse(rawResponse)} expectations={detail.datasetExpectations} />
           ) : null}
+          </ModEvidenceView>
 
           {exception.capabilityGap ? (
             <MarginNote

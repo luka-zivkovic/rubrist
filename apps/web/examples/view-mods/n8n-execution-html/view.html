@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>n8n workflow execution</title>
+<style>
+  :root {
+    --paper: #F1EBDE; --card-raw: #FAF6EC; --card-2: #F6F0E0; --rule-soft: #DFD5BC; --rule-strong: #9C927A;
+    --ink: #1A1614; --ink-2: #3D362E; --ink-3: #5E574B; --signal: #8B2A1C; --signal-wash: #F3E2DA;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { padding: 12px; background: var(--card-2); color: var(--ink); font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  h1 { margin: 0; font-size: 13px; font-weight: 600; }
+  .sub, .legend { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-3); }
+  .canvas { margin-top: 10px; overflow-x: auto; border: 1px solid var(--rule-soft); border-radius: 2px; background: var(--card-raw); }
+  svg { display: block; }
+  .edge { fill: none; stroke: var(--rule-strong); stroke-width: 1.5; stroke-dasharray: 4 4; }
+  .edge.ran { stroke: var(--ink-2); stroke-dasharray: none; }
+  .node { cursor: pointer; outline: none; }
+  .node rect { fill: var(--card-2); stroke: var(--rule-strong); stroke-width: 1; stroke-dasharray: 4 3; }
+  .node.ran rect { fill: var(--card-raw); stroke: var(--ink-2); stroke-dasharray: none; }
+  .node.error rect, .node.failing rect { fill: var(--signal-wash); stroke: var(--signal); stroke-width: 2; stroke-dasharray: none; }
+  .node.selected rect { stroke-width: 3; }
+  .node:focus-visible rect { stroke-width: 3; stroke: var(--ink); }
+  .node text { fill: var(--ink); font-size: 12px; }
+  .node .type, .node .state, .port { fill: var(--ink-3); font-size: 10px; font-family: ui-monospace, monospace; }
+  .node .flag { fill: var(--signal); font-size: 10px; font-family: ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
+  .detail { margin-top: 10px; border: 1px solid var(--rule-soft); border-radius: 2px; background: var(--card-raw); padding: 10px 12px; }
+  .detail h2 { margin: 0 0 2px; font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+  .detail h3 { margin: 10px 0 4px; font: 10.5px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+  .detail .flag { color: var(--signal); font: 10.5px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
+  pre { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--rule-soft); border-radius: 2px; background: var(--card-2); padding: 6px 8px; font: 11.5px/1.55 ui-monospace, monospace; }
+  .run + .run { margin-top: 12px; border-top: 1px solid var(--rule-soft); padding-top: 10px; }
+  .note { margin: 10px 0 0; font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<h1 id="title">n8n workflow execution</h1>
+<p class="sub" id="sub">Waiting for the case evidence.</p>
+<div id="root"></div>
+<script>
+(() => {
+  const SVG = "http://www.w3.org/2000/svg";
+  const W = 172, H = 62, PAD = 28;
+  const root = document.getElementById("root");
+
+  // Every recorded value is written as text. Nothing from the case is parsed as markup.
+  function el(tag, attrs, text) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, value);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function svg(tag, attrs, text) {
+    const node = document.createElementNS(SVG, tag);
+    for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, String(value));
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  const object = value => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+  const clip = (text, max) => text.length > max ? text.slice(0, max - 1) + "…" : text;
+  const show = value => value === undefined ? "Not recorded" : typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? "Not recorded";
+
+  function readWorkflow(evidence) {
+    const workflow = object(object(evidence.input)?.workflow);
+    if (!workflow || !Array.isArray(workflow.nodes)) return null;
+    const nodes = [];
+    for (const item of workflow.nodes) {
+      const node = object(item);
+      const position = node?.position;
+      if (!node || typeof node.name !== "string" || !Array.isArray(position) || !position.every(Number.isFinite) || position.length < 2) return null;
+      nodes.push({ name: node.name, type: typeof node.type === "string" ? node.type : "", x: position[0], y: position[1] });
+    }
+    if (nodes.length === 0 || new Set(nodes.map(node => node.name)).size !== nodes.length) return null;
+    const edges = [];
+    for (const [source, outputs] of Object.entries(object(workflow.connections) || {})) {
+      const main = object(outputs)?.main;
+      if (!Array.isArray(main)) continue;
+      main.forEach((targets, output) => {
+        for (const target of Array.isArray(targets) ? targets : []) {
+          if (typeof object(target)?.node === "string") edges.push({ source, target: target.node, output, outputs: main.length });
+        }
+      });
+    }
+    return { name: typeof workflow.name === "string" ? workflow.name : "Unnamed workflow", nodes, edges };
+  }
+
+  function render({ evidence, evaluatorFailingStep }) {
+    root.replaceChildren();
+    const steps = Array.isArray(evidence.steps) ? evidence.steps.map((step, index) => ({ index, step: object(step) || {} })) : [];
+    const workflow = readWorkflow(evidence);
+    if (!workflow) {
+      document.getElementById("sub").textContent = "This case has no input.workflow with named, positioned nodes, so there is no graph to draw. Use the recorded evidence below.";
+      return;
+    }
+    const byName = new Map(workflow.nodes.map(node => [node.name, { ...node, runs: [] }]));
+    const orphans = [];
+    for (const entry of steps) (byName.get(entry.step.name)?.runs ?? orphans).push(entry);
+    const nodes = [...byName.values()];
+    const idle = nodes.filter(node => node.runs.length === 0).length;
+    document.getElementById("title").textContent = workflow.name;
+    document.getElementById("sub").textContent =
+      `${nodes.length} nodes in the recorded workflow · ${steps.length} recorded steps · ${idle} ${idle === 1 ? "node" : "nodes"} without a recorded step`;
+
+    const minX = Math.min(...nodes.map(node => node.x)), minY = Math.min(...nodes.map(node => node.y));
+    for (const node of nodes) { node.x = (node.x - minX) * 0.92 + PAD; node.y = (node.y - minY) * 0.9 + PAD + 14; }
+    const width = Math.max(...nodes.map(node => node.x)) + W + PAD, height = Math.max(...nodes.map(node => node.y)) + H + PAD;
+    const canvas = el("div", { class: "canvas" });
+    const drawing = svg("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "group", "aria-label": `Workflow graph: ${workflow.name}` });
+
+    for (const edge of workflow.edges) {
+      const from = byName.get(edge.source), to = byName.get(edge.target);
+      if (!from || !to) continue;
+      const x1 = from.x + W, y1 = from.y + H * (edge.output + 1) / (edge.outputs + 1), x2 = to.x, y2 = to.y + H / 2;
+      const bend = Math.max(30, Math.abs(x2 - x1) / 2);
+      drawing.append(svg("path", {
+        class: from.runs.length && to.runs.length ? "edge ran" : "edge",
+        d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+      }));
+      if (edge.outputs > 1) drawing.append(svg("text", { class: "port", x: x1 + 6, y: y1 - 4 }, `out ${edge.output}`));
+    }
+
+    const detail = el("div", { class: "detail", "aria-live": "polite" });
+    let selected = null;
+    function select(node, group) {
+      selected?.classList.remove("selected");
+      selected = group; group.classList.add("selected");
+      detail.replaceChildren(el("h2", {}, `${node.name}${node.type ? ` · ${node.type}` : ""}`));
+      if (node.runs.length === 0) detail.append(el("p", { class: "note" }, "No recorded step names this node. That is what was recorded, not proof the node did not run."));
+      for (const { index, step } of node.runs) {
+        const meta = object(step.metadata) || {};
+        const run = el("div", { class: "run" });
+        const facts = [`Step #${index}`, typeof meta.status === "string" ? meta.status : "status not recorded"];
+        if (typeof meta.executionTimeMs === "number") facts.push(`${meta.executionTimeMs} ms`);
+        run.append(el("div", { class: "sub" }, facts.join(" · ")));
+        if (index === evaluatorFailingStep) run.append(el("div", { class: "flag" }, "evaluator: failing step"));
+        if (meta.error !== undefined) run.append(el("h3", {}, "Recorded error"), el("pre", {}, show(meta.error)));
+        run.append(el("h3", {}, "Input"), el("pre", {}, show(step.input)), el("h3", {}, "Output"), el("pre", {}, show(step.output)));
+        detail.append(run);
+      }
+    }
+
+    let first = null, named = null;
+    for (const node of nodes) {
+      const failed = node.runs.some(run => object(run.step.metadata)?.status === "error");
+      const failing = node.runs.some(run => run.index === evaluatorFailingStep);
+      const state = node.runs.length === 0 ? "no recorded step" : failed ? "error" : node.runs.length > 1 ? `ran ×${node.runs.length}` : "ran";
+      const numbers = node.runs.map(run => `#${run.index}`).join(" ");
+      const group = svg("g", {
+        class: `node${node.runs.length ? " ran" : ""}${failed ? " error" : ""}${failing ? " failing" : ""}`,
+        transform: `translate(${node.x} ${node.y})`, tabindex: 0, role: "button",
+        "aria-label": `${node.name}, ${state}${numbers ? `, step ${numbers}` : ""}${failing ? ", named by the evaluator as the failing step" : ""}. Show its recorded input and output.`
+      });
+      group.append(svg("title", {}, node.name), svg("rect", { width: W, height: H, rx: 3 }));
+      if (failing) group.append(svg("text", { class: "flag", x: 0, y: -6 }, "evaluator: failing step"));
+      group.append(
+        svg("text", { x: 10, y: 20, "font-weight": 600 }, clip(node.name, 24)),
+        svg("text", { class: "type", x: 10, y: 35 }, clip(node.type.split(".").pop() || "unknown type", 26)),
+        svg("text", { class: "state", x: 10, y: 51 }, `${numbers ? `${numbers} · ` : ""}${state}`)
+      );
+      group.addEventListener("click", () => select(node, group));
+      group.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(node, group); }
+      });
+      drawing.append(group);
+      if (failing) named = { node, group };
+      else if (!first && node.runs.length) first = { node, group };
+    }
+    canvas.append(drawing);
+    root.append(canvas, el("p", { class: "legend" },
+      "Solid outline: a recorded step names the node. Dashed: none does. A solid line joins two nodes that both have recorded steps; the execution does not record which line the data took. Select a node for its recorded input and output."), detail);
+    if (orphans.length > 0) {
+      root.append(el("p", { class: "note" },
+        `${orphans.length} recorded ${orphans.length === 1 ? "step names" : "steps name"} no node in this workflow and ${orphans.length === 1 ? "is" : "are"} not drawn: ${orphans.map(entry => `#${entry.index} ${entry.step.name ?? "unnamed step"}`).join(", ")}. Read ${orphans.length === 1 ? "it" : "them"} in the recorded evidence below.`));
+    }
+    const initial = named ?? first;
+    if (initial) {
+      select(initial.node, initial.group);
+      // Scroll only the graph; scrollIntoView would also move the host page.
+      canvas.scrollLeft = initial.node.x + W / 2 - canvas.clientWidth / 2;
+    }
+  }
+
+  function reportHeight() {
+    parent.postMessage({ type: "rubrist:resize", height: Math.ceil(document.documentElement.getBoundingClientRect().height) }, "*");
+  }
+  addEventListener("message", event => {
+    if (event.source !== parent || event.data?.type !== "rubrist:evidence") return;
+    for (const [token, value] of Object.entries(event.data.theme?.tokens || {})) document.documentElement.style.setProperty(token, value);
+    document.documentElement.style.colorScheme = event.data.theme?.scheme === "dark" ? "dark" : "light";
+    render(event.data);
+    reportHeight();
+  });
+  new ResizeObserver(reportHeight).observe(document.documentElement);
+  parent.postMessage({ type: "rubrist:ready" }, "*");
+})();
+</script>
+</body>
+</html>

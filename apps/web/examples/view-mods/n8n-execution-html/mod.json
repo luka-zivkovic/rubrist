@@ -1,0 +1,12 @@
+{
+  "id": "n8n-execution-html",
+  "name": "n8n workflow execution (HTML)",
+  "version": "0.1.0",
+  "contract": "rubrist/view-mod/v1",
+  "renders": [
+    "n8n-execution-html/v1"
+  ],
+  "entry": "view.html",
+  "entrySha256": "211e4e86b73b871acf7206545a133845bbc36c0b75f12e8e51b7407b05c7e560",
+  "height": 460
+}

@@ -30,3 +30,7 @@ playwright-report/
 
 # Disposable SQLite development account database (including WAL/SHM).
 .sqlite-dev/
+
+# View mods are deployment files, never part of the build: a missing index means
+# no mods. Examples live in apps/web/examples/view-mods.
+apps/web/public/mods/

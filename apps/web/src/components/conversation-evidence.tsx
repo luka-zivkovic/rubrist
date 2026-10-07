@@ -4,6 +4,7 @@ import { additionalFields, conversationEvidence, evidenceObject, evidenceText, m
 
 import { formattedRecordedJson, losslessJson, isRecordedTrajectory, messageGroups, type messageEvidence } from "../lib/message-evidence.js";
 
+import { CopyTextButton } from "./copy-text-button.js";
 import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
 
 const TEXT = "whitespace-pre-wrap [overflow-wrap:anywhere] text-[13px] leading-6 text-ink-2";
@@ -190,6 +191,7 @@ export function ConversationEvidence({ input, output, steps, trajectory, metadat
       )}
       <details className="border-t border-rule-soft pt-3">
         <summary className="cursor-pointer text-[12px] text-ink-3">Raw recorded input, output and steps</summary>
+        <div className="mt-2 flex justify-end"><CopyTextButton text={evidenceText({ input, output, ...(steps !== undefined ? { steps } : {}) })} /></div>
         <div className="mt-2"><RawValue value={{ input, output, ...(steps !== undefined ? { steps } : {}) }} /></div>
       </details>
     </CardContent>
