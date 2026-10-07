@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Chip } from "@/components/rubrist";
 
@@ -16,6 +16,7 @@ import {
   type ViewModManifest
 } from "../lib/view-mods.js";
 import { declaredViewEvidence } from "../lib/view-spec.js";
+import { CopyTextButton } from "./copy-text-button.js";
 import { DeclaredEvidenceView } from "./declared-evidence-view.js";
 
 // Host tokens a frame mod may use to match the app. Values are copied, so the
@@ -90,11 +91,21 @@ function DeclaredView({ manifest, input, output, steps, metadata, evaluatorFaili
   return <DeclaredEvidenceView blocks={blocks} evaluatorFailingStep={evaluatorFailingStep} />;
 }
 
-// SPIKE: an added, display-only view of the same recorded evidence. The
-// recorded evidence view stays below it as the source of record.
-export function ModEvidenceView(props: ViewProps) {
+type Tab = "view" | "recorded" | "raw";
+const TABS: { id: Tab; label: string }[] = [{ id: "view", label: "Custom view" }, { id: "recorded", label: "Recorded evidence" }, { id: "raw", label: "Raw JSON" }];
+
+// SPIKE: an added, display-only view of the same recorded evidence, beside the
+// ordinary recorded view (`children`) and the raw JSON. All three stay mounted;
+// the tabs only choose which one is shown, so an evaluator's message reference
+// can still land in the recorded view.
+export function ModEvidenceView({ children, inspected, targetPrefix, ...props }: ViewProps & {
+  children: ReactNode; inspected: { index: number } | null; targetPrefix: string;
+}) {
   const view = declaredEvidenceView(props.metadata);
   const [installed, setInstalled] = useState<InstalledViewMods | null>(null);
+  const [tab, setTab] = useState<Tab>("view");
+  const pendingScroll = useRef<number | null>(null);
+  const raw = useMemo(() => JSON.stringify({ input: props.input, output: props.output, steps: props.steps, metadata: props.metadata }, null, 2) ?? "", [props.input, props.output, props.steps, props.metadata]);
 
   useEffect(() => {
     let current = true;
@@ -102,29 +113,61 @@ export function ModEvidenceView(props: ViewProps) {
     return () => { current = false; };
   }, [view]);
 
-  if (view === null || installed === null) return null;
+  // A reference into the recorded messages opens that tab and lands on it once.
+  useEffect(() => {
+    if (!inspected) return;
+    pendingScroll.current = inspected.index;
+    setTab("recorded");
+  }, [inspected]);
+  useEffect(() => {
+    if (tab !== "recorded" || pendingScroll.current === null) return;
+    const target = document.getElementById(`${targetPrefix}-${pendingScroll.current}`);
+    pendingScroll.current = null;
+    target?.scrollIntoView({ block: "start", behavior: "instant" });
+    target?.focus({ preventScroll: true });
+  }, [tab, inspected, targetPrefix]);
+
+  if (view === null || installed === null) return <>{children}</>;
   const manifest = viewModFor(props.metadata, installed.mods);
   if (!manifest) {
-    return <p className="rounded-sm border border-rule-soft p-3 text-[12px] text-ink-3 [overflow-wrap:anywhere]">
-      This case declares the view <code>{view}</code>. No installed view mod draws it, so only the recorded evidence is shown.
-      {installed.skipped.map(skipped => ` The view mod ${skipped.id} is not loaded because ${viewModSkipText(skipped.reason)}.`).join("")}
-    </p>;
+    return <>
+      <p className="rounded-sm border border-rule-soft p-3 text-[12px] text-ink-3 [overflow-wrap:anywhere]">
+        This case declares the view <code>{view}</code>. No installed view mod draws it, so only the recorded evidence is shown.
+        {installed.skipped.map(skipped => ` The view mod ${skipped.id} is not loaded because ${viewModSkipText(skipped.reason)}.`).join("")}
+      </p>
+      {children}
+    </>;
   }
   return <Card className="min-w-0" data-testid="mod-evidence-view">
     <CardHeader>
       <div className="min-w-0">
         <CardTitle>{manifest.name}</CardTitle>
         <CardDescription>
-          {manifest.kind === "declared"
-            ? "Rubrist drew this from the recorded evidence below, following a view description. It is another way to read the same case, not a separate record."
-            : "A view mod drew this from the recorded evidence below. It cannot record a label or change the case; check the recorded evidence before you rely on it."}
+          {tab === "view"
+            ? manifest.kind === "declared"
+              ? "Rubrist drew this from the recorded evidence, following a view description. It is another way to read the same case, not a separate record."
+              : "A view mod drew this from the recorded evidence. It cannot record a label or change the case; check the recorded evidence before you rely on it."
+            : tab === "recorded" ? "The recorded evidence as Rubrist ordinarily shows it." : "The recorded input, output, steps and metadata of this case, as stored."}
         </CardDescription>
       </div>
       <div className="flex-1" />
       <Chip>view mod · {manifest.id} {manifest.version} · {manifest.kind === "declared" ? "declared" : "sandboxed HTML"}</Chip>
     </CardHeader>
-    <CardContent className="min-w-0">
-      {manifest.kind === "declared" ? <DeclaredView {...props} manifest={manifest} /> : <FrameView {...props} manifest={manifest} />}
+    <CardContent className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Evidence view">
+        {TABS.map(item => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)}
+          className={`inline-flex h-7 cursor-pointer items-center rounded-sm border px-2.5 text-[12px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${tab === item.id ? "border-ink bg-ink text-paper" : "border-rule-soft text-ink-2 hover:bg-paper-3"}`}>
+          {item.label}
+        </button>)}
+        {tab === "raw" ? <><span className="flex-1" /><CopyTextButton text={raw} /></> : null}
+      </div>
+      <div role="tabpanel" hidden={tab !== "view"} className="min-w-0">
+        {manifest.kind === "declared" ? <DeclaredView {...props} manifest={manifest} /> : <FrameView {...props} manifest={manifest} />}
+      </div>
+      <div role="tabpanel" hidden={tab !== "recorded"} className="min-w-0 flex flex-col gap-5">{children}</div>
+      <div role="tabpanel" hidden={tab !== "raw"} className="min-w-0">
+        <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm bg-card-2 p-3 font-mono text-[11.5px] leading-5">{raw}</pre>
+      </div>
     </CardContent>
   </Card>;
 }

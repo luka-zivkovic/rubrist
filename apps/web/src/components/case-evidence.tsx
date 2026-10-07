@@ -1,6 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { evidenceClaim } from "../lib/recorded-evaluation.js";
 
+import { CopyTextButton } from "./copy-text-button.js";
 import { EvidenceTruncationWarning } from "./evidence-truncation-warning.js";
 
 export function CaseEvidence({ input, output, steps }: { input: unknown; output: unknown; steps?: unknown }) {
@@ -37,6 +38,7 @@ export function CaseEvidence({ input, output, steps }: { input: unknown; output:
         </section>
         <details className="border-t border-rule-soft pt-3">
           <summary className="cursor-pointer text-[12px] text-ink-3">Raw input and output</summary>
+          <div className="mt-2 flex justify-end"><CopyTextButton text={JSON.stringify({ input, output }, null, 2)} /></div>
           <pre className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-[11.5px]">{JSON.stringify({ input, output }, null, 2)}</pre>
         </details>
       </CardContent>
