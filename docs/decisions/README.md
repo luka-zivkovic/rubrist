@@ -28,3 +28,4 @@ Status meanings:
 - [0015 — One product vocabulary and one display with a help layer](0015-one-vocabulary-one-display.md) — Accepted for vocabulary and single display; additional help-layer behavior remains proposed
 
 - [0016 — SQLite exact-byte storage and Analyze snapshot provenance](0016-sqlite-deployment-and-provenance.md) — Accepted; SQLite exact-byte BLOB storage and honest backend provenance, with Analyze transport and compatibility settled in Milestone 4
+- [0017 — Optimizer-assisted evaluator development](0017-optimizer-assisted-evaluator-development.md) — Proposed; SkillOpt-style rubric optimization as ungoverned development tooling, with a development-execution endpoint, exposure recording, and provenance; no runtime behavior until accepted
