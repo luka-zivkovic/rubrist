@@ -45,7 +45,7 @@ describe("view mod manifests", () => {
     const { entry: _entry, entrySha256: _pin, ...neither } = frame;
     expect(parseViewModManifest(neither, "html-view")).toBeNull();
     expect(parseViewModManifest({ ...neither, views: [{ kind: "chart" }] }, "html-view")).toBeNull();
-    expect(parseViewModManifest({ ...neither, views: shipped("langtracer-finding").views }, "html-view")).toMatchObject({ kind: "declared" });
+    expect(parseViewModManifest({ ...neither, views: shipped("finding-report").views }, "html-view")).toMatchObject({ kind: "declared" });
   });
 
   it("clamps a declared height", () => {
@@ -57,7 +57,7 @@ describe("view mod manifests", () => {
 describe("view mod pins", () => {
   it("match the shipped files, so the index and the frame entry load", async () => {
     const index = JSON.parse(modFile("index.json").toString("utf8")) as { mods: { id: string; sha256: string }[] };
-    expect(index.mods.map(mod => mod.id)).toEqual(["langtracer-finding", "n8n-execution", "n8n-execution-html"]);
+    expect(index.mods.map(mod => mod.id)).toEqual(["finding-report", "n8n-execution", "n8n-execution-html"]);
     for (const mod of index.mods) expect(await sha256Hex(bytes(modFile(`${mod.id}/mod.json`)))).toBe(mod.sha256);
     const html = shipped("n8n-execution-html");
     expect(await sha256Hex(bytes(modFile(`n8n-execution-html/${html.entry}`)))).toBe(html.entrySha256);
@@ -74,7 +74,7 @@ describe("view mod pins", () => {
 
 describe("view frame policy", () => {
   it("allows only the addresses pinned mods name, and none when there are none", () => {
-    const mods = ["langtracer-finding", "n8n-execution", "n8n-execution-html"].map(id => parseViewModManifest(shipped(id), id)!);
+    const mods = ["finding-report", "n8n-execution", "n8n-execution-html"].map(id => parseViewModManifest(shipped(id), id)!);
     expect(viewModFrameOrigins(mods)).toEqual(["https://n8n-preview-service.internal.n8n.cloud"]);
     expect(viewFramePolicy(viewModFrameOrigins(mods))).toBe("frame-src https://n8n-preview-service.internal.n8n.cloud");
     expect(viewFramePolicy(viewModFrameOrigins(mods.filter(mod => mod.id !== "n8n-execution")))).toBe("frame-src 'none'");
@@ -82,22 +82,22 @@ describe("view frame policy", () => {
 });
 
 describe("installed mod resolution", () => {
-  const mods = ["langtracer-finding", "n8n-execution", "n8n-execution-html"].map(id => parseViewModManifest(shipped(id), id)!);
+  const mods = ["finding-report", "n8n-execution", "n8n-execution-html"].map(id => parseViewModManifest(shipped(id), id)!);
 
   it("turns sandboxed HTML mods off while any pinned mod names an outside page", () => {
     const resolved = resolveViewMods({ mods, skipped: [] });
-    expect(resolved.mods.map(mod => mod.id)).toEqual(["langtracer-finding", "n8n-execution"]);
+    expect(resolved.mods.map(mod => mod.id)).toEqual(["finding-report", "n8n-execution"]);
     expect(resolved.skipped).toEqual([{ id: "n8n-execution-html", reason: "frames-off" }]);
     const withoutEmbed = resolveViewMods({ mods: mods.filter(mod => mod.id !== "n8n-execution"), skipped: [] });
-    expect(withoutEmbed.mods.map(mod => mod.id)).toEqual(["langtracer-finding", "n8n-execution-html"]);
+    expect(withoutEmbed.mods.map(mod => mod.id)).toEqual(["finding-report", "n8n-execution-html"]);
     expect(withoutEmbed.skipped).toEqual([]);
   });
 
   it("skips, visibly, a later mod that renders a view an earlier one renders", () => {
-    const twin = { ...parseViewModManifest(shipped("langtracer-finding"), "langtracer-finding")!, id: "langtracer-twin" };
+    const twin = { ...parseViewModManifest(shipped("finding-report"), "finding-report")!, id: "finding-twin" };
     const resolved = resolveViewMods({ mods: [mods[0]!, twin], skipped: [{ id: "x", reason: "changed" }] });
-    expect(resolved.mods.map(mod => mod.id)).toEqual(["langtracer-finding"]);
-    expect(resolved.skipped).toEqual([{ id: "x", reason: "changed" }, { id: "langtracer-twin", reason: "overlap" }]);
+    expect(resolved.mods.map(mod => mod.id)).toEqual(["finding-report"]);
+    expect(resolved.skipped).toEqual([{ id: "x", reason: "changed" }, { id: "finding-twin", reason: "overlap" }]);
     expect(viewModSkipText("overlap")).toMatch(/earlier mod/);
     expect(viewModSkipText("frames-off")).toMatch(/outside page/);
   });

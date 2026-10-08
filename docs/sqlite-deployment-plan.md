@@ -57,7 +57,7 @@ Dailies owns release decisions; Casefile owns static capability intake. Do not
 add semantic clustering, merge portfolio products, or redesign the UI as part
 of this work.
 
-The LangTracer pilot and its potentially sensitive data remain paused until
+The pilot integration and its potentially sensitive data remain paused until
 the user resumes that work. Use synthetic fixtures for this implementation.
 Do not reuse credentials from the conversation or fetch pilot data.
 
@@ -281,7 +281,7 @@ specialist repositories remain Milestone 4.
 
 Completion: a feature checklist maps every main repository method and scheduled
 task to its implementation and backend test. Integration tests use controlled
-test services or fixtures. No real LangTracer data or paid provider calls are
+test services or fixtures. No real pilot data or paid provider calls are
 required for parity tests.
 
 ## Milestone 4 Preserve advanced analysis and governed evidence
@@ -415,7 +415,7 @@ data, migration history, evidence guarantees, and unrelated local work. Keep
 the database choice out of the product UI and do not add database conversion
 or Cloudflare D1 to the scope.
 
-Use synthetic fixtures; the LangTracer data work remains paused. Follow the
+Use synthetic fixtures; the pilot data work remains paused. Follow the
 repository's validation and independent implementation-review requirements.
 Update the plan with completed work, test evidence, and any remaining blockers
 so the next session can continue from a concrete checkpoint. Do not publish a

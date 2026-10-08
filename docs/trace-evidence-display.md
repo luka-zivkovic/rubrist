@@ -22,7 +22,7 @@ keep their existing rendering and exposure boundaries.
   A manual jump is labeled “Selected message”, never an evaluator reference.
   Tool field values occupy the full width on phones; the original source values
   are unchanged. Navigation does not submit a review or alter saved evidence.
-- The existing LangTracer pilot's explicit `userRequestPreview` /
+- The existing pilot integration's explicit `userRequestPreview` /
   `precedingTurns` input shape receives a preview view: earlier turns, current
   request, supplied trajectory and the separately recorded output. Preview-only
   limitations remain prominent; formatting cannot recover clipped content.

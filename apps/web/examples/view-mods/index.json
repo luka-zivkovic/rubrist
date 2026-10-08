@@ -1,8 +1,8 @@
 {
   "mods": [
     {
-      "id": "langtracer-finding",
-      "sha256": "c8e3fb8befe306e557223ed39f88f2c7847d4af7d66a11db252ad13224e5dd3d"
+      "id": "finding-report",
+      "sha256": "3758e2f4f2b140c874e7e318b43bae768cd5946ef0ae1a353c364162f2eda8ed"
     },
     {
       "id": "n8n-execution",

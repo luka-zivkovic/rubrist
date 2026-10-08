@@ -1,10 +1,10 @@
 {
-  "id": "langtracer-finding",
-  "name": "LangTracer finding",
+  "id": "finding-report",
+  "name": "Finding report",
   "version": "0.1.0",
   "contract": "rubrist/view-mod/v1",
   "renders": [
-    "langtracer-finding/v1"
+    "finding-report/v1"
   ],
   "views": [
     {
