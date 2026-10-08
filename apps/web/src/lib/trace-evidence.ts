@@ -34,7 +34,7 @@ export function additionalFields(record: Record<string, unknown>, known: string[
 export function conversationEvidence(input: unknown) {
   const record = evidenceObject(input);
   if (!record) return null;
-  // This is the explicit preview format used by the existing LangTracer pilot.
+  // This is the explicit preview format used by the existing pilot integration.
   // Its limitations travel with the evidence, not a guessed source identity.
   if (typeof record.userRequestPreview === "string" && Array.isArray(record.precedingTurns)) {
     return { kind: "preview" as const, record, turns: record.precedingTurns, request: record.userRequestPreview };

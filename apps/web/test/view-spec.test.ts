@@ -100,9 +100,9 @@ describe("graph projection of the n8n example", () => {
   });
 });
 
-describe("fields and lists: the LangTracer finding example", () => {
-  const views = read("langtracer-finding/mod.json").views;
-  const finding = read("langtracer-finding/example-case.json");
+describe("fields and lists: the finding report example", () => {
+  const views = read("finding-report/mod.json").views;
+  const finding = read("finding-report/example-case.json");
   const specs = parseViewSpecs(views)!;
   const project = (change: (copy: typeof finding) => void = () => {}): DisplayBlock[] => {
     const copy = structuredClone(finding);

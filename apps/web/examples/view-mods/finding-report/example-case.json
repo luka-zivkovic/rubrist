@@ -1,8 +1,8 @@
 {
-  "sourceTraceId": "langtracer-finding-example",
+  "sourceTraceId": "finding-report-example",
   "metadata": {
-    "evidenceView": "langtracer-finding/v1",
-    "source": "langtracer"
+    "evidenceView": "finding-report/v1",
+    "source": "example"
   },
   "input": {
     "toolRuns": [

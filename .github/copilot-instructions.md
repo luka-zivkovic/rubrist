@@ -35,7 +35,7 @@ record. Judge the declared milestone, not unfinished later milestones. Flag
 false parity/completion claims or silent weakening of guarantees. Explicit
 unavailable responses for unported workflows are intentional at intermediate
 checkpoints. Proposed ADR-0016 is not permission to change evidence contracts.
-Use synthetic data; the LangTracer pilot is paused.
+Use synthetic data; the pilot data work is paused.
 
 ## Validation
 
