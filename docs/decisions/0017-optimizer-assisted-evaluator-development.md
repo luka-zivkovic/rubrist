@@ -9,6 +9,12 @@ founder's request after an assessment of `microsoft/skillopt` on 2026-10-07.
 It is a recommendation awaiting founder review. No runtime behavior depends
 on it yet, and none may be built until it is accepted (AGENTS.md).
 
+An independent Codex review through agent-bridge on 2026-10-08 corrected
+the sealed-reuse consequence, added the crash-safe accounting contract for
+development execution, gave Stage A its own provenance record, fixed the
+overlap identity basis to `input-identity/v1`, narrowed the regression and
+API-key claims, and pinned the upstream commit.
+
 ## Context
 
 ### The question
@@ -20,7 +26,8 @@ manual: the editor seeds a new version from the latest one, shows a
 before/after of the definition, and the owner reads disagreement cases and
 rewrites text by hand.
 
-SkillOpt (Microsoft Research, MIT licence, Python, arXiv 2605.23904) is an
+SkillOpt (Microsoft Research, MIT licence, Python, arXiv 2605.23904,
+read at upstream commit `343db229dbd5ddaf9df6b1d5540d8bcdb2604d5c` on 2026-10-07) is an
 open-source loop that automates exactly this kind of text tuning for a
 different object. It treats a Markdown "skill" document as the trainable
 state of a frozen model: roll the model out over a batch of scored tasks,
@@ -107,8 +114,15 @@ this record is whether, and under what rules, Rubrist should support it.
   (Goodhart: the optimizer farms judge wobble, not quality). Optimization
   loops require a large, kappa-stable golden set and an explicit
   return-on-investment gate."
-- API keys authenticate only `/api/v1/*` and are read/judge-only. No client
-  can create versions or launch revision-bound runs without an owner session.
+- API keys authenticate only `/api/v1/*`. For ordinary evaluator
+  development they are read/judge-only: no API key can create a version,
+  create a candidate, or launch a revision-bound eval run; those need an
+  owner session. Two bounded exceptions exist and are out of this record's
+  scope: production-ingest keys append production decision records
+  (`apps/api/src/production-calibration/ingest-routes.ts`), and the one-time
+  `/api/v1/bootstrap` flow, authorized by a pairing or deployment token,
+  creates the first starter version
+  (`apps/api/src/routes/v1-agent-administration.ts`).
 - Rubrist is a TypeScript/pnpm monorepo. SkillOpt is Python 3.10+ with
   `openai` and Azure SDK dependencies and a 2,500-line trainer whose state
   lives on the filesystem.
@@ -126,9 +140,13 @@ this record is whether, and under what rules, Rubrist should support it.
    gate run. Using versions as scratch state would pollute the lineage.
 3. **Regression independence.** Candidate creation copies the truth batch
    into the candidate's own regression revision. If the optimizer trained on
-   that truth, the mandatory passed regression run is satisfied by
-   construction and measures nothing new. Sealed calibration remains the
-   independent check, but the regression run would then be a formality.
+   that truth, the mandatory regression run is no longer independent of the
+   candidate's development: it measures the optimizer's own training fit.
+   Passing is not guaranteed, because tuning can raise agreement without
+   reaching full agreement and a later execution can still disagree or fail,
+   and the database guard still demands every retained item accounted for.
+   What is lost is independence, not the known-failure check itself. Sealed
+   calibration remains the independent measurement.
 4. **Goodhart on small sets.** SkillOpt accepts a candidate on a strictly
    higher accuracy over the selection split. With a nonzero-temperature
    judge and a few dozen items, that accepts noise.
@@ -166,6 +184,19 @@ Stage B is authorized only after Stage A has been used on real projects and
 the founder has judged the suggestions worth automating. Stage A alone may be
 the whole feature.
 
+Stage A has its own record and exposure, so that it does not have to invent
+an optimization run. Each reflection appends one append-only
+`evaluator_reflections` row holding the eval run id, the revision id, the
+optimizer binding, the prompt template version, and the digest of the
+returned suggestions. Sending disagreement cases and their resolved labels
+or rationales to the optimizer model is an `export` exposure on the truth
+revision with `subject_kind=activity` and the reflection id as subject.
+A candidate the owner later creates may reference one or more reflection
+ids in `development_provenance` (decision 5) alongside the digest of the
+definition the owner actually saved; the two digests differ whenever the
+owner edited by hand, and that difference is the record of human authorship
+over the suggestion.
+
 ### 3. Data boundary
 
 - Training and selection inputs are `iterative_development` revisions only.
@@ -174,7 +205,11 @@ the whole feature.
   refusal.
 - The training and selection revisions must be distinct, and an exact item
   overlap between them is refused and recorded as an `exact_overlap`
-  exposure on both.
+  exposure on both. "Exact" means the ADR-0007 input identity basis
+  (`input-identity/v1`, the SHA-256 over the canonical normalized input),
+  compared through each item's `input_digest`. Item digests are not the
+  basis, because they also cover labels, payload snapshots and provenance
+  and so can differ for identical inputs.
 - Every rollout appends a development exposure on the revision it read:
   `kind=development_use`, `exposure_class=development`,
   `activity=prompt_tuning`, `subject_kind=activity`, `subject_id` the
@@ -207,6 +242,29 @@ version would, returns per-case outcomes in the ADR-0014 outcome model, and:
 - is subject to an owner-adjustable per-project call budget, refusing work
   beyond it rather than queueing it.
 
+Because these calls send revision content to a provider, the execution
+follows the accounting discipline the sealed calibration worker already
+uses, adapted to development data:
+
+- Every id in the request (criterion version, revision, optimization run,
+  binding credential) is validated as belonging to the caller's project
+  inside the same transaction that authorizes the execution.
+- Authorization is durable before dispatch: one execution row and its
+  development exposures (decision 3) are written, and the budget is
+  reserved, in one transaction before the first provider call. A request
+  that cannot reserve its full item count is refused whole. ADR-0007
+  requires exposure to be recorded atomically with the activity it
+  describes; here the exposure precedes the call, never follows it.
+- Each item is a `started` then `completed` attempt row. Recovery after a
+  crash records every `started` row without a completion as
+  `outcome_unknown`, permanently, so the same observation is never
+  dispatched twice and the budget it consumed is never refunded. An unknown
+  outcome scores as disagreement (principle 2).
+- Requests carry an idempotency key. A retry with the same key returns the
+  existing execution and dispatches nothing.
+- Only one nonterminal execution per optimization run at a time; a second
+  request is refused rather than queued.
+
 Typed-question evaluators are out of scope: their trainable text is a
 question and a threshold, not a document.
 
@@ -218,18 +276,20 @@ created automatically.
 
 A candidate created from a proposal records `rubric_provenance =
 agent-drafted` with the declaration flag set, plus a new immutable
-`development_provenance` reference to the optimization-run record. That
+`development_provenance` reference to the optimization-run record (Stage B)
+or to the reflection records it drew on (Stage A). An optimization-run
 record holds: the tool name and version, the optimizer binding, the training
-and selection revision ids and item digests, the configuration digest, the
-accept/reject history with its selection scores, and the digest of the
-proposed definition. Receipts and calibration artifacts remain unchanged;
+and selection revision ids and their `input_digest` sets, the configuration
+digest, the accept/reject history with its selection scores, and the digest
+of the proposed definition. A reflection record holds the fields in
+decision 2. Receipts and calibration artifacts remain unchanged;
 they already carry the definition digest and not its text.
 
 ### 6. Regression independence is made visible
 
 When the governed truth batch that seeds a candidate's `regression_golden`
-revision shares exact items with the candidate's optimization-run training
-or selection revisions, candidate creation appends an `exact_overlap`
+revision shares input identities (`input-identity/v1`, decision 3) with the
+candidate's optimization-run training or selection revisions, candidate creation appends an `exact_overlap`
 exposure between the regression revision and the optimization run and the
 lifecycle projection labels the regression run **development-overlapping**.
 The activation rule is unchanged in this proposal, because sealed
@@ -293,8 +353,16 @@ app, reusing SkillOpt's failure-analysis prompt design rather than its code.
 - Each Stage B run costs roughly (batch size plus selection size) judge
   calls per step plus optimizer calls, across every step and epoch. The
   per-project budget makes that cost explicit.
-- Sealed revisions are untouched by construction, so ADR-0009's reuse
-  barrier is not triggered by optimization itself.
+- ADR-0009's sealed-reuse barrier applies to optimized candidates exactly
+  as to hand-written ones. The barrier is temporal, not access-based: a
+  version created or developed after the earliest prior final-validation
+  completion on a sealed revision for the same criterion cannot reuse that
+  revision, whether or not the optimizer ever read sealed data. An
+  optimized candidate for a criterion that already has a completed sealed
+  calibration therefore needs a direct unexposed successor sealed revision
+  (ADR-0007), and every development execution in decision 4 is a
+  development event that the reuse check counts. Optimization does not
+  trigger the barrier by itself, but it never bypasses it either.
 
 ## Open questions for the founder
 
